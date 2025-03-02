@@ -6,9 +6,9 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.const import CONF_BROKER, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
+from homeassistant.const import CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 
-from .const import DOMAIN, CONF_TOPIC_PREFIX, CONF_QOS
+from .const import DOMAIN, CONF_BROKER, CONF_TOPIC_PREFIX, CONF_QOS
 
 _LOGGER = logging.getLogger(__name__)
 
