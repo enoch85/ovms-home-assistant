@@ -28,7 +28,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
 
             # Create or update the sensor
             async_add_entities([
-            OVMSMQTTSensor(sensor_id, msg.topic, msg.payload)
+                OVMSMQTTSensor(sensor_id, msg.topic, msg.payload)
             ])
 
     # Subscribe to all OVMS topics
