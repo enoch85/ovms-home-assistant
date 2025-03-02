@@ -1,6 +1,7 @@
 import logging
 import json
 from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry  # Add this import
 from homeassistant.components.mqtt import subscription
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .sensor import OvmsSensor
@@ -8,7 +9,7 @@ from .const import DOMAIN, CONF_BROKER, CONF_PORT, CONF_USERNAME, CONF_PASSWORD,
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_entry(hass: HomeAssistant, entry: config_entries.ConfigEntry, async_add_entities: AddEntitiesCallback):
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
     """Set up OVMS MQTT from a config entry."""
     _LOGGER.debug("Starting async_setup_entry for OVMS MQTT integration")
 
