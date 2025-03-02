@@ -4,7 +4,6 @@ from __future__ import annotations
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import DOMAIN
@@ -17,6 +16,7 @@ DATA_SCHEMA = vol.Schema(
         vol.Required("password"): str,
     }
 )
+
 
 class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for OVMS MQTT."""
@@ -31,7 +31,9 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Validate the user input (e.g., check if the broker is reachable)
             valid = await self._validate_input(user_input)
             if valid:
-                return self.async_create_entry(title="OVMS MQTT", data=user_input)
+                return self.async_create_entry(
+                    title="OVMS MQTT", data=user_input
+                )
             errors["base"] = "cannot_connect"
 
         return self.async_show_form(
