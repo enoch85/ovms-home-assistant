@@ -1,27 +1,21 @@
 """Sensor platform for OVMS MQTT integration."""
 import logging
 
-from homeassistant.components.mqtt import subscription
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import callback
 
+from .const import DOMAIN
+
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = "ovms_mqtt"
-
-
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
+async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up the OVMS MQTT sensor platform."""
-    _LOGGER.info("Setting up OVMS MQTT sensor platform")
+    config = config_entry.data
 
     @callback
     def message_received(msg):
         """Handle new MQTT messages."""
-        _LOGGER.debug(
-            "Received message: %s %s",
-            msg.topic,
-            msg.payload,
-        )
+        _LOGGER.debug("Received message: %s %s", msg.topic, msg.payload)
 
         # Extract vehicle ID and metric key from the topic
         parts = msg.topic.split("/")
@@ -36,20 +30,13 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
             ])
 
     # Subscribe to all OVMS topics
-    await subscription.async_subscribe_topics(
-        hass,
-        {
-            "ovms_notify_topic": {
-                "topic": "ovms/+/notify/#",
-                "msg_callback": message_received,
-                "qos": 0,
-            },
-            "ovms_metrics_topic": {
-                "topic": "ovms/+/metrics/#",
-                "msg_callback": message_received,
-                "qos": 0,
-            },
-        },
+    await hass.components.mqtt.async_subscribe(
+        "ovms/+/notify/#",
+        message_received,
+    )
+    await hass.components.mqtt.async_subscribe(
+        "ovms/+/metrics/#",
+        message_received,
     )
 
 
