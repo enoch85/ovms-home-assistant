@@ -8,7 +8,7 @@ from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.const import CONF_BROKER, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_TOPIC_PREFIX, CONF_QOS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,8 +23,8 @@ DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_PORT, default=1883): vol.In(PORT_OPTIONS),
         vol.Required(CONF_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
-        vol.Optional("topic_prefix", default="ovms"): str,
-        vol.Optional("qos", default=1): vol.All(vol.Coerce(int), vol.Range(min=0, max=2)),
+        vol.Optional(CONF_TOPIC_PREFIX, default="ovms"): str,
+        vol.Optional(CONF_QOS, default=1): vol.All(vol.Coerce(int), vol.Range(min=0, max=2)),
     }
 )
 
