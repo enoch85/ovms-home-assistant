@@ -15,6 +15,7 @@ DATA_SCHEMA = vol.Schema(
         vol.Required("username"): str,
         vol.Required("password"): str,
         vol.Optional("topic_prefix", default="ovms"): str,
+        vol.Optional("qos", default=1): vol.All(vol.Coerce(int), vol.Range(min=0, max=2)),
     }
 )
 
