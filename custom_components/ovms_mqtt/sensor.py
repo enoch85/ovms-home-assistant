@@ -1,6 +1,7 @@
 """Sensor platform for OVMS MQTT integration."""
 import logging
 
+from homeassistant.components.mqtt import async_subscribe
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import callback
 
@@ -27,11 +28,13 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             ])
 
     # Subscribe to all OVMS topics
-    await hass.components.mqtt.async_subscribe(
+    await async_subscribe(
+        hass,
         "ovms/+/notify/#",
         message_received,
     )
-    await hass.components.mqtt.async_subscribe(
+    await async_subscribe(
+        hass,
         "ovms/+/metrics/#",
         message_received,
     )
