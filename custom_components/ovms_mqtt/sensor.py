@@ -2,7 +2,7 @@ import logging
 import json
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.components.mqtt import subscription
+from homeassistant.components.mqtt import async_subscribe  # Import async_subscribe directly
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import Entity
 from .const import DOMAIN, CONF_BROKER, CONF_PORT, CONF_USERNAME, CONF_PASSWORD, CONF_TOPIC_PREFIX, CONF_QOS
@@ -39,11 +39,19 @@ async def subscribe_to_topics(hass: HomeAssistant, topic_prefix: str, async_add_
     """Subscribe to relevant MQTT topics."""
     _LOGGER.debug(f"Subscribing to MQTT topics with prefix: {topic_prefix}")
 
-    await hass.components.mqtt.async_subscribe(
+    await async_subscribe(  # Use async_subscribe directly
+        hass,
         f"{topic_prefix}/+/+/metric/#",
         lambda msg: handle_metric_update(hass, msg, async_add_entities)
     )
     _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/metric/#")
+
+    await async_subscribe(  # Use async_subscribe directly
+        hass,
+        f"{topic_prefix}/+/+/notify/#",
+        lambda msg: handle_notification_update(hass, msg)
+    )
+    _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/notify/#")
 
     await hass.components.mqtt.async_subscribe(
         f"{topic_prefix}/+/+/notify/#",
