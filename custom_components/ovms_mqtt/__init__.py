@@ -1,36 +1,80 @@
-"""The OVMS MQTT integration."""
 import logging
-
-from homeassistant.config_entries import ConfigEntry
+import json
 from homeassistant.core import HomeAssistant
-
-from .const import DOMAIN
+from homeassistant.components.mqtt import subscription
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from .sensor import OvmsSensor
 
 _LOGGER = logging.getLogger(__name__)
 
+DOMAIN = "ovms_mqtt"
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up OVMS MQTT from a config entry."""
-    _LOGGER.debug("Setting up OVMS MQTT integration with config entry: %s", entry.data)
+async def async_setup(hass: HomeAssistant, config: dict):
+    """Set up the OVMS MQTT integration."""
+    hass.data[DOMAIN] = {'entities': {}}
 
-    hass.data.setdefault(DOMAIN, {})
-
-    # Store the config data
-    hass.data[DOMAIN][entry.entry_id] = entry.data
-
-    # Forward the setup to the sensor platform
-    _LOGGER.debug("Forwarding setup to sensor platform")
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
+    # Subscribe to MQTT topics
+    await subscribe_to_topics(hass)
     return True
 
+async def subscribe_to_topics(hass: HomeAssistant):
+    """Subscribe to relevant MQTT topics."""
+    await hass.components.mqtt.async_subscribe(
+        "ovms/+/+/metric/#",
+        lambda msg: handle_metric_update(hass, msg)
+    )
+    await hass.components.mqtt.async_subscribe(
+        "ovms/+/+/notify/#",
+        lambda msg: handle_notification_update(hass, msg)
+    )
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    _LOGGER.debug("Unloading OVMS MQTT integration for config entry: %s", entry.entry_id)
+def handle_metric_update(hass: HomeAssistant, msg):
+    """Handle incoming MQTT messages for metrics."""
+    topic = msg.topic
+    payload = msg.payload
+    _LOGGER.debug(f"Received metric update: topic={topic}, payload={payload}")
 
-    # Unload the sensor platform
-    await hass.config_entries.async_forward_entry_unload(entry, "sensor")
+    # Parse the topic
+    parts = topic.split('/')
+    if len(parts) >= 5 and parts[0] == 'ovms' and parts[3] == 'metric':
+        vehicle_name = parts[1]  # Dynamic vehicle name
+        vin = parts[2]  # Dynamic VIN
+        metric_key = '/'.join(parts[4:])  # Full metric key
 
-    # Remove the config data
-    hass.data[DOMAIN].pop(entry.entry_id)
-    return True
+        # Parse the payload (assuming JSON or plain text)
+        try:
+            value = json.loads(payload)
+        except json.JSONDecodeError:
+            value = payload
+
+        # Create or update the sensor entity
+        update_sensor_entity(hass, vin, metric_key, value)
+
+def handle_notification_update(hass: HomeAssistant, msg):
+    """Handle incoming MQTT messages for notifications."""
+    topic = msg.topic
+    payload = msg.payload
+    _LOGGER.debug(f"Received notification: topic={topic}, payload={payload}")
+
+    # Parse the topic
+    parts = topic.split('/')
+    if len(parts) >= 5 and parts[0] == 'ovms' and parts[3] == 'notify':
+        vehicle_name = parts[1]  # Dynamic vehicle name
+        vin = parts[2]  # Dynamic VIN
+        notification_type = '/'.join(parts[4:])  # Full notification type
+
+        # Log the notification (or trigger an automation)
+        _LOGGER.info(f"Notification received for {vin}: {notification_type} = {payload}")
+
+def update_sensor_entity(hass: HomeAssistant, vin: str, metric_key: str, value):
+    """Create or update a sensor entity."""
+    entity_id = f"sensor.{vin}_{metric_key.replace('/', '_')}"
+    entities = hass.data[DOMAIN]['entities']
+
+    if entity_id not in entities:
+        # Create a new sensor entity
+        sensor = OvmsSensor(vin, metric_key, value)
+        entities[entity_id] = sensor
+        hass.add_job(sensor.async_add_to_platform, hass, None)
+        _LOGGER.debug(f"Created new entity: {entity_id}")
+    else
