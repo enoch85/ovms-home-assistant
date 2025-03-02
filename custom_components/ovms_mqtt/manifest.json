@@ -2,6 +2,7 @@
   "domain": "ovms_mqtt",
   "name": "OVMS MQTT Integration",
   "codeowners": ["@enoch85"],
+  "config_flow": true,
   "dependencies": ["mqtt"],
   "documentation": "https://github.com/enoch85/ovms-mqtt-integration",
   "iot_class": "local_push",

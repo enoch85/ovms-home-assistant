@@ -1,19 +1,33 @@
 """The OVMS MQTT integration."""
 import logging
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.typing import ConfigType
-from homeassistant.helpers import config_validation as cv
+
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = "ovms_mqtt"
 
-# Define a config schema (empty since this integration is configured via MQTT)
-CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up OVMS MQTT from a config entry."""
+    hass.data.setdefault(DOMAIN, {})
+
+    # Store the config data
+    hass.data[DOMAIN][entry.entry_id] = entry.data
+
+    # Forward the setup to the sensor platform
+    hass.async_create_task(
+        hass.config_entries.async_forward_entry_setup(entry, "sensor")
+    )
+    return True
 
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the OVMS MQTT integration."""
-    _LOGGER.info("OVMS MQTT integration setup")
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    # Unload the sensor platform
+    await hass.config_entries.async_forward_entry_unload(entry, "sensor")
+
+    # Remove the config data
+    hass.data[DOMAIN].pop(entry.entry_id)
     return True
