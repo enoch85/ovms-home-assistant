@@ -6,6 +6,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.const import CONF_BROKER, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 
 from .const import DOMAIN
 
@@ -18,10 +19,10 @@ PORT_OPTIONS = {
 
 DATA_SCHEMA = vol.Schema(
     {
-        vol.Required("broker"): str,
-        vol.Required("port", default=1883): vol.In(PORT_OPTIONS),
-        vol.Required("username"): str,
-        vol.Required("password"): str,
+        vol.Required(CONF_BROKER): str,
+        vol.Required(CONF_PORT, default=1883): vol.In(PORT_OPTIONS),
+        vol.Required(CONF_USERNAME): str,
+        vol.Required(CONF_PASSWORD): str,
         vol.Optional("topic_prefix", default="ovms"): str,
         vol.Optional("qos", default=1): vol.All(vol.Coerce(int), vol.Range(min=0, max=2)),
     }
