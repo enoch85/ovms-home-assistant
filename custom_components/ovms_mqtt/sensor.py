@@ -13,7 +13,8 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     """Set up the OVMS MQTT sensor platform."""
     _LOGGER.info("Setting up OVMS MQTT sensor platform")
 
-    async def message_received(msg):
+    @callback
+    def message_received(msg):
         """Handle new MQTT messages."""
         _LOGGER.debug(f"Received message: {msg.topic} {msg.payload}")
 
@@ -28,16 +29,21 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
             async_add_entities([OVMSMQTTSensor(sensor_id, msg.topic, msg.payload)])
 
     # Subscribe to all OVMS topics
-    await subscription.async_subscribe_topics(hass, {
-        "ovms_notify_topic": {
-            "topic": "ovms/+/notify/#",
-            "msg_callback": message_received
+    await subscription.async_subscribe_topics(
+        hass,
+        {
+            "ovms_notify_topic": {
+                "topic": "ovms/+/notify/#",
+                "msg_callback": message_received,
+                "qos": 0,
+            },
+            "ovms_metrics_topic": {
+                "topic": "ovms/+/metrics/#",
+                "msg_callback": message_received,
+                "qos": 0,
+            },
         },
-        "ovms_metrics_topic": {
-            "topic": "ovms/+/metrics/#",
-            "msg_callback": message_received
-        }
-    })
+    )
 
 class OVMSMQTTSensor(SensorEntity):
     """Representation of an OVMS MQTT sensor."""
@@ -58,6 +64,11 @@ class OVMSMQTTSensor(SensorEntity):
     def state(self):
         """Return the state of the sensor."""
         return self._state
+
+    @property
+    def unique_id(self):
+        """Return a unique ID for the sensor."""
+        return self._sensor_id
 
     @callback
     def async_update(self):
