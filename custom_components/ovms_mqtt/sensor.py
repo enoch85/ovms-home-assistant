@@ -16,6 +16,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     topic_prefix = config.get("topic_prefix", "ovms")
     qos = config.get("qos", 1)
 
+    _LOGGER.debug("Setting up OVMS MQTT sensor platform with config: %s", config)
+
     @callback
     def message_received(msg):
         """Handle new MQTT messages."""
@@ -23,6 +25,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
         # Extract user, vehicle_id, and topic type (metric/notify/client) from the topic
         parts = msg.topic.split("/")
+        _LOGGER.debug("Topic parts: %s", parts)  # Log the topic parts
+
         if len(parts) >= 4:  # ovms/user/vehicle_id/[metric|notify|client]/...
             user = parts[1]
             vehicle_id = parts[2]
@@ -33,10 +37,14 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             sensor_id = f"ovms_{user}_{vehicle_id}_{topic_type}_{metric_path.replace('/', '_')}"
             sensor_name = f"OVMS {vehicle_id} {topic_type} {metric_path.replace('/', ' ')}"
 
+            _LOGGER.debug("Creating sensor: %s (%s)", sensor_name, sensor_id)  # Log sensor creation
+
             # Create or update the sensor
             async_add_entities([
                 OVMSMQTTSensor(sensor_id, sensor_name, msg.topic, msg.payload)
             ])
+        else:
+            _LOGGER.debug("Invalid topic structure: %s", msg.topic)  # Log invalid topics
 
     # Subscribe to all relevant topics using wildcards
     topics = [
@@ -61,6 +69,7 @@ class OVMSMQTTSensor(SensorEntity):
 
     def __init__(self, sensor_id, name, topic, payload):
         """Initialize the sensor."""
+        _LOGGER.debug("Initializing sensor: %s (%s)", name, sensor_id)
         self._sensor_id = sensor_id
         self._name = name
         self._topic = topic
@@ -85,4 +94,5 @@ class OVMSMQTTSensor(SensorEntity):
     @callback
     def async_update(self):
         """Update the sensor state."""
+        _LOGGER.debug("Updating sensor state: %s", self._payload)
         self._state = self._payload
