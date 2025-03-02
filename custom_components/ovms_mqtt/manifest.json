@@ -1,0 +1,9 @@
+{
+  "domain": "ovms_mqtt",
+  "name": "OVMS MQTT Integration",
+  "version": "1.0.0",
+  "documentation": "https://github.com/enoch85/ovms-mqtt-integration",
+  "dependencies": ["mqtt"],
+  "codeowners": ["@yourusername"],
+  "requirements": ["paho-mqtt>=1.6.1"]
+}

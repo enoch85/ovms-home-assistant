@@ -1,0 +1,11 @@
+{
+  "title": "OVMS MQTT Integration",
+  "config": {
+    "step": {
+      "user": {
+        "title": "OVMS MQTT Configuration",
+        "description": "Configure the OVMS MQTT integration."
+      }
+    }
+  }
+}
