@@ -14,6 +14,7 @@ DATA_SCHEMA = vol.Schema(
         vol.Required("port", default=1883): int,
         vol.Required("username"): str,
         vol.Required("password"): str,
+        vol.Optional("topic_prefix", default="ovms"): str,
     }
 )
 
