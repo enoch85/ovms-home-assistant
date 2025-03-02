@@ -3,6 +3,7 @@
   "name": "OVMS MQTT Integration",
   "version": "1.0.0",
   "documentation": "https://github.com/enoch85/ovms-mqtt-integration",
+  "issue_tracker": "https://github.com/enoch85/ovms-mqtt-integration/issues",
   "dependencies": ["mqtt"],
   "codeowners": ["@enoch85"],
   "requirements": ["paho-mqtt>=1.6.1"],
