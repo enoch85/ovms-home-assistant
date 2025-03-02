@@ -17,7 +17,11 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     @callback
     def message_received(msg):
         """Handle new MQTT messages."""
-        _LOGGER.debug("Received message: %s %s", msg.topic, msg.payload)
+        _LOGGER.debug(
+            "Received message: %s %s",
+            msg.topic,
+            msg.payload,
+        )
 
         # Extract vehicle ID and metric key from the topic
         parts = msg.topic.split("/")
