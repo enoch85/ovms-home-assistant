@@ -53,12 +53,6 @@ async def subscribe_to_topics(hass: HomeAssistant, topic_prefix: str, async_add_
     )
     _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/notify/#")
 
-    await hass.components.mqtt.async_subscribe(
-        f"{topic_prefix}/+/+/notify/#",
-        lambda msg: handle_notification_update(hass, msg)
-    )
-    _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/notify/#")
-
 def handle_metric_update(hass: HomeAssistant, msg, async_add_entities: AddEntitiesCallback):
     """Handle incoming MQTT messages for metrics."""
     _LOGGER.debug(f"Received MQTT message: topic={msg.topic}, payload={msg.payload}")
