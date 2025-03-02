@@ -16,3 +16,7 @@ Add the following to your `configuration.yaml`:
 ```yaml
 sensor:
   - platform: ovms_mqtt
+
+## First look:
+![image](https://github.com/user-attachments/assets/8b8f44cd-356d-44ef-aad1-c3b60d3af8e6)
+
