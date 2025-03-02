@@ -36,12 +36,12 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     _LOGGER.debug("Subscribing to MQTT topics with prefix: %s", topic_prefix)
     await async_subscribe(
         hass,
-        f"{topic_prefix}/+/notify/#",
+        f"{topic_prefix}/+/+/notify/#",
         message_received,
     )
     await async_subscribe(
         hass,
-        f"{topic_prefix}/+/metrics/#",
+        f"{topic_prefix}/+/+/metrics/#",
         message_received,
     )
     _LOGGER.debug("Successfully subscribed to MQTT topics")
