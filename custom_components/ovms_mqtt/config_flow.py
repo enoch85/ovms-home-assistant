@@ -1,139 +1,78 @@
-"""Config flow for OVMS MQTT integration."""
-from __future__ import annotations
-
-import logging
-import asyncio
-import ssl
+"""Config flow for Open Vehicle Monitoring System (OVMS) integration."""
 import voluptuous as vol
-import paho.mqtt.client as mqtt
 
 from homeassistant import config_entries
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.const import CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 
-from .const import DOMAIN, CONF_BROKER, CONF_TOPIC_PREFIX, CONF_QOS
-
-_LOGGER = logging.getLogger(__name__)
-
-PORT_OPTIONS = {
-    1883: "Unencrypted (port 1883, mqtt://)",
-    8883: "Encrypted (port 8883, mqtts://)",
-}
-
-DATA_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_BROKER): str,
-        vol.Required(CONF_PORT, default=1883): vol.In(PORT_OPTIONS),
-        vol.Required(CONF_USERNAME): str,
-        vol.Required(CONF_PASSWORD): str,
-        vol.Optional(CONF_TOPIC_PREFIX, default="ovms"): str,
-        vol.Optional(CONF_QOS, default=1): vol.All(vol.Coerce(int), vol.Range(min=0, max=2)),
-    }
-)
+from .const import DOMAIN
 
 
-class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for OVMS MQTT."""
+class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for Open Vehicle Monitoring System (OVMS)."""
 
     VERSION = 1
 
-    async def async_step_user(self, user_input: dict | None = None) -> FlowResult:
+    async def async_step_user(self, user_input=None) -> FlowResult:
         """Handle the initial step."""
-        _LOGGER.debug("Starting configuration flow for OVMS MQTT")
-
         errors = {}
 
         if user_input is not None:
-            _LOGGER.debug("User input received: %s", user_input)
+            return self.async_create_entry(title="OVMS", data=user_input)
 
-            # Validate the user input (e.g., check if the broker is reachable)
-            valid, error = await self._validate_input(user_input)
-            if valid:
-                _LOGGER.debug("Configuration is valid, creating entry")
-                return self.async_create_entry(
-                    title="OVMS MQTT", data=user_input
-                )
-            errors["base"] = error  # Display the detailed error message in the UI
-            _LOGGER.debug("Configuration validation failed: %s", errors)
-
-        return self.async_show_form(
-            step_id="user",
-            data_schema=DATA_SCHEMA,
-            errors=errors,
+        data_schema = vol.Schema(
+            {
+                vol.Required("broker"): str,
+                vol.Required("port", default=1883): int,
+                vol.Required("username"): str,
+                vol.Required("password"): str,
+            }
         )
 
-    async def _validate_input(self, user_input: dict) -> tuple[bool, str]:
-        """Validate the user input and test the MQTT broker connection."""
-        _LOGGER.debug("Validating user input: %s", user_input)
+        return self.async_show_form(
+            step_id="user", data_schema=data_schema, errors=errors
+        )
 
-        broker = user_input[CONF_BROKER]
-        port = user_input[CONF_PORT]
-        username = user_input[CONF_USERNAME]
-        password = user_input[CONF_PASSWORD]
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Get the options flow for this handler."""
+        return OVMSOptionsFlowHandler(config_entry)
 
-        _LOGGER.debug("Testing MQTT broker connection...")
-        connected, error_message = await self._test_mqtt_connection(broker, port, username, password)
 
-        if connected:
-            _LOGGER.debug("MQTT broker connection successful")
-            return True, ""
-        else:
-            _LOGGER.error("Failed to connect to MQTT broker: %s", error_message)
-            return False, error_message  # Return the detailed error message
+class OVMSOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options flow for Open Vehicle Monitoring System (OVMS)."""
 
-    async def _test_mqtt_connection(self, broker: str, port: int, username: str, password: str) -> tuple[bool, str]:
-        """Test the MQTT broker connection and return a tuple of (success, error_message)."""
-        _LOGGER.debug("Testing connection to MQTT broker: %s:%s", broker, port)
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
 
-        client = mqtt.Client()
-        client.username_pw_set(username, password)
+    async def async_step_init(self, user_input=None) -> FlowResult:
+        """Manage the options."""
+        errors = {}
 
-        # Configure TLS if the port is 8883
-        if port == 8883:
-            _LOGGER.debug("Configuring TLS for MQTT connection")
-            try:
-                # Offload the blocking tls_set call to a separate thread
-                await self.hass.async_add_executor_job(
-                    client.tls_set,
-                    cert_reqs=ssl.CERT_NONE  # Disable certificate verification
-                )
-                client.tls_insecure_set(True)  # Allow insecure TLS connections
-                _LOGGER.debug("TLS configuration completed successfully")
-            except Exception as e:
-                error_message = f"Exception while configuring TLS: {str(e)}"
-                _LOGGER.error(error_message)
-                return False, error_message
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
 
-        connected = False
-        error_message = ""
+        options_schema = vol.Schema(
+            {
+                vol.Required(
+                    "broker", default=self.config_entry.options.get("broker", "")
+                ): str,
+                vol.Required(
+                    "port", default=self.config_entry.options.get("port", 1883)
+                ): int,
+                vol.Required(
+                    "username", default=self.config_entry.options.get("username", "")
+                ): str,
+                vol.Required(
+                    "password", default=self.config_entry.options.get("password", "")
+                ): str,
+            }
+        )
 
-        def on_connect(client, userdata, flags, rc):
-            nonlocal connected, error_message
-            if rc == 0:
-                _LOGGER.debug("Successfully connected to MQTT broker")
-                connected = True
-            else:
-                error_message = f"Failed to connect to MQTT broker: {mqtt.connack_string(rc)} (code: {rc})"
-                _LOGGER.error(error_message)
-
-        client.on_connect = on_connect
-
-        try:
-            _LOGGER.debug("Attempting to connect to MQTT broker...")
-            await self.hass.async_add_executor_job(client.connect, broker, port, 10)
-            client.loop_start()
-
-            # Wait for the connection to complete (or timeout)
-            for _ in range(10):  # Wait up to 5 seconds (10 * 0.5s)
-                if connected:
-                    break
-                await asyncio.sleep(0.5)
-        except Exception as e:
-            error_message = f"Exception while connecting to MQTT broker: {str(e)}"
-            _LOGGER.error(error_message)
-            connected = False
-        finally:
-            client.loop_stop()
-            client.disconnect()
-
-        return connected, error_message
+        return self.async_show_form(
+            step_id="init", data_schema=options_schema, errors=errors
+        )
