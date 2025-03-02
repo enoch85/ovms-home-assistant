@@ -8,6 +8,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "ovms_mqtt"
 
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the OVMS MQTT integration."""
     _LOGGER.info("OVMS MQTT integration setup")
