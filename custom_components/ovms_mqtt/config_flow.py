@@ -91,8 +91,18 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Configure TLS if the port is 8883
         if port == 8883:
             _LOGGER.debug("Configuring TLS for MQTT connection")
-            client.tls_set(cert_reqs=ssl.CERT_NONE)  # Disable certificate verification
-            client.tls_insecure_set(True)  # Allow insecure TLS connections
+            try:
+                # Offload the blocking tls_set call to a separate thread
+                await self.hass.async_add_executor_job(
+                    client.tls_set,
+                    cert_reqs=ssl.CERT_NONE  # Disable certificate verification
+                )
+                client.tls_insecure_set(True)  # Allow insecure TLS connections
+                _LOGGER.debug("TLS configuration completed successfully")
+            except Exception as e:
+                error_message = f"Exception while configuring TLS: {str(e)}"
+                _LOGGER.error(error_message)
+                return False, error_message
 
         connected = False
         error_message = ""
@@ -110,7 +120,7 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         try:
             _LOGGER.debug("Attempting to connect to MQTT broker...")
-            client.connect(broker, port, keepalive=10)
+            await self.hass.async_add_executor_job(client.connect, broker, port, 10)
             client.loop_start()
 
             # Wait for the connection to complete (or timeout)
