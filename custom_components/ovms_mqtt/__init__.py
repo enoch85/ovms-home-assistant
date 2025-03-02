@@ -31,17 +31,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     _LOGGER.debug("Configuration stored in hass.data")
 
     # Subscribe to MQTT topics
-    await subscribe_to_topics(hass, topic_prefix)
+    await subscribe_to_topics(hass, topic_prefix, async_add_entities)
     _LOGGER.debug("MQTT topics subscribed successfully")
     return True
 
-async def subscribe_to_topics(hass: HomeAssistant, topic_prefix: str):
+async def subscribe_to_topics(hass: HomeAssistant, topic_prefix: str, async_add_entities: AddEntitiesCallback):
     """Subscribe to relevant MQTT topics."""
     _LOGGER.debug(f"Subscribing to MQTT topics with prefix: {topic_prefix}")
 
     await hass.components.mqtt.async_subscribe(
         f"{topic_prefix}/+/+/metric/#",
-        lambda msg: handle_metric_update(hass, msg)
+        lambda msg: handle_metric_update(hass, msg, async_add_entities)
     )
     _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/metric/#")
 
@@ -51,7 +51,7 @@ async def subscribe_to_topics(hass: HomeAssistant, topic_prefix: str):
     )
     _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/notify/#")
 
-def handle_metric_update(hass: HomeAssistant, msg):
+def handle_metric_update(hass: HomeAssistant, msg, async_add_entities: AddEntitiesCallback):
     """Handle incoming MQTT messages for metrics."""
     _LOGGER.debug(f"Received MQTT message: topic={msg.topic}, payload={msg.payload}")
 
@@ -78,7 +78,7 @@ def handle_metric_update(hass: HomeAssistant, msg):
             _LOGGER.debug(f"Payload is plain text: {value}")
 
         # Create or update the sensor entity
-        update_sensor_entity(hass, vin, metric_key, value)
+        update_sensor_entity(hass, vin, metric_key, value, async_add_entities)
     else:
         _LOGGER.warning(f"Topic does not match expected structure: {topic}")
 
@@ -105,7 +105,7 @@ def handle_notification_update(hass: HomeAssistant, msg):
     else:
         _LOGGER.warning(f"Topic does not match expected structure: {topic}")
 
-def update_sensor_entity(hass: HomeAssistant, vin: str, metric_key: str, value):
+def update_sensor_entity(hass: HomeAssistant, vin: str, metric_key: str, value, async_add_entities: AddEntitiesCallback):
     """Create or update a sensor entity."""
     entity_id = f"sensor.{vin}_{metric_key.replace('/', '_')}"
     entities = hass.data[DOMAIN]['entities']
@@ -117,7 +117,7 @@ def update_sensor_entity(hass: HomeAssistant, vin: str, metric_key: str, value):
         _LOGGER.debug(f"Creating new sensor entity: {entity_id}")
         sensor = OvmsSensor(vin, metric_key, value)
         entities[entity_id] = sensor
-        hass.add_job(sensor.async_add_to_platform, hass, None)
+        async_add_entities([sensor])
     else:
         # Update the existing entity
         _LOGGER.debug(f"Updating existing sensor entity: {entity_id}")
