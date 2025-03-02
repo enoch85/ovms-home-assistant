@@ -9,6 +9,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "ovms_mqtt"
 
+
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
     """Set up the OVMS MQTT sensor platform."""
     _LOGGER.info("Setting up OVMS MQTT sensor platform")
@@ -16,7 +17,11 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     @callback
     def message_received(msg):
         """Handle new MQTT messages."""
-        _LOGGER.debug(f"Received message: {msg.topic} {msg.payload}")
+        _LOGGER.debug(
+            "Received message: %s %s",
+            msg.topic,
+            msg.payload,
+        )
 
         # Extract vehicle ID and metric key from the topic
         parts = msg.topic.split("/")
@@ -26,7 +31,9 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
             sensor_id = f"ovms_{vehicle_id}_{metric_key.replace('/', '_')}"
 
             # Create or update the sensor
-            async_add_entities([OVMSMQTTSensor(sensor_id, msg.topic, msg.payload)])
+            async_add_entities([
+                OVMSMQTTSensor(sensor_id, msg.topic, msg.payload)
+            ])
 
     # Subscribe to all OVMS topics
     await subscription.async_subscribe_topics(
@@ -44,6 +51,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
             },
         },
     )
+
 
 class OVMSMQTTSensor(SensorEntity):
     """Representation of an OVMS MQTT sensor."""
