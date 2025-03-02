@@ -1,17 +1,15 @@
 """Open Vehicle Monitoring System (OVMS) MQTT Integration for Home Assistant."""
 import logging
-
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry
 
-from .sensor import async_setup_entry
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 async def async_setup(hass: HomeAssistant, config: dict):
-    """Set up the OVMS MQTT component."""
-    # This function is called when the integration is loaded.
-    # It doesn't need to do anything for this integration.
+    """Set up the OVMS MQTT integration."""
+    _LOGGER.debug("Setting up OVMS MQTT integration")
     return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
@@ -19,9 +17,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     _LOGGER.debug("Setting up OVMS MQTT config entry")
 
     # Forward the setup to the sensor platform
-    hass.async_create_task(
-        hass.config_entries.async_forward_entry_setup(entry, "sensor")
-    )
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
 
     return True
 
