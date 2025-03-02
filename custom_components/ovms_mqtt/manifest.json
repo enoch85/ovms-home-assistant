@@ -7,6 +7,7 @@
   "documentation": "https://github.com/enoch85/ovms-mqtt-integration",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/enoch85/ovms-mqtt-integration/issues",
+  "platforms": ["sensor"],
   "requirements": ["paho-mqtt>=1.6.1"],
   "version": "1.0.0"
 }

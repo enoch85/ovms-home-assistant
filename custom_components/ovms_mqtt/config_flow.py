@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import logging
+import asyncio
+import ssl
 import voluptuous as vol
+import paho.mqtt.client as mqtt
 
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.const import CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_BROKER, CONF_TOPIC_PREFIX, CONF_QOS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,12 +22,12 @@ PORT_OPTIONS = {
 
 DATA_SCHEMA = vol.Schema(
     {
-        vol.Required("broker"): str,
-        vol.Required("port", default=1883): vol.In(PORT_OPTIONS),
-        vol.Required("username"): str,
-        vol.Required("password"): str,
-        vol.Optional("topic_prefix", default="ovms"): str,
-        vol.Optional("qos", default=1): vol.All(vol.Coerce(int), vol.Range(min=0, max=2)),
+        vol.Required(CONF_BROKER): str,
+        vol.Required(CONF_PORT, default=1883): vol.In(PORT_OPTIONS),
+        vol.Required(CONF_USERNAME): str,
+        vol.Required(CONF_PASSWORD): str,
+        vol.Optional(CONF_TOPIC_PREFIX, default="ovms"): str,
+        vol.Optional(CONF_QOS, default=1): vol.All(vol.Coerce(int), vol.Range(min=0, max=2)),
     }
 )
 
@@ -43,13 +47,13 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.debug("User input received: %s", user_input)
 
             # Validate the user input (e.g., check if the broker is reachable)
-            valid = await self._validate_input(user_input)
+            valid, error = await self._validate_input(user_input)
             if valid:
                 _LOGGER.debug("Configuration is valid, creating entry")
                 return self.async_create_entry(
                     title="OVMS MQTT", data=user_input
                 )
-            errors["base"] = "cannot_connect"
+            errors["base"] = error  # Display the detailed error message in the UI
             _LOGGER.debug("Configuration validation failed: %s", errors)
 
         return self.async_show_form(
@@ -58,8 +62,68 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def _validate_input(self, user_input: dict) -> bool:
-        """Validate the user input."""
+    async def _validate_input(self, user_input: dict) -> tuple[bool, str]:
+        """Validate the user input and test the MQTT broker connection."""
         _LOGGER.debug("Validating user input: %s", user_input)
-        # Add logic to validate the MQTT broker connection (optional)
-        return True
+
+        broker = user_input[CONF_BROKER]
+        port = user_input[CONF_PORT]
+        username = user_input[CONF_USERNAME]
+        password = user_input[CONF_PASSWORD]
+
+        _LOGGER.debug("Testing MQTT broker connection...")
+        connected, error_message = await self._test_mqtt_connection(broker, port, username, password)
+
+        if connected:
+            _LOGGER.debug("MQTT broker connection successful")
+            return True, ""
+        else:
+            _LOGGER.error("Failed to connect to MQTT broker: %s", error_message)
+            return False, error_message  # Return the detailed error message
+
+    async def _test_mqtt_connection(self, broker: str, port: int, username: str, password: str) -> tuple[bool, str]:
+        """Test the MQTT broker connection and return a tuple of (success, error_message)."""
+        _LOGGER.debug("Testing connection to MQTT broker: %s:%s", broker, port)
+
+        client = mqtt.Client()
+        client.username_pw_set(username, password)
+
+        # Configure TLS if the port is 8883
+        if port == 8883:
+            _LOGGER.debug("Configuring TLS for MQTT connection")
+            client.tls_set(cert_reqs=ssl.CERT_NONE)  # Disable certificate verification
+            client.tls_insecure_set(True)  # Allow insecure TLS connections
+
+        connected = False
+        error_message = ""
+
+        def on_connect(client, userdata, flags, rc):
+            nonlocal connected, error_message
+            if rc == 0:
+                _LOGGER.debug("Successfully connected to MQTT broker")
+                connected = True
+            else:
+                error_message = f"Failed to connect to MQTT broker: {mqtt.connack_string(rc)} (code: {rc})"
+                _LOGGER.error(error_message)
+
+        client.on_connect = on_connect
+
+        try:
+            _LOGGER.debug("Attempting to connect to MQTT broker...")
+            client.connect(broker, port, keepalive=10)
+            client.loop_start()
+
+            # Wait for the connection to complete (or timeout)
+            for _ in range(10):  # Wait up to 5 seconds (10 * 0.5s)
+                if connected:
+                    break
+                await asyncio.sleep(0.5)
+        except Exception as e:
+            error_message = f"Exception while connecting to MQTT broker: {str(e)}"
+            _LOGGER.error(error_message)
+            connected = False
+        finally:
+            client.loop_stop()
+            client.disconnect()
+
+        return connected, error_message
