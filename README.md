@@ -11,7 +11,7 @@ It's written by DeepSeek.
 
 ## First look:
 
-![image](https://github.com/user-attachments/assets/8b8f44cd-356d-44ef-aad1-c3b60d3af8e6)
+![image](https://github.com/user-attachments/assets/ecff58fe-188a-4aca-8eca-07d3bfeb2605)
 
 ## Configuration
 
