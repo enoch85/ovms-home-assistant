@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio  # Add this import
 import voluptuous as vol
 import paho.mqtt.client as mqtt
 
