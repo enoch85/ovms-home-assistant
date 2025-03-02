@@ -2,10 +2,10 @@
   "domain": "ovms_mqtt",
   "name": "OVMS MQTT Integration",
   "version": "1.0.0",
-  "codeowners": ["@enoch85"],
-  "dependencies": ["mqtt"],
   "documentation": "https://github.com/enoch85/ovms-mqtt-integration",
   "issue_tracker": "https://github.com/enoch85/ovms-mqtt-integration/issues",
+  "codeowners": ["@enoch85"],
+  "dependencies": ["mqtt"],
   "iot_class": "local_push",
   "requirements": ["paho-mqtt>=1.6.1"]
 }
