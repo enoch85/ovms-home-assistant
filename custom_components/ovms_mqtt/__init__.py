@@ -1,7 +1,7 @@
 import logging
 import json
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry  # Add this import
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.components.mqtt import subscription
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .sensor import OvmsSensor
