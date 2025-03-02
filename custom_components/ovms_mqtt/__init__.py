@@ -1,12 +1,18 @@
 """The Open Vehicle Monitoring System (OVMS) integration."""
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+import voluptuous as vol
 
 from .const import DOMAIN
+
+CONFIG_SCHEMA = vol.Schema({DOMAIN: vol.Schema({})}, extra=vol.ALLOW_EXTRA)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the OVMS MQTT component."""
+    # Use the config_entry_only_config_schema helper since this integration
+    # is set up via config entries.
     return True
 
 
