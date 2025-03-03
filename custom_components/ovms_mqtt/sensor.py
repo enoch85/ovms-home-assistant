@@ -1,10 +1,10 @@
 import logging
 import json
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.components.mqtt import async_subscribe  # Import async_subscribe directly
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import Entity
+from homeassistant.components import mqtt
 from .const import DOMAIN, CONF_BROKER, CONF_PORT, CONF_USERNAME, CONF_PASSWORD, CONF_TOPIC_PREFIX, CONF_QOS
 
 _LOGGER = logging.getLogger(__name__)
@@ -14,112 +14,155 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     _LOGGER.debug("Starting async_setup_entry for OVMS MQTT sensor platform")
 
     config = entry.data
-    broker = config[CONF_BROKER]
-    port = config[CONF_PORT]
-    username = config[CONF_USERNAME]
-    password = config[CONF_PASSWORD]
     topic_prefix = config.get(CONF_TOPIC_PREFIX, "ovms")
     qos = config.get(CONF_QOS, 1)
 
-    _LOGGER.debug(f"Configuration loaded: broker={broker}, port={port}, username={username}, topic_prefix={topic_prefix}, qos={qos}")
+    _LOGGER.debug(f"Configuration loaded: topic_prefix={topic_prefix}, qos={qos}")
 
-    # Store the configuration in hass.data
+    # Initialize entities dictionary
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {}
+    
     hass.data[DOMAIN] = {
         'entities': {},
-        'config': config
+        'config': config,
+        'discovered_topics': set()
     }
     _LOGGER.debug("Configuration stored in hass.data")
 
-    # Subscribe to MQTT topics
-    await subscribe_to_topics(hass, topic_prefix, async_add_entities)
-    _LOGGER.debug("MQTT topics subscribed successfully")
+    # Create a callback for handling the MQTT subscription
+    @callback
+    def message_received(msg):
+        """Handle received MQTT messages."""
+        topic = msg.topic
+        payload = msg.payload
+        
+        try:
+            payload_str = payload.decode('utf-8')
+        except (UnicodeDecodeError, AttributeError):
+            payload_str = str(payload)
+            
+        _LOGGER.debug(f"Received MQTT message: topic={topic}, payload={payload_str}")
+        
+        # Detect if this is a metric or notification topic
+        if "/metric/" in topic:
+            handle_metric_update(hass, topic, payload_str, async_add_entities)
+        elif "/notify/" in topic:
+            handle_notification_update(hass, topic, payload_str)
+            
+    # Subscribe to all OVMS MQTT topics with wildcard
+    subscription = await mqtt.async_subscribe(
+        hass, 
+        f"{topic_prefix}/#", 
+        message_received, 
+        qos
+    )
+    
+    _LOGGER.debug(f"Subscribed to MQTT topic: {topic_prefix}/#")
+    
+    # Store the subscription for later cleanup
+    hass.data[DOMAIN]['subscription'] = subscription
+    
     return True
 
-async def subscribe_to_topics(hass: HomeAssistant, topic_prefix: str, async_add_entities: AddEntitiesCallback):
-    """Subscribe to relevant MQTT topics."""
-    _LOGGER.debug(f"Subscribing to MQTT topics with prefix: {topic_prefix}")
-
-    await async_subscribe(  # Use async_subscribe directly
-        hass,
-        f"{topic_prefix}/+/+/metric/#",
-        lambda msg: handle_metric_update(hass, msg, async_add_entities)
-    )
-    _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/metric/#")
-
-    await async_subscribe(  # Use async_subscribe directly
-        hass,
-        f"{topic_prefix}/+/+/notify/#",
-        lambda msg: handle_notification_update(hass, msg)
-    )
-    _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/notify/#")
-
-def handle_metric_update(hass: HomeAssistant, msg, async_add_entities: AddEntitiesCallback):
+def handle_metric_update(hass: HomeAssistant, topic: str, payload_str: str, async_add_entities: AddEntitiesCallback):
     """Handle incoming MQTT messages for metrics."""
-    _LOGGER.debug(f"Received MQTT message: topic={msg.topic}, payload={msg.payload}")
+    _LOGGER.debug(f"Processing metric topic: {topic}")
 
-    topic = msg.topic
-    payload = msg.payload
     config = hass.data[DOMAIN]['config']
     topic_prefix = config.get(CONF_TOPIC_PREFIX, "ovms")
 
-    _LOGGER.debug(f"Parsing topic: {topic}")
     parts = topic.split('/')
-    if len(parts) >= 5 and parts[0] == topic_prefix and parts[3] == 'metric':
+    
+    # Validate topic structure
+    if len(parts) < 5 or parts[0] != topic_prefix or "metric" not in parts:
+        _LOGGER.warning(f"Topic does not match expected structure: {topic}")
+        return
+        
+    # Find the position of "metric" in the topic
+    try:
+        metric_index = parts.index("metric")
+        if metric_index < 3:  # Need at least prefix/vehicle/vin before metric
+            _LOGGER.warning(f"Topic structure is invalid: {topic}")
+            return
+            
         vehicle_name = parts[1]  # Dynamic vehicle name
         vin = parts[2]  # Dynamic VIN
-        metric_key = '/'.join(parts[4:])  # Full metric key
-
+        metric_key = '/'.join(parts[metric_index+1:])  # Full metric key after "metric"
+        
         _LOGGER.debug(f"Parsed metric: vehicle_name={vehicle_name}, vin={vin}, metric_key={metric_key}")
-
-        # Parse the payload (assuming JSON or plain text)
+        
+        # Parse the payload
         try:
-            value = json.loads(payload)
+            value = json.loads(payload_str)
             _LOGGER.debug(f"Payload parsed as JSON: {value}")
         except json.JSONDecodeError:
-            value = payload
-            _LOGGER.debug(f"Payload is plain text: {value}")
-
+            # Try to convert to appropriate type
+            value = payload_str.strip()
+            try:
+                # Convert to number if possible
+                if '.' in value:
+                    value = float(value)
+                else:
+                    value = int(value)
+            except ValueError:
+                # Keep as string if not a number
+                pass
+            _LOGGER.debug(f"Payload processed as: {value} (type: {type(value)})")
+        
         # Create or update the sensor entity
         update_sensor_entity(hass, vin, metric_key, value, async_add_entities)
-    else:
-        _LOGGER.warning(f"Topic does not match expected structure: {topic}")
+        
+    except ValueError:
+        _LOGGER.warning(f"Could not find 'metric' in topic: {topic}")
+        return
 
-def handle_notification_update(hass: HomeAssistant, msg):
+def handle_notification_update(hass: HomeAssistant, topic: str, payload_str: str):
     """Handle incoming MQTT messages for notifications."""
-    _LOGGER.debug(f"Received MQTT message: topic={msg.topic}, payload={msg.payload}")
+    _LOGGER.debug(f"Processing notification topic: {topic}")
 
-    topic = msg.topic
-    payload = msg.payload
     config = hass.data[DOMAIN]['config']
     topic_prefix = config.get(CONF_TOPIC_PREFIX, "ovms")
 
-    _LOGGER.debug(f"Parsing topic: {topic}")
     parts = topic.split('/')
-    if len(parts) >= 5 and parts[0] == topic_prefix and parts[3] == 'notify':
+    
+    # Find the position of "notify" in the topic
+    try:
+        notify_index = parts.index("notify")
+        if notify_index < 3:  # Need at least prefix/vehicle/vin before notify
+            _LOGGER.warning(f"Topic structure is invalid: {topic}")
+            return
+            
         vehicle_name = parts[1]  # Dynamic vehicle name
         vin = parts[2]  # Dynamic VIN
-        notification_type = '/'.join(parts[4:])  # Full notification type
-
-        _LOGGER.debug(f"Parsed notification: vehicle_name={vehicle_name}, vin={vin}, notification_type={notification_type}")
-
-        # Log the notification (or trigger an automation)
-        _LOGGER.info(f"Notification received for {vin}: {notification_type} = {payload}")
-    else:
-        _LOGGER.warning(f"Topic does not match expected structure: {topic}")
+        notification_type = '/'.join(parts[notify_index+1:])  # Full notification type
+        
+        _LOGGER.info(f"Notification received for {vin}: {notification_type} = {payload_str}")
+        
+    except ValueError:
+        _LOGGER.warning(f"Could not find 'notify' in topic: {topic}")
+        return
 
 def update_sensor_entity(hass: HomeAssistant, vin: str, metric_key: str, value, async_add_entities: AddEntitiesCallback):
     """Create or update a sensor entity."""
-    entity_id = f"sensor.{vin}_{metric_key.replace('/', '_')}"
-    entities = hass.data[DOMAIN]['entities']
-
+    # Create a safe entity_id (remove invalid characters)
+    safe_metric_key = metric_key.replace('/', '_').replace('.', '_')
+    entity_id = f"{vin}_{safe_metric_key}"
+    
     _LOGGER.debug(f"Updating sensor entity: entity_id={entity_id}, value={value}")
+    
+    # Initialize entities dict if needed
+    if 'entities' not in hass.data[DOMAIN]:
+        hass.data[DOMAIN]['entities'] = {}
+    
+    entities = hass.data[DOMAIN]['entities']
 
     if entity_id not in entities:
         # Create a new sensor entity
         _LOGGER.debug(f"Creating new sensor entity: {entity_id}")
         sensor = OvmsSensor(vin, metric_key, value)
         entities[entity_id] = sensor
-        async_add_entities([sensor])
+        async_add_entities([sensor], True)  # True for update before adding
     else:
         # Update the existing entity
         _LOGGER.debug(f"Updating existing sensor entity: {entity_id}")
@@ -134,37 +177,48 @@ class OvmsSensor(Entity):
         self._vin = vin
         self._metric_key = metric_key
         self._value = value
-        self._unique_id = f"{vin}_{metric_key.replace('/', '_')}"
+        # Make sure the unique_id is valid
+        safe_metric_key = metric_key.replace('/', '_').replace('.', '_')
+        self._unique_id = f"{vin}_{safe_metric_key}"
         self._name = f"OVMS {vin} {metric_key.replace('/', ' ')}"
+        
+        # Initialize additional attributes
+        self._attr_available = True
+        self._attr_extra_state_attributes = {
+            "vin": vin,
+            "metric_key": metric_key
+        }
+        
         _LOGGER.debug(f"Created sensor with unique_id={self._unique_id}, name={self._name}")
 
     @property
     def unique_id(self):
         """Return a unique ID for the sensor."""
-        _LOGGER.debug(f"Getting unique_id: {self._unique_id}")
         return self._unique_id
 
     @property
     def name(self):
         """Return the name of the sensor."""
-        _LOGGER.debug(f"Getting name: {self._name}")
         return self._name
 
     @property
     def state(self):
         """Return the state of the sensor."""
-        _LOGGER.debug(f"Getting state: {self._value}")
         return self._value
 
     @property
     def should_poll(self):
         """No polling needed for MQTT sensors."""
-        _LOGGER.debug("Polling is disabled for this sensor")
         return False
+        
+    @property
+    def extra_state_attributes(self):
+        """Return entity specific state attributes."""
+        return self._attr_extra_state_attributes
 
     def update_value(self, value):
         """Update the sensor's value."""
-        _LOGGER.debug(f"Updating sensor value: {self._value} -> {value}")
+        _LOGGER.debug(f"Updating sensor value: old={self._value} new={value}")
         self._value = value
-        self.schedule_update_ha_state()
-        _LOGGER.debug("Sensor value updated and state scheduled for update")
+        self.async_write_ha_state()  # Use async_write_ha_state instead of schedule_update_ha_state
+        _LOGGER.debug("Sensor value updated and state written")
