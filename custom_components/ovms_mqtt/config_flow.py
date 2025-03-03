@@ -166,7 +166,9 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             password = user_input.get(CONF_PASSWORD)
 
             # Determine port and SSL based on connection type
-            ssl_enabled = conn_type in (CONNECTION_TYPE_SECURE, CONNECTION_TYPE_WEBSOCKETS_SECURE)
+            ssl_enabled = conn_type in (
+                CONNECTION_TYPE_SECURE, CONNECTION_TYPE_WEBSOCKETS_SECURE
+            )
             if conn_type == CONNECTION_TYPE_STANDARD:
                 port = DEFAULT_PORT
             elif conn_type == CONNECTION_TYPE_SECURE:
@@ -208,7 +210,7 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
-                        {"value": t, "label": CONNECTION_TYPES[t]} 
+                        {"value": t, "label": CONNECTION_TYPES[t]}
                         for t in CONNECTION_TYPES
                     ],
                     translation_key="connection_type",
@@ -217,7 +219,7 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             vol.Optional(CONF_PORT): selector.NumberSelector(
                 selector.NumberSelectorConfig(
-                    min=1, 
+                    min=1,
                     max=65535,
                     mode=selector.NumberSelectorMode.BOX
                 )
@@ -271,7 +273,7 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_QOS, default=DEFAULT_QOS): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
-                        {"value": qos_level, "label": QOS_OPTIONS[qos_level]} 
+                        {"value": qos_level, "label": QOS_OPTIONS[qos_level]}
                         for qos_level in QOS_OPTIONS
                     ],
                     translation_key="qos_level",
@@ -335,7 +337,9 @@ class OVMSMQTTOptionsFlow(config_entries.OptionsFlow):
                 password = self.current_config[CONF_PASSWORD]
 
             # Determine port and SSL based on connection type
-            ssl_enabled = conn_type in (CONNECTION_TYPE_SECURE, CONNECTION_TYPE_WEBSOCKETS_SECURE)
+            ssl_enabled = conn_type in (
+                CONNECTION_TYPE_SECURE, CONNECTION_TYPE_WEBSOCKETS_SECURE
+            )
             if conn_type == CONNECTION_TYPE_STANDARD:
                 port = DEFAULT_PORT
             elif conn_type == CONNECTION_TYPE_SECURE:
@@ -393,7 +397,7 @@ class OVMSMQTTOptionsFlow(config_entries.OptionsFlow):
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
-                        {"value": t, "label": CONNECTION_TYPES[t]} 
+                        {"value": t, "label": CONNECTION_TYPES[t]}
                         for t in CONNECTION_TYPES
                     ],
                     translation_key="connection_type",
@@ -402,13 +406,13 @@ class OVMSMQTTOptionsFlow(config_entries.OptionsFlow):
             ),
             vol.Optional(CONF_PORT): selector.NumberSelector(
                 selector.NumberSelectorConfig(
-                    min=1, 
+                    min=1,
                     max=65535,
                     mode=selector.NumberSelectorMode.BOX
                 )
             ),
             vol.Optional(
-                CONF_USERNAME, 
+                CONF_USERNAME,
                 description={"suggested_value": self.current_config.get(CONF_USERNAME)}
             ): str,
             vol.Optional(CONF_PASSWORD): selector.TextSelector(
@@ -422,8 +426,16 @@ class OVMSMQTTOptionsFlow(config_entries.OptionsFlow):
             data_schema=data_schema,
             errors=errors,
             description_placeholders={
-                "username_notice": f"Current username: {self.current_config.get(CONF_USERNAME)}" if self.current_config.get(CONF_USERNAME) else "No username set",
-                "password_notice": "Password is set" if self.current_config.get(CONF_PASSWORD) else "No password set",
+                "username_notice": (
+                    f"Current username: {self.current_config.get(CONF_USERNAME)}"
+                    if self.current_config.get(CONF_USERNAME)
+                    else "No username set"
+                ),
+                "password_notice": (
+                    "Password is set"
+                    if self.current_config.get(CONF_PASSWORD)
+                    else "No password set"
+                ),
             },
         )
 
@@ -466,20 +478,20 @@ class OVMSMQTTOptionsFlow(config_entries.OptionsFlow):
         # Prepare schema with QoS dropdown instead of slider
         data_schema = vol.Schema({
             vol.Required(
-                CONF_TOPIC_PREFIX, 
+                CONF_TOPIC_PREFIX,
                 default=self.current_config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
             ): str,
             vol.Required(
-                CONF_VEHICLE_ID, 
+                CONF_VEHICLE_ID,
                 default=self.current_config.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID)
             ): str,
             vol.Required(
-                CONF_QOS, 
+                CONF_QOS,
                 default=self.current_config.get(CONF_QOS, DEFAULT_QOS)
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
-                        {"value": qos_level, "label": QOS_OPTIONS[qos_level]} 
+                        {"value": qos_level, "label": QOS_OPTIONS[qos_level]}
                         for qos_level in QOS_OPTIONS
                     ],
                     translation_key="qos_level",
