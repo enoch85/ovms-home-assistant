@@ -1,4 +1,3 @@
-"""Config flow for OVMS MQTT integration."""
 from __future__ import annotations
 
 import logging
@@ -123,11 +122,13 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.hass.async_add_executor_job(client.connect, broker, port, 10)
             client.loop_start()
 
-            # Wait for the connection to complete (or timeout)
-            for _ in range(10):  # Wait up to 5 seconds (10 * 0.5s)
-                if connected:
-                    break
-                await asyncio.sleep(0.5)
+            # Wait for the connection to complete with timeout
+            await asyncio.wait_for(self._wait_for_connection(client), timeout=10)
+
+        except asyncio.TimeoutError:
+            error_message = "Connection to MQTT broker timed out"
+            _LOGGER.error(error_message)
+            connected = False
         except Exception as e:
             error_message = f"Exception while connecting to MQTT broker: {str(e)}"
             _LOGGER.error(error_message)
@@ -137,3 +138,8 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             client.disconnect()
 
         return connected, error_message
+
+    async def _wait_for_connection(self, client):
+        """Wait for the connection to be established."""
+        while not client.is_connected():
+            await asyncio.sleep(0.5)
