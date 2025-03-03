@@ -1,11 +1,14 @@
-"""Open Vehicle Monitoring System (OVMS) MQTT Integration for Home Assistant."""
 import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+import voluptuous as vol
 
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+# Define an empty configuration schema
+CONFIG_SCHEMA = vol.Schema({})
 
 async def async_setup(hass: HomeAssistant, config: dict):
     """Set up the OVMS MQTT integration."""
