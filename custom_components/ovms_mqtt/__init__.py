@@ -7,6 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX
+from .mqtt_handler import async_cleanup_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +57,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Unload the sensor platform
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    
+    # Clean up entities from registry
+    if unload_ok:
+        await async_cleanup_entities(hass, entry)
     
     # Remove config entry from hass.data
     if unload_ok and DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
