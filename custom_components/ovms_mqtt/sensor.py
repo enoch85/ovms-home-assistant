@@ -39,6 +39,7 @@ async def subscribe_to_topics(hass: HomeAssistant, topic_prefix: str, async_add_
     """Subscribe to relevant MQTT topics."""
     _LOGGER.debug(f"Subscribing to MQTT topics with prefix: {topic_prefix}")
 
+    # Subscribe to metric topics
     await async_subscribe(  # Use async_subscribe directly
         hass,
         f"{topic_prefix}/+/+/metric/#",
@@ -46,6 +47,7 @@ async def subscribe_to_topics(hass: HomeAssistant, topic_prefix: str, async_add_
     )
     _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/metric/#")
 
+    # Subscribe to notification topics
     await async_subscribe(  # Use async_subscribe directly
         hass,
         f"{topic_prefix}/+/+/notify/#",
