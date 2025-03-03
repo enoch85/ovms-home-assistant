@@ -202,7 +202,9 @@ def parse_topic(topic: str) -> Tuple[Optional[str], Optional[str], list, Optiona
     return vehicle_id, topic_type, path_segments, metric_name
 
 
-def determine_entity_metadata(topic: str, path_segments: list, metric_name: str, payload_data: Any) -> dict:
+def determine_entity_metadata(
+    topic: str, path_segments: list, metric_name: str, payload_data: Any
+) -> dict:
     """Determine entity metadata from topic and payload."""
     result = {
         "name": metric_name.replace('_', ' ').title() if metric_name else "Unknown",
