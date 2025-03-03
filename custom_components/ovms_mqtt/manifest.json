@@ -1,13 +1,12 @@
 {
   "domain": "ovms_mqtt",
-  "name": "OVMS MQTT Integration",
+  "name": "Open Vehicle Monitoring System MQTT",
   "codeowners": ["@enoch85"],
   "config_flow": true,
   "dependencies": ["mqtt"],
   "documentation": "https://github.com/enoch85/ovms-mqtt-integration",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/enoch85/ovms-mqtt-integration/issues",
-  "platforms": ["sensor"],
-  "requirements": ["paho-mqtt>=1.6.1"],
-  "version": "1.0.0"
+  "requirements": ["paho-mqtt==2.2.1"],
+  "version": "0.1.0"
 }
