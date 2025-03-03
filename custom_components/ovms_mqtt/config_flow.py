@@ -94,7 +94,9 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 # Offload the blocking tls_set call to a separate thread
                 await self.hass.async_add_executor_job(
-                    functools.partial(client.tls_set, cert_reqs=ssl.CERT_NONE),
+                    functools.partial(
+                        client.tls_set, cert_reqs=ssl.CERT_NONE
+                    ),
                 )
                 client.tls_insecure_set(True)  # Allow insecure TLS connections
                 _LOGGER.debug("TLS configuration completed successfully")
