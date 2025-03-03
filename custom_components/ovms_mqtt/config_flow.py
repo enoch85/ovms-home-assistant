@@ -69,10 +69,12 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         broker = user_input[CONF_BROKER]
         port = user_input[CONF_PORT]
         username = user_input[CONF_USERNAME]
-        password = user_input[CONF_PASSWORD]
+        password = user_input[CONF_PASSWORD]  # Used in _test_mqtt_connection
 
         _LOGGER.debug("Testing MQTT broker connection...")
-        connected, error_message = await self._test_mqtt_connection(broker, port, username, password)
+        connected, error_message = await self._test_mqtt_connection(
+            broker, port, username, password
+        )
 
         if connected:
             _LOGGER.debug("MQTT broker connection successful")
@@ -81,7 +83,9 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.error("Failed to connect to MQTT broker: %s", error_message)
             return False, error_message  # Return the detailed error message
 
-    async def _test_mqtt_connection(self, broker: str, port: int, username: str, password: str) -> tuple[bool, str]:
+    async def _test_mqtt_connection(
+        self, broker: str, port: int, username: str, password: str
+    ) -> tuple[bool, str]:
         """Test the MQTT broker connection and return a tuple of (success, error_message)."""
         _LOGGER.debug("Testing connection to MQTT broker: %s:%s", broker, port)
 
@@ -94,9 +98,7 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 # Offload the blocking tls_set call to a separate thread
                 await self.hass.async_add_executor_job(
-                    functools.partial(
-                        client.tls_set, cert_reqs=ssl.CERT_NONE
-                    ),
+                    functools.partial(client.tls_set, cert_reqs=ssl.CERT_NONE),
                 )
                 client.tls_insecure_set(True)  # Allow insecure TLS connections
                 _LOGGER.debug("TLS configuration completed successfully")
