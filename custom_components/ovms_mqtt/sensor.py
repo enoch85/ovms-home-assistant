@@ -1,170 +1,215 @@
+"""Sensor platform for OVMS MQTT integration."""
 import logging
-import json
-from homeassistant.core import HomeAssistant
+from typing import Optional, Dict, Any
+
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.components.mqtt import async_subscribe  # Import async_subscribe directly
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.entity import Entity
-from .const import DOMAIN, CONF_BROKER, CONF_PORT, CONF_USERNAME, CONF_PASSWORD, CONF_TOPIC_PREFIX, CONF_QOS
+from homeassistant.helpers.typing import StateType
+from homeassistant.util import slugify
+
+from .const import DOMAIN, DEFAULT_MANUFACTURER, CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
-    """Set up OVMS MQTT sensor platform from a config entry."""
-    _LOGGER.debug("Starting async_setup_entry for OVMS MQTT sensor platform")
 
-    config = entry.data
-    broker = config[CONF_BROKER]
-    port = config[CONF_PORT]
-    username = config[CONF_USERNAME]
-    password = config[CONF_PASSWORD]
-    topic_prefix = config.get(CONF_TOPIC_PREFIX, "ovms")
-    qos = config.get(CONF_QOS, 1)
-
-    _LOGGER.debug(f"Configuration loaded: broker={broker}, port={port}, username={username}, topic_prefix={topic_prefix}, qos={qos}")
-
-    # Store the configuration in hass.data
-    hass.data[DOMAIN] = {
-        'entities': {},
-        'config': config
-    }
-    _LOGGER.debug("Configuration stored in hass.data")
-
-    # Subscribe to MQTT topics
-    await subscribe_to_topics(hass, topic_prefix, async_add_entities)
-    _LOGGER.debug("MQTT topics subscribed successfully")
-    return True
-
-async def subscribe_to_topics(hass: HomeAssistant, topic_prefix: str, async_add_entities: AddEntitiesCallback):
-    """Subscribe to relevant MQTT topics."""
-    _LOGGER.debug(f"Subscribing to MQTT topics with prefix: {topic_prefix}")
-
-    await async_subscribe(  # Use async_subscribe directly
-        hass,
-        f"{topic_prefix}/+/+/metric/#",
-        lambda msg: handle_metric_update(hass, msg, async_add_entities)
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up OVMS MQTT sensors based on a config entry."""
+    _LOGGER.debug(f"Setting up OVMS MQTT sensor platform for entry {entry.entry_id}")
+    
+    # Get stored entities from hass.data
+    entities = hass.data[DOMAIN][entry.entry_id]["entities"]
+    vehicle_id = entry.data.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID)
+    
+    # Add entities for existing data
+    sensors = []
+    for entity_id, entity_data in entities.items():
+        _LOGGER.debug(f"Creating sensor for existing entity: {entity_id}")
+        sensors.append(
+            OVMSMQTTSensor(
+                hass,
+                entry,
+                entity_id,
+                entity_data["topic"],
+                entity_data["name"],
+                entity_data.get("unique_id", entity_id),
+                vehicle_id,
+            )
+        )
+    
+    if sensors:
+        async_add_entities(sensors)
+    
+    @callback
+    def async_add_sensor(entity_id):
+        """Add sensor for a newly received MQTT topic."""
+        _LOGGER.debug(f"Adding new sensor for entity: {entity_id}")
+        if entity_id in entities:
+            entity_data = entities[entity_id]
+            sensor = OVMSMQTTSensor(
+                hass,
+                entry,
+                entity_id,
+                entity_data["topic"],
+                entity_data["name"],
+                entity_data.get("unique_id", entity_id),
+                vehicle_id,
+            )
+            async_add_entities([sensor])
+    
+    # Connect to dispatcher to add new sensors
+    entry.async_on_unload(
+        async_dispatcher_connect(
+            hass, f"{DOMAIN}_{entry.entry_id}_new_entity", async_add_sensor
+        )
     )
-    _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/metric/#")
 
-    await async_subscribe(  # Use async_subscribe directly
-        hass,
-        f"{topic_prefix}/+/+/notify/#",
-        lambda msg: handle_notification_update(hass, msg)
-    )
-    _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/notify/#")
 
-def handle_metric_update(hass: HomeAssistant, msg, async_add_entities: AddEntitiesCallback):
-    """Handle incoming MQTT messages for metrics."""
-    _LOGGER.debug(f"Received MQTT message: topic={msg.topic}, payload={msg.payload}")
-
-    topic = msg.topic
-    payload = msg.payload
-    config = hass.data[DOMAIN]['config']
-    topic_prefix = config.get(CONF_TOPIC_PREFIX, "ovms")
-
-    _LOGGER.debug(f"Parsing topic: {topic}")
-    parts = topic.split('/')
-    if len(parts) >= 5 and parts[0] == topic_prefix and parts[3] == 'metric':
-        vehicle_name = parts[1]  # Dynamic vehicle name
-        vin = parts[2]  # Dynamic VIN
-        metric_key = '/'.join(parts[4:])  # Full metric key
-
-        _LOGGER.debug(f"Parsed metric: vehicle_name={vehicle_name}, vin={vin}, metric_key={metric_key}")
-
-        # Parse the payload (assuming JSON or plain text)
-        try:
-            value = json.loads(payload)
-            _LOGGER.debug(f"Payload parsed as JSON: {value}")
-        except json.JSONDecodeError:
-            value = payload
-            _LOGGER.debug(f"Payload is plain text: {value}")
-
-        # Create or update the sensor entity
-        update_sensor_entity(hass, vin, metric_key, value, async_add_entities)
-    else:
-        _LOGGER.warning(f"Topic does not match expected structure: {topic}")
-
-def handle_notification_update(hass: HomeAssistant, msg):
-    """Handle incoming MQTT messages for notifications."""
-    _LOGGER.debug(f"Received MQTT message: topic={msg.topic}, payload={msg.payload}")
-
-    topic = msg.topic
-    payload = msg.payload
-    config = hass.data[DOMAIN]['config']
-    topic_prefix = config.get(CONF_TOPIC_PREFIX, "ovms")
-
-    _LOGGER.debug(f"Parsing topic: {topic}")
-    parts = topic.split('/')
-    if len(parts) >= 5 and parts[0] == topic_prefix and parts[3] == 'notify':
-        vehicle_name = parts[1]  # Dynamic vehicle name
-        vin = parts[2]  # Dynamic VIN
-        notification_type = '/'.join(parts[4:])  # Full notification type
-
-        _LOGGER.debug(f"Parsed notification: vehicle_name={vehicle_name}, vin={vin}, notification_type={notification_type}")
-
-        # Log the notification (or trigger an automation)
-        _LOGGER.info(f"Notification received for {vin}: {notification_type} = {payload}")
-    else:
-        _LOGGER.warning(f"Topic does not match expected structure: {topic}")
-
-def update_sensor_entity(hass: HomeAssistant, vin: str, metric_key: str, value, async_add_entities: AddEntitiesCallback):
-    """Create or update a sensor entity."""
-    entity_id = f"sensor.{vin}_{metric_key.replace('/', '_')}"
-    entities = hass.data[DOMAIN]['entities']
-
-    _LOGGER.debug(f"Updating sensor entity: entity_id={entity_id}, value={value}")
-
-    if entity_id not in entities:
-        # Create a new sensor entity
-        _LOGGER.debug(f"Creating new sensor entity: {entity_id}")
-        sensor = OvmsSensor(vin, metric_key, value)
-        entities[entity_id] = sensor
-        async_add_entities([sensor])
-    else:
-        # Update the existing entity
-        _LOGGER.debug(f"Updating existing sensor entity: {entity_id}")
-        entities[entity_id].update_value(value)
-
-class OvmsSensor(Entity):
+class OVMSMQTTSensor(SensorEntity):
     """Representation of an OVMS MQTT sensor."""
 
-    def __init__(self, vin: str, metric_key: str, value):
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        entity_id: str,
+        topic: str,
+        name: str,
+        unique_id: str,
+        vehicle_id: str,
+    ) -> None:
         """Initialize the sensor."""
-        _LOGGER.debug(f"Initializing OvmsSensor: vin={vin}, metric_key={metric_key}, value={value}")
-        self._vin = vin
-        self._metric_key = metric_key
-        self._value = value
-        self._unique_id = f"{vin}_{metric_key.replace('/', '_')}"
-        self._name = f"OVMS {vin} {metric_key.replace('/', ' ')}"
-        _LOGGER.debug(f"Created sensor with unique_id={self._unique_id}, name={self._name}")
+        self.hass = hass
+        self.entry = entry
+        self._entity_id = entity_id
+        self.topic = topic
+        self._attr_name = name
+        self._attr_unique_id = unique_id
+        self._vehicle_id = vehicle_id
+        
+        # Get last component of the topic for device class guessing
+        topic_parts = topic.split('/')
+        self._topic_last_part = topic_parts[-1] if topic_parts else ""
+        
+        # Guess device class and unit based on topic
+        self._attr_device_class = self._guess_device_class()
+        self._attr_native_unit_of_measurement = self._guess_unit()
+        
+        # Device info
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, self._vehicle_id)},
+            name=f"OVMS Vehicle {self._vehicle_id}",
+            manufacturer=DEFAULT_MANUFACTURER,
+            model="OVMS",
+        )
+        
+        _LOGGER.debug(
+            f"Initialized sensor: {self._attr_name} (ID: {self._entity_id}) "
+            f"with device class: {self._attr_device_class}, "
+            f"unit: {self._attr_native_unit_of_measurement}"
+        )
+
+    def _guess_device_class(self) -> Optional[str]:
+        """Guess device class based on topic/name."""
+        topic_lower = self._topic_last_part.lower()
+        
+        if "temp" in topic_lower:
+            return "temperature"
+        elif "humidity" in topic_lower:
+            return "humidity"
+        elif "soc" in topic_lower or "battery" in topic_lower:
+            return "battery"
+        elif "voltage" in topic_lower:
+            return "voltage"
+        elif "current" in topic_lower:
+            return "current"
+        elif "power" in topic_lower:
+            return "power"
+        elif "energy" in topic_lower:
+            return "energy"
+        elif "distance" in topic_lower or "odometer" in topic_lower:
+            return "distance"
+        elif "speed" in topic_lower:
+            return "speed"
+        
+        return None
+
+    def _guess_unit(self) -> str:
+        """Guess unit based on topic/name and device class."""
+        topic_lower = self._topic_last_part.lower()
+        
+        if self._attr_device_class == "temperature":
+            return "°C"
+        elif self._attr_device_class == "humidity":
+            return "%"
+        elif self._attr_device_class == "battery":
+            return "%"
+        elif self._attr_device_class == "voltage":
+            return "V"
+        elif self._attr_device_class == "current":
+            return "A"
+        elif self._attr_device_class == "power":
+            return "W"
+        elif self._attr_device_class == "energy":
+            return "kWh"
+        elif self._attr_device_class == "distance":
+            return "km"
+        elif self._attr_device_class == "speed":
+            return "km/h"
+        
+        # Check topic for unit hints
+        if "percent" in topic_lower or "%" in topic_lower:
+            return "%"
+        elif "temp" in topic_lower:
+            return "°C"
+        
+        return ""
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to state updates."""
+        await super().async_added_to_hass()
+        
+        # Subscribe to state updates
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{DOMAIN}_{self.entry.entry_id}_state_update",
+                self._handle_state_update,
+            )
+        )
+        
+        # Set initial state
+        self._update_state()
+
+    @callback
+    def _handle_state_update(self, entity_id):
+        """Handle state update from dispatcher."""
+        if entity_id == self._entity_id:
+            self._update_state()
+            self.async_write_ha_state()
+
+    def _update_state(self):
+        """Update state from MQTT data."""
+        entity_data = self.hass.data[DOMAIN][self.entry.entry_id]["entities"].get(self._entity_id)
+        if entity_data:
+            state_value = entity_data.get("state")
+            
+            # Convert boolean values to "ON"/"OFF" strings
+            if isinstance(state_value, bool):
+                self._attr_native_value = "ON" if state_value else "OFF"
+            else:
+                self._attr_native_value = state_value
+                
+            # Update unit if available
+            if "unit" in entity_data and entity_data["unit"]:
+                self._attr_native_unit_of_measurement = entity_data["unit"]
 
     @property
-    def unique_id(self):
-        """Return a unique ID for the sensor."""
-        _LOGGER.debug(f"Getting unique_id: {self._unique_id}")
-        return self._unique_id
-
-    @property
-    def name(self):
-        """Return the name of the sensor."""
-        _LOGGER.debug(f"Getting name: {self._name}")
-        return self._name
-
-    @property
-    def state(self):
-        """Return the state of the sensor."""
-        _LOGGER.debug(f"Getting state: {self._value}")
-        return self._value
-
-    @property
-    def should_poll(self):
-        """No polling needed for MQTT sensors."""
-        _LOGGER.debug("Polling is disabled for this sensor")
-        return False
-
-    def update_value(self, value):
-        """Update the sensor's value."""
-        _LOGGER.debug(f"Updating sensor value: {self._value} -> {value}")
-        self._value = value
-        self.schedule_update_ha_state()
-        _LOGGER.debug("Sensor value updated and state scheduled for update")
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self._entity_id in self.hass.data[DOMAIN][self.entry.entry_id]["entities"]
