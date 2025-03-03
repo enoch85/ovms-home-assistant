@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict
+from typing import Dict, Any, Optional
+from datetime import datetime, timedelta
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -10,8 +11,12 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
-from .entity_handler import get_device_info, get_vehicle_device_info
+from .const import (
+    DOMAIN,
+    CONF_AVAILABILITY_TIMEOUT,
+    DEFAULT_AVAILABILITY_TIMEOUT,
+)
+from .entity_handler import get_device_info, get_vehicle_device_info, get_battery_icon
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -81,6 +86,8 @@ class OVMSMQTTSensor(SensorEntity):
         self.config_entry = config_entry
         self._unique_id = unique_id
         self._attr_unique_id = unique_id
+        self._attr_available = True  # Initially assume available
+        self._last_updated = None
         
         # Set up various attributes from entity_data
         self._vehicle_id = entity_data.get("vehicle_id")
@@ -94,6 +101,13 @@ class OVMSMQTTSensor(SensorEntity):
         self._attr_state_class = entity_data.get("state_class")
         self._attr_icon = entity_data.get("icon")
         self._attr_native_value = entity_data.get("state")
+        
+        # Update last updated timestamp if available
+        if "last_updated" in entity_data:
+            try:
+                self._last_updated = datetime.fromisoformat(entity_data["last_updated"])
+            except (ValueError, TypeError):
+                self._last_updated = datetime.now()
         
         # Set up device info - group by category
         if self._category and self._vehicle_id:
@@ -113,21 +127,16 @@ class OVMSMQTTSensor(SensorEntity):
         )
     
     @property
-    def extra_state_attributes(self) -> Dict:
+    def extra_state_attributes(self) -> Dict[str, Any]:
         """Return additional attributes about the sensor."""
         attributes = {}
         
         # Add topic for debugging
         attributes["mqtt_topic"] = self._topic
         
-        # Get the full entity data
-        entity_data = self.hass.data[DOMAIN][self.config_entry.entry_id]["entities"].get(
-            self._unique_id, {}
-        )
-        
-        # Add last updated timestamp if available
-        if "last_updated" in entity_data:
-            attributes["last_updated"] = entity_data["last_updated"]
+        # Add last updated timestamp
+        if self._last_updated:
+            attributes["last_updated"] = self._last_updated.isoformat()
         
         return attributes
 
@@ -159,39 +168,50 @@ class OVMSMQTTSensor(SensorEntity):
             )
         )
         if entity_data:
+            # Update state value
             self._attr_native_value = entity_data.get("state")
+            
+            # Update availability if explicitly set
+            if "available" in entity_data:
+                self._attr_available = entity_data["available"]
+            
+            # Update last updated timestamp
+            if "last_updated" in entity_data:
+                try:
+                    self._last_updated = datetime.fromisoformat(
+                        entity_data["last_updated"]
+                    )
+                except (ValueError, TypeError):
+                    self._last_updated = datetime.now()
             
             # Update battery icon based on state if applicable
             if "soc" in self._topic and isinstance(self._attr_native_value, (int, float)):
-                try:
-                    level = int(float(self._attr_native_value))
-                    if level <= 10:
-                        self._attr_icon = "mdi:battery-10"
-                    elif level <= 20:
-                        self._attr_icon = "mdi:battery-20"
-                    elif level <= 30:
-                        self._attr_icon = "mdi:battery-30"
-                    elif level <= 40:
-                        self._attr_icon = "mdi:battery-40"
-                    elif level <= 50:
-                        self._attr_icon = "mdi:battery-50"
-                    elif level <= 60:
-                        self._attr_icon = "mdi:battery-60"
-                    elif level <= 70:
-                        self._attr_icon = "mdi:battery-70"
-                    elif level <= 80:
-                        self._attr_icon = "mdi:battery-80"
-                    elif level <= 90:
-                        self._attr_icon = "mdi:battery-90"
-                    else:
-                        self._attr_icon = "mdi:battery"
-                except (ValueError, TypeError):
-                    pass
+                self._attr_icon = get_battery_icon(self._attr_native_value)
 
     @property
     def available(self) -> bool:
         """Return if entity is available."""
-        return (
+        # Check if entity exists in data store
+        has_entity = (
             self._unique_id in
             self.hass.data[DOMAIN][self.config_entry.entry_id]["entities"]
         )
+        
+        if not has_entity:
+            return False
+            
+        # If explicitly marked as unavailable
+        if hasattr(self, "_attr_available") and not self._attr_available:
+            return False
+            
+        # Check for timeout if configured
+        availability_timeout = self.config_entry.data.get(
+            CONF_AVAILABILITY_TIMEOUT, DEFAULT_AVAILABILITY_TIMEOUT
+        )
+        if availability_timeout > 0 and self._last_updated:
+            # Check if last update is too old
+            timeout_delta = timedelta(seconds=availability_timeout)
+            if datetime.now() - self._last_updated > timeout_delta:
+                return False
+                
+        return True
