@@ -9,7 +9,11 @@ from .const import DOMAIN, CONF_BROKER, CONF_PORT, CONF_USERNAME, CONF_PASSWORD,
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback
+) -> bool:
     """Set up OVMS MQTT sensor platform from a config entry."""
     _LOGGER.debug("Starting async_setup_entry for OVMS MQTT sensor platform")
 
@@ -21,7 +25,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     topic_prefix = config.get(CONF_TOPIC_PREFIX, "ovms")
     qos = config.get(CONF_QOS, 1)
 
-    _LOGGER.debug(f"Configuration loaded: broker={broker}, port={port}, username={username}, topic_prefix={topic_prefix}, qos={qos}")
+    _LOGGER.debug(
+        f"Configuration loaded: broker={broker}, port={port}, username={username}, "
+        f"topic_prefix={topic_prefix}, qos={qos}"
+    )
 
     # Store the configuration in hass.data
     hass.data[DOMAIN] = {
@@ -35,12 +42,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     _LOGGER.debug("MQTT topics subscribed successfully")
     return True
 
-async def subscribe_to_topics(hass: HomeAssistant, topic_prefix: str, async_add_entities: AddEntitiesCallback):
+async def subscribe_to_topics(
+    hass: HomeAssistant,
+    topic_prefix: str,
+    async_add_entities: AddEntitiesCallback
+):
     """Subscribe to relevant MQTT topics."""
     _LOGGER.debug(f"Subscribing to MQTT topics with prefix: {topic_prefix}")
 
     # Subscribe to metric topics
-    await async_subscribe(  # Use async_subscribe directly
+    await async_subscribe(
         hass,
         f"{topic_prefix}/+/+/metric/#",
         lambda msg: handle_metric_update(hass, msg, async_add_entities)
@@ -48,14 +59,18 @@ async def subscribe_to_topics(hass: HomeAssistant, topic_prefix: str, async_add_
     _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/metric/#")
 
     # Subscribe to notification topics
-    await async_subscribe(  # Use async_subscribe directly
+    await async_subscribe(
         hass,
         f"{topic_prefix}/+/+/notify/#",
         lambda msg: handle_notification_update(hass, msg)
     )
     _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/notify/#")
 
-def handle_metric_update(hass: HomeAssistant, msg, async_add_entities: AddEntitiesCallback):
+def handle_metric_update(
+    hass: HomeAssistant,
+    msg,
+    async_add_entities: AddEntitiesCallback
+):
     """Handle incoming MQTT messages for metrics."""
     _LOGGER.debug(f"Received MQTT message: topic={msg.topic}, payload={msg.payload}")
 
@@ -102,14 +117,23 @@ def handle_notification_update(hass: HomeAssistant, msg):
         vin = parts[2]  # Dynamic VIN
         notification_type = '/'.join(parts[4:])  # Full notification type
 
-        _LOGGER.debug(f"Parsed notification: vehicle_name={vehicle_name}, vin={vin}, notification_type={notification_type}")
+        _LOGGER.debug(
+            f"Parsed notification: vehicle_name={vehicle_name}, vin={vin}, "
+            f"notification_type={notification_type}"
+        )
 
         # Log the notification (or trigger an automation)
         _LOGGER.info(f"Notification received for {vin}: {notification_type} = {payload}")
     else:
         _LOGGER.warning(f"Topic does not match expected structure: {topic}")
 
-def update_sensor_entity(hass: HomeAssistant, vin: str, metric_key: str, value, async_add_entities: AddEntitiesCallback):
+def update_sensor_entity(
+    hass: HomeAssistant,
+    vin: str,
+    metric_key: str,
+    value,
+    async_add_entities: AddEntitiesCallback
+):
     """Create or update a sensor entity."""
     entity_id = f"sensor.{vin}_{metric_key.replace('/', '_')}"
     entities = hass.data[DOMAIN]['entities']
