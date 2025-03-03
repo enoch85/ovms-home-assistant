@@ -5,9 +5,9 @@ It's written by DeepSeek.
 
 ## WIP
 
-The current implementation doesn't work. If you want to test it you need to manually move [this folder](https://github.com/enoch85/ovms-mqtt-integration/tree/main/custom_components/ovms_mqtt) to your Home Assistant and activate the integration.
+The current implementation does *not* work. If you want to test it you need to manually move [this folder](https://github.com/enoch85/ovms-mqtt-integration/tree/main/custom_components/ovms_mqtt) to your Home Assistant and activate the integration.
 
-In it's current state, it installs fine, and produces no errors, but [no enteties are produced](https://github.com/enoch85/ovms-mqtt-integration/issues/12).
+In its current state, it installs fine, and produces no errors, but [no enteties are produced](https://github.com/enoch85/ovms-mqtt-integration/issues/12).
 
 ## Installation
 
