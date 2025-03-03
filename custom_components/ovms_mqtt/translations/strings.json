@@ -13,7 +13,9 @@
           "connection_type": "Connection Type",
           "port": "Port (leave empty for default)",
           "username": "Username (optional)",
-          "password": "Password (optional)"
+          "password": "Password (optional)",
+          "tls_insecure": "Disable certificate verification",
+          "certificate_path": "Path to CA certificate file (optional)"
         }
       },
       "ovms": {
@@ -22,7 +24,8 @@
         "data": {
           "topic_prefix": "MQTT Topic Prefix",
           "vehicle_id": "Vehicle ID",
-          "qos": "Quality of Service (QoS)"
+          "qos": "Quality of Service (QoS)",
+          "availability_timeout": "Availability timeout (seconds, 0 to disable)"
         }
       }
     },
@@ -36,7 +39,9 @@
       "broker_unavailable": "MQTT broker unavailable",
       "not_authorized": "Not authorized",
       "unknown": "Unexpected error",
-      "already_configured": "This OVMS vehicle is already configured"
+      "already_configured": "This OVMS vehicle is already configured",
+      "invalid_certificate": "Invalid certificate path",
+      "invalid_qos": "Invalid QoS value (must be 0, 1, or 2)"
     },
     "abort": {
       "already_configured": "This OVMS vehicle is already configured"
@@ -61,6 +66,8 @@
           "port": "Port (leave empty for default)",
           "username": "Username (optional)",
           "password": "Password (optional)",
+          "tls_insecure": "Disable certificate verification",
+          "certificate_path": "Path to CA certificate file (optional)",
           "edit_ovms": "Edit OVMS settings after connection setup"
         }
       },
@@ -70,7 +77,8 @@
         "data": {
           "topic_prefix": "MQTT Topic Prefix",
           "vehicle_id": "Vehicle ID",
-          "qos": "Quality of Service (QoS)"
+          "qos": "Quality of Service (QoS)",
+          "availability_timeout": "Availability timeout (seconds, 0 to disable)"
         }
       }
     },
@@ -83,7 +91,9 @@
       "invalid_client_id": "Invalid client ID",
       "broker_unavailable": "MQTT broker unavailable",
       "not_authorized": "Not authorized",
-      "unknown": "Unexpected error"
+      "unknown": "Unexpected error",
+      "invalid_certificate": "Invalid certificate path",
+      "invalid_qos": "Invalid QoS value (must be 0, 1, or 2)"
     }
   },
   "selector": {
