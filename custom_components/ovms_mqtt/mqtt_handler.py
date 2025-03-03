@@ -1,8 +1,10 @@
 """MQTT message handling for OVMS integration."""
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Callable
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -26,96 +28,140 @@ from .const import (
     CONF_TLS_INSECURE,
     DEFAULT_TLS_INSECURE,
     CONF_CERTIFICATE_PATH,
+    CONF_CONNECTION_TYPE,
+    CONNECTION_TYPE_SECURE,
+    CONNECTION_TYPE_WEBSOCKETS_SECURE,
 )
 from .entity_handler import process_ovms_message
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_mqtt_handler(
-    hass: HomeAssistant, entry: ConfigEntry
-) -> List[callable]:
-    """Set up MQTT subscription and message handling."""
-    # Extract configuration
-    topic_prefix = entry.data.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
-    vehicle_id = entry.data.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID)
-    qos = entry.data.get(CONF_QOS, DEFAULT_QOS)
-    
-    # Initialize entity storage if not exists
-    if entry.entry_id not in hass.data[DOMAIN]:
-        hass.data[DOMAIN][entry.entry_id] = {
-            "entities": {},
-            "config": dict(entry.data),
-            "unsub": [],
-        }
-    
-    @callback
-    def message_received(msg):
-        """Handle new MQTT messages.
+class OVMSMQTTHandler:
+    """Handler for OVMS MQTT messages."""
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the MQTT handler."""
+        self.hass = hass
+        self.entry = entry
+        self.entry_id = entry.entry_id
+        self.config = dict(entry.data)
+        self.subscriptions: List[Callable] = []
+        self.topic_prefix = self.config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
+        self.vehicle_id = self.config.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID)
+        self.qos = self.config.get(CONF_QOS, DEFAULT_QOS)
+        self.availability_timeout = self.config.get(
+            CONF_AVAILABILITY_TIMEOUT, DEFAULT_AVAILABILITY_TIMEOUT
+        )
+        self.availability_task = None
+
+    async def async_setup(self) -> bool:
+        """Set up the MQTT handler."""
+        _LOGGER.debug("Setting up OVMS MQTT handler")
+
+        # Initialize storage in hass.data if not exists
+        if self.entry_id not in self.hass.data[DOMAIN]:
+            self.hass.data[DOMAIN][self.entry_id] = {
+                "entities": {},
+                "config": self.config,
+                "data_handler": self,
+            }
+
+        # Set up MQTT subscriptions
+        success = await self.async_subscribe_topics()
         
-        Note: This must be a synchronous function as it's a callback.
-        """
+        # Start availability monitoring if configured
+        if success and self.availability_timeout > 0:
+            self.availability_task = self.hass.async_create_task(
+                self.monitor_availability()
+            )
+            
+        return success
+
+    async def async_subscribe_topics(self) -> bool:
+        """Subscribe to OVMS MQTT topics."""
+        _LOGGER.debug(
+            "Subscribing to OVMS MQTT topics: prefix=%s, vehicle_id=%s",
+            self.topic_prefix, self.vehicle_id
+        )
+        
+        # Generate wildcard topic for all OVMS messages
+        topic_filter = f"{self.topic_prefix}/{self.vehicle_id}/#"
+        
+        try:
+            # Subscribe to MQTT topic
+            self.subscriptions.append(
+                await mqtt.async_subscribe(
+                    self.hass,
+                    topic_filter,
+                    self._message_received,
+                    self.qos,
+                )
+            )
+            _LOGGER.debug("Successfully subscribed to topic: %s", topic_filter)
+            return True
+        except Exception as e:
+            _LOGGER.error("Failed to subscribe to MQTT topic %s: %s", topic_filter, e)
+            return False
+
+    @callback
+    def _message_received(self, msg) -> None:
+        """Handle new MQTT messages."""
         topic = msg.topic
         payload = msg.payload
         
-        # Debug log incoming messages
         _LOGGER.debug("Received message on topic %s", topic)
         
-        # Process the OVMS message to extract entity data
+        # Process the message
         entity_data = process_ovms_message(topic, payload)
         if not entity_data:
             return
         
-        # Generate a unique entity ID for Home Assistant
-        # Use the unique_id from entity_data to ensure consistency
+        # Get the unique ID from the entity data
         unique_id = entity_data["unique_id"]
         
-        # Check if we already have this entity
-        entities = hass.data[DOMAIN][entry.entry_id]["entities"]
-        
         # Store or update entity
+        entities = self.hass.data[DOMAIN][self.entry_id]["entities"]
+        
         if unique_id not in entities:
-            # Store new entity
+            # New entity
             _LOGGER.debug(
                 "Creating new entity with unique_id: %s from topic %s",
                 unique_id, topic
             )
             entities[unique_id] = entity_data
             
-            # Signal platform to create entity
+            # Notify that a new entity is available
             async_dispatcher_send(
-                hass, f"{DOMAIN}_{entry.entry_id}_new_entity", unique_id
+                self.hass, f"{DOMAIN}_{self.entry_id}_new_entity", unique_id
             )
         else:
-            # Update existing entity state
+            # Update existing entity
             entities[unique_id].update({
                 "state": entity_data["state"],
+                "unit": entity_data.get("unit"),
                 "last_updated": entity_data["last_updated"],
-                "available": True,  # Mark entity as available
+                "available": True,
             })
             
-            # Signal state update
+            # Notify that an entity needs a state update
             async_dispatcher_send(
-                hass, f"{DOMAIN}_{entry.entry_id}_state_update", unique_id
+                self.hass, f"{DOMAIN}_{self.entry_id}_state_update", unique_id
             )
 
-    # Setup availability topic if configured
-    availability_timeout = entry.data.get(
-        CONF_AVAILABILITY_TIMEOUT, DEFAULT_AVAILABILITY_TIMEOUT
-    )
-    if availability_timeout > 0:
-        # Set up availability monitoring for entities
-        async def monitor_availability():
-            """Monitor entity availability based on last update time."""
-            import time
-            from datetime import datetime, timedelta
-            
-            while True:
+    async def monitor_availability(self) -> None:
+        """Monitor entity availability based on last update time."""
+        _LOGGER.debug("Starting entity availability monitoring")
+        
+        from datetime import datetime, timedelta
+        
+        while True:
+            try:
                 current_time = datetime.now()
-                timeout_delta = timedelta(seconds=availability_timeout)
+                timeout_delta = timedelta(seconds=self.availability_timeout)
                 
-                if entry.entry_id in hass.data.get(DOMAIN, {}):
-                    entities = hass.data[DOMAIN][entry.entry_id].get("entities", {})
+                if self.entry_id in self.hass.data.get(DOMAIN, {}):
+                    entities = self.hass.data[DOMAIN][self.entry_id].get("entities", {})
                     
                     for unique_id, entity_data in entities.items():
                         if "last_updated" in entity_data:
@@ -125,58 +171,56 @@ async def async_setup_mqtt_handler(
                                 )
                                 if current_time - last_updated > timeout_delta:
                                     # Mark entity as unavailable
-                                    entity_data["available"] = False
-                                    # Signal state update
-                                    async_dispatcher_send(
-                                        hass,
-                                        f"{DOMAIN}_{entry.entry_id}_state_update",
-                                        unique_id
-                                    )
+                                    if entity_data.get("available", True):
+                                        entity_data["available"] = False
+                                        # Notify that entity availability changed
+                                        async_dispatcher_send(
+                                            self.hass,
+                                            f"{DOMAIN}_{self.entry_id}_state_update",
+                                            unique_id
+                                        )
                             except (ValueError, TypeError) as e:
                                 _LOGGER.debug(
                                     "Error parsing timestamp for %s: %s", 
                                     unique_id, e
                                 )
+            except Exception as e:
+                _LOGGER.error("Error in availability monitoring: %s", e)
                 
-                # Check every 60 seconds
-                await asyncio.sleep(60)
-        
-        # Start availability monitoring task
-        hass.async_create_task(monitor_availability())
+            # Check every 60 seconds
+            await asyncio.sleep(60)
 
-    # Configure additional MQTT options
-    mqtt_options = {}
-    
-    # Handle SSL/TLS options if configured
-    if entry.data.get(CONF_SSL, False):
-        import ssl
+    async def async_unsubscribe(self) -> None:
+        """Unsubscribe from all MQTT topics."""
+        _LOGGER.debug("Unsubscribing from MQTT topics")
         
-        # Check if certificate verification should be disabled
-        tls_insecure = entry.data.get(CONF_TLS_INSECURE, DEFAULT_TLS_INSECURE)
+        for unsub in self.subscriptions:
+            unsub()
+        self.subscriptions = []
         
-        # Check if a certificate path is provided
-        cert_path = entry.data.get(CONF_CERTIFICATE_PATH)
-        
-        mqtt_options["tls_context"] = ssl.create_default_context(
-            cafile=cert_path if cert_path else None
-        )
-        
-        if tls_insecure:
-            mqtt_options["tls_context"].check_hostname = False
-            mqtt_options["tls_context"].verify_mode = ssl.CERT_NONE
+        # Cancel availability monitoring
+        if self.availability_task:
+            self.availability_task.cancel()
+            try:
+                await self.availability_task
+            except asyncio.CancelledError:
+                pass
+            self.availability_task = None
 
-    # Subscribe to all topics for this vehicle
-    subscribe_topic = f"{topic_prefix}/{vehicle_id}/#"
-    _LOGGER.debug("Subscribing to MQTT topic: %s", subscribe_topic)
+
+async def async_setup_mqtt_handler(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> Optional[OVMSMQTTHandler]:
+    """Set up MQTT handler for OVMS integration."""
+    _LOGGER.debug("Creating OVMS MQTT handler")
     
-    try:
-        unsub = await mqtt.async_subscribe(
-            hass, subscribe_topic, message_received, qos, **mqtt_options
-        )
-        return [unsub]
-    except Exception as e:
-        _LOGGER.error("Failed to subscribe to MQTT topic %s: %s", subscribe_topic, e)
-        return []
+    handler = OVMSMQTTHandler(hass, entry)
+    success = await handler.async_setup()
+    
+    if success:
+        return handler
+    
+    return None
 
 
 async def async_cleanup_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -192,6 +236,8 @@ async def async_cleanup_entities(hass: HomeAssistant, entry: ConfigEntry) -> Non
         # Remove each entity
         for entity_id in entries:
             entity_registry.async_remove(entity_id)
+            
+        _LOGGER.debug("Cleaned up entities for config entry %s", entry.entry_id)
     except Exception as e:
         _LOGGER.error("Error cleaning up entities: %s", e)
 
