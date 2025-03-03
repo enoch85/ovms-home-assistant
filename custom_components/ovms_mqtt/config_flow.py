@@ -464,7 +464,9 @@ class OVMSMQTTOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             # Update options
             updated_config = {
-                CONF_TOPIC_PREFIX: user_input.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX),
+                CONF_TOPIC_PREFIX: user_input.get(
+                    CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX
+                ),
                 CONF_VEHICLE_ID: user_input.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID),
                 CONF_QOS: user_input.get(CONF_QOS, DEFAULT_QOS),
             }
