@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
@@ -323,7 +322,9 @@ def process_ovms_message(topic: str, payload: bytes) -> Optional[Dict[str, Any]]
                 return None
         
         # Process the metric value and metadata
-        metadata = determine_entity_metadata(topic, path_segments, metric_name, payload_data)
+        metadata = determine_entity_metadata(
+            topic, path_segments, metric_name, payload_data
+        )
         if metadata["value"] is None:
             return None
         
