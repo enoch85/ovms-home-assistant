@@ -2,14 +2,104 @@
   "config": {
     "step": {
       "user": {
-        "title": "OVMS Configuration",
+        "title": "OVMS MQTT Integration",
+        "description": "Set up your Open Vehicle Monitoring System (OVMS) to connect via MQTT"
+      },
+      "broker": {
+        "title": "MQTT Connection",
+        "description": "Configure the connection to your MQTT broker",
         "data": {
-          "broker": "MQTT Broker",
-          "port": "MQTT Port",
-          "username": "MQTT Username",
-          "password": "MQTT Password",
-          "debug_logging": "Enable Debug Logging"
+          "host": "Broker Address",
+          "connection_type": "Connection Type",
+          "port": "Port (leave empty for default)",
+          "username": "Username (optional)",
+          "password": "Password (optional)"
         }
+      },
+      "ovms": {
+        "title": "OVMS Configuration",
+        "description": "Configure how the integration connects to your OVMS data",
+        "data": {
+          "topic_prefix": "MQTT Topic Prefix",
+          "vehicle_id": "Vehicle ID",
+          "qos": "Quality of Service (QoS)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the MQTT broker",
+      "invalid_auth": "Invalid authentication",
+      "invalid_host": "Could not resolve hostname",
+      "timeout_connect": "Connection timeout",
+      "invalid_protocol": "Protocol error",
+      "invalid_client_id": "Invalid client ID",
+      "broker_unavailable": "MQTT broker unavailable",
+      "not_authorized": "Not authorized",
+      "unknown": "Unexpected error",
+      "already_configured": "This OVMS vehicle is already configured"
+    },
+    "abort": {
+      "already_configured": "This OVMS vehicle is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OVMS MQTT Options",
+        "description": "Update your OVMS MQTT integration settings",
+        "data": {
+          "edit_connection": "Edit broker connection settings",
+          "edit_ovms": "Edit OVMS configuration"
+        }
+      },
+      "broker": {
+        "title": "Update MQTT Connection",
+        "description": "Update your connection to the MQTT broker",
+        "data": {
+          "host": "Broker Address",
+          "connection_type": "Connection Type",
+          "port": "Port (leave empty for default)",
+          "username": "Username (optional)",
+          "password": "Password (optional)",
+          "edit_ovms": "Edit OVMS settings after connection setup"
+        }
+      },
+      "ovms": {
+        "title": "Update OVMS Settings",
+        "description": "Update your OVMS configuration",
+        "data": {
+          "topic_prefix": "MQTT Topic Prefix",
+          "vehicle_id": "Vehicle ID",
+          "qos": "Quality of Service (QoS)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the MQTT broker",
+      "invalid_auth": "Invalid authentication",
+      "invalid_host": "Could not resolve hostname",
+      "timeout_connect": "Connection timeout",
+      "invalid_protocol": "Protocol error",
+      "invalid_client_id": "Invalid client ID",
+      "broker_unavailable": "MQTT broker unavailable",
+      "not_authorized": "Not authorized",
+      "unknown": "Unexpected error"
+    }
+  },
+  "selector": {
+    "connection_type": {
+      "options": {
+        "standard": "Standard MQTT (mqtt://)",
+        "secure": "Secure MQTT (mqtts://)",
+        "websockets": "WebSockets (ws://)",
+        "websockets_secure": "Secure WebSockets (wss://)"
+      }
+    },
+    "qos_level": {
+      "options": {
+        "0": "0 - At most once (Fire and forget)",
+        "1": "1 - At least once (Acknowledged delivery)",
+        "2": "2 - Exactly once (Assured delivery)"
       }
     }
   }
