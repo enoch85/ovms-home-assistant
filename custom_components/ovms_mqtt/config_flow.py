@@ -9,6 +9,8 @@ import ssl
 import os.path
 
 import voluptuous as vol
+# Import paho.mqtt at the module level to avoid blocking in event loop
+import paho.mqtt.client as mqtt
 
 from homeassistant import config_entries
 from homeassistant.const import (
@@ -67,18 +69,27 @@ async def validate_mqtt_connection(
     certificate_path: Optional[str] = None,
 ) -> Optional[str]:
     """Test if we can connect to the MQTT broker."""
-    import paho.mqtt.client as mqtt
-
     result = None
+    client = None
 
     def _on_connect(client, userdata, flags, result_code, properties=None):
         """Handle connection result."""
         nonlocal result
         result = result_code
 
-    try:
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        client.on_connect = _on_connect
+    def _setup_client():
+        """Set up the MQTT client."""
+        nonlocal client
+        # Support both old and new versions of paho-mqtt
+        try:
+            # For paho-mqtt >= 2.0.0
+            client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+            client.on_connect = _on_connect
+        except (AttributeError, TypeError):
+            # Fallback for paho-mqtt < 2.0.0
+            client = mqtt.Client()
+            # Adjust the callback parameter format for older versions
+            client.on_connect = lambda client, userdata, flags, rc: _on_connect(client, userdata, flags, rc)
 
         if username and password:
             client.username_pw_set(username, password)
@@ -104,16 +115,34 @@ async def validate_mqtt_connection(
             host, port, ssl_enabled, not tls_insecure
         )
 
-        await hass.async_add_executor_job(client.connect, host, port, 5)
-        await hass.async_add_executor_job(client.loop_start)
+    def _connect_mqtt():
+        """Connect to MQTT broker."""
+        nonlocal client
+        client.connect(host, port, 5)
+        client.loop_start()
+
+    def _disconnect_mqtt():
+        """Disconnect from MQTT broker."""
+        nonlocal client
+        if client:
+            try:
+                client.loop_stop()
+                client.disconnect()
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+    try:
+        # Setup client in executor to avoid blocking event loop
+        await hass.async_add_executor_job(_setup_client)
+        
+        # Connect in executor
+        await hass.async_add_executor_job(_connect_mqtt)
 
         # Wait for connection result
         for _ in range(10):
             if result is not None:
                 break
             await asyncio.sleep(0.5)
-
-        await hass.async_add_executor_job(client.loop_stop)
 
         # Check connection result
         if result is not None and result != 0:
@@ -144,11 +173,8 @@ async def validate_mqtt_connection(
         _LOGGER.exception("Unexpected error: %s", exc)
         return "unknown"
     finally:
-        # Clean up
-        try:
-            client.disconnect()
-        except Exception:  # pylint: disable=broad-except
-            pass
+        # Clean up - must run even if exceptions occur
+        await hass.async_add_executor_job(_disconnect_mqtt)
 
     return None
 
