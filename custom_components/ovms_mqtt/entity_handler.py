@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -99,7 +99,20 @@ STATE_CLASS_HINTS = {
     "odometer": SensorStateClass.TOTAL_INCREASING,
     "consumption": SensorStateClass.TOTAL_INCREASING,
     "trip": SensorStateClass.TOTAL_INCREASING,
+    "energy/used": SensorStateClass.TOTAL_INCREASING,
+    "energy/recovered": SensorStateClass.TOTAL_INCREASING,
+    "charge": SensorStateClass.TOTAL_INCREASING,
 }
+
+# State class pattern matching for more complex cases
+STATE_CLASS_PATTERNS = [
+    # Format: (keyword, suffixes/context, state_class)
+    ("energy", ["used", "consumed", "total"], SensorStateClass.TOTAL_INCREASING),
+    ("energy", ["rate", "current"], SensorStateClass.MEASUREMENT),
+    ("power", [], SensorStateClass.MEASUREMENT),
+    ("soc", [], SensorStateClass.MEASUREMENT),
+    ("temperature", [], SensorStateClass.MEASUREMENT),
+]
 
 # Icon hints based on keywords in topic
 ICON_HINTS = {
@@ -174,31 +187,67 @@ def get_vehicle_device_info(vehicle_id: str) -> DeviceInfo:
     )
 
 
+def get_battery_icon(level: Union[int, float]) -> str:
+    """Get the appropriate battery icon for the given level."""
+    try:
+        level_int = int(float(level))
+        if level_int <= 10:
+            return "mdi:battery-10"
+        elif level_int <= 20:
+            return "mdi:battery-20"
+        elif level_int <= 30:
+            return "mdi:battery-30"
+        elif level_int <= 40:
+            return "mdi:battery-40"
+        elif level_int <= 50:
+            return "mdi:battery-50"
+        elif level_int <= 60:
+            return "mdi:battery-60"
+        elif level_int <= 70:
+            return "mdi:battery-70"
+        elif level_int <= 80:
+            return "mdi:battery-80"
+        elif level_int <= 90:
+            return "mdi:battery-90"
+        else:
+            return "mdi:battery"
+    except (ValueError, TypeError):
+        # Default to regular battery icon if conversion fails
+        return "mdi:battery"
+
+
 def parse_topic(topic: str) -> Tuple[Optional[str], Optional[str], list, Optional[str]]:
     """Parse an OVMS topic into components.
     
     Returns:
         Tuple with (vehicle_id, topic_type, path_segments, metric_name)
     """
-    parts = topic.split('/')
-    
-    # Need at least: ovms/vehicleid/...
-    if len(parts) < 3 or parts[0] != "ovms":
+    if not topic:
         return None, None, [], None
     
-    vehicle_id = parts[1]
-    
-    # Check if this is a metric topic
-    if len(parts) >= 4 and parts[2] == "metric":
-        topic_type = "metric"
-        path_segments = parts[3:-1] if len(parts) > 4 else []
-        metric_name = parts[-1]
-    else:
-        topic_type = parts[2] if len(parts) > 2 else None
-        path_segments = parts[3:-1] if len(parts) > 3 else []
-        metric_name = parts[-1] if len(parts) > 3 else None
-    
-    return vehicle_id, topic_type, path_segments, metric_name
+    try:
+        parts = topic.split('/')
+        
+        # Need at least: ovms/vehicleid/...
+        if len(parts) < 3 or parts[0] != "ovms":
+            return None, None, [], None
+        
+        vehicle_id = parts[1]
+        
+        # Check if this is a metric topic
+        if len(parts) >= 4 and parts[2] == "metric":
+            topic_type = "metric"
+            path_segments = parts[3:-1] if len(parts) > 4 else []
+            metric_name = parts[-1]
+        else:
+            topic_type = parts[2] if len(parts) > 2 else None
+            path_segments = parts[3:-1] if len(parts) > 3 else []
+            metric_name = parts[-1] if len(parts) > 3 else None
+        
+        return vehicle_id, topic_type, path_segments, metric_name
+    except Exception as e:
+        _LOGGER.error("Error parsing topic %s: %s", topic, e)
+        return None, None, [], None
 
 
 def determine_entity_metadata(
@@ -256,6 +305,15 @@ def determine_entity_metadata(
         if keyword in full_topic_lower:
             result["state_class"] = state_class
             break
+            
+    # If no state class found, try more complex pattern matching
+    if not result["state_class"]:
+        for base_keyword, contexts, state_class in STATE_CLASS_PATTERNS:
+            if base_keyword in full_topic_lower:
+                # If no specific contexts to check, or if any context matches
+                if not contexts or any(ctx in full_topic_lower for ctx in contexts):
+                    result["state_class"] = state_class
+                    break
     
     # Try to determine icon from topic keywords
     for keyword, icon in ICON_HINTS.items():
@@ -273,31 +331,7 @@ def determine_entity_metadata(
     
     # For battery SOC, adjust icon based on level
     if "soc" in full_topic_lower and isinstance(result["value"], (int, float)):
-        try:
-            level = int(float(result["value"]))
-            if level <= 10:
-                result["icon"] = "mdi:battery-10"
-            elif level <= 20:
-                result["icon"] = "mdi:battery-20"
-            elif level <= 30:
-                result["icon"] = "mdi:battery-30"
-            elif level <= 40:
-                result["icon"] = "mdi:battery-40"
-            elif level <= 50:
-                result["icon"] = "mdi:battery-50"
-            elif level <= 60:
-                result["icon"] = "mdi:battery-60"
-            elif level <= 70:
-                result["icon"] = "mdi:battery-70"
-            elif level <= 80:
-                result["icon"] = "mdi:battery-80"
-            elif level <= 90:
-                result["icon"] = "mdi:battery-90"
-            else:
-                result["icon"] = "mdi:battery"
-        except (ValueError, TypeError):
-            # If value is not a number, use default icon
-            pass
+        result["icon"] = get_battery_icon(result["value"])
     
     return result
 
