@@ -21,6 +21,16 @@ QOS_OPTIONS: Final[Dict[int, str]] = {
     2: "2 - Exactly once (Assured delivery)"
 }
 
+# SSL/TLS configuration options
+CONF_TLS_INSECURE: Final = "tls_insecure"
+DEFAULT_TLS_INSECURE: Final = False
+
+CONF_CERTIFICATE_PATH: Final = "certificate_path"
+
+# Entity availability configuration
+CONF_AVAILABILITY_TIMEOUT: Final = "availability_timeout"
+DEFAULT_AVAILABILITY_TIMEOUT: Final = 300  # 5 minutes in seconds
+
 # Connection types
 CONF_CONNECTION_TYPE: Final = "connection_type"
 CONNECTION_TYPE_STANDARD: Final = "standard"
