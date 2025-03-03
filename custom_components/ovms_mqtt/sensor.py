@@ -1,17 +1,18 @@
 """Sensor platform for OVMS MQTT integration."""
+from __future__ import annotations
+
 import logging
-from typing import Optional, Dict, Any
+from typing import Any, Optional
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import StateType
 from homeassistant.util import slugify
 
-from .const import DOMAIN, DEFAULT_MANUFACTURER, CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID
+from .const import DOMAIN
+from .entity_handler import get_device_info, get_vehicle_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,47 +21,43 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up OVMS MQTT sensors based on a config entry."""
-    _LOGGER.debug(f"Setting up OVMS MQTT sensor platform for entry {entry.entry_id}")
+    _LOGGER.debug("Setting up OVMS MQTT sensor platform for entry %s", entry.entry_id)
     
     # Get stored entities from hass.data
-    entities = hass.data[DOMAIN][entry.entry_id]["entities"]
-    vehicle_id = entry.data.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID)
+    if entry.entry_id not in hass.data[DOMAIN]:
+        _LOGGER.warning("Config entry %s not found in hass.data", entry.entry_id)
+        return
     
-    # Add entities for existing data
+    entities_data = hass.data[DOMAIN][entry.entry_id].get("entities", {})
+    
+    # Create entities for existing data
     sensors = []
-    for entity_id, entity_data in entities.items():
-        _LOGGER.debug(f"Creating sensor for existing entity: {entity_id}")
-        sensors.append(
-            OVMSMQTTSensor(
-                hass,
-                entry,
-                entity_id,
-                entity_data["topic"],
-                entity_data["name"],
-                entity_data.get("unique_id", entity_id),
-                vehicle_id,
-            )
-        )
+    entity_ids_created = set()
+    
+    for unique_id, entity_data in entities_data.items():
+        if unique_id in entity_ids_created:
+            continue
+            
+        sensor = OVMSMQTTSensor(hass, entry, unique_id, entity_data)
+        sensors.append(sensor)
+        entity_ids_created.add(unique_id)
     
     if sensors:
         async_add_entities(sensors)
     
     @callback
-    def async_add_sensor(entity_id):
+    def async_add_sensor(unique_id):
         """Add sensor for a newly received MQTT topic."""
-        _LOGGER.debug(f"Adding new sensor for entity: {entity_id}")
-        if entity_id in entities:
-            entity_data = entities[entity_id]
-            sensor = OVMSMQTTSensor(
-                hass,
-                entry,
-                entity_id,
-                entity_data["topic"],
-                entity_data["name"],
-                entity_data.get("unique_id", entity_id),
-                vehicle_id,
-            )
-            async_add_entities([sensor])
+        if unique_id in entity_ids_created:
+            return
+            
+        entity_data = hass.data[DOMAIN][entry.entry_id]["entities"].get(unique_id)
+        if not entity_data:
+            return
+            
+        sensor = OVMSMQTTSensor(hass, entry, unique_id, entity_data)
+        async_add_entities([sensor])
+        entity_ids_created.add(unique_id)
     
     # Connect to dispatcher to add new sensors
     entry.async_on_unload(
@@ -76,99 +73,64 @@ class OVMSMQTTSensor(SensorEntity):
     def __init__(
         self,
         hass: HomeAssistant,
-        entry: ConfigEntry,
-        entity_id: str,
-        topic: str,
-        name: str,
+        config_entry: ConfigEntry,
         unique_id: str,
-        vehicle_id: str,
+        entity_data: dict,
     ) -> None:
         """Initialize the sensor."""
         self.hass = hass
-        self.entry = entry
-        self._entity_id = entity_id
-        self.topic = topic
-        self._attr_name = name
+        self.config_entry = config_entry
+        self._unique_id = unique_id
         self._attr_unique_id = unique_id
-        self._vehicle_id = vehicle_id
         
-        # Get last component of the topic for device class guessing
-        topic_parts = topic.split('/')
-        self._topic_last_part = topic_parts[-1] if topic_parts else ""
+        # Set up various attributes from entity_data
+        self._vehicle_id = entity_data.get("vehicle_id")
+        self._topic = entity_data.get("topic", "")
+        self._category = entity_data.get("category")
         
-        # Guess device class and unit based on topic
-        self._attr_device_class = self._guess_device_class()
-        self._attr_native_unit_of_measurement = self._guess_unit()
+        # Entity attributes
+        self._attr_name = entity_data.get("name")
+        self._attr_native_unit_of_measurement = entity_data.get("unit")
+        self._attr_device_class = entity_data.get("device_class")
+        self._attr_state_class = entity_data.get("state_class")
+        self._attr_icon = entity_data.get("icon")
+        self._attr_native_value = entity_data.get("state")
         
-        # Device info
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, self._vehicle_id)},
-            name=f"OVMS Vehicle {self._vehicle_id}",
-            manufacturer=DEFAULT_MANUFACTURER,
-            model="OVMS",
-        )
+        # Set up device info - group by category
+        if self._category and self._vehicle_id:
+            self._attr_device_info = get_device_info(
+                self._vehicle_id, self._category
+            )
+        else:
+            # Fallback to main vehicle device
+            self._attr_device_info = get_vehicle_device_info(self._vehicle_id)
         
         _LOGGER.debug(
-            f"Initialized sensor: {self._attr_name} (ID: {self._entity_id}) "
-            f"with device class: {self._attr_device_class}, "
-            f"unit: {self._attr_native_unit_of_measurement}"
+            "Initialized sensor: %s (ID: %s) with device class: %s, unit: %s",
+            self._attr_name,
+            self._attr_unique_id,
+            self._attr_device_class,
+            self._attr_native_unit_of_measurement,
         )
-
-    def _guess_device_class(self) -> Optional[str]:
-        """Guess device class based on topic/name."""
-        topic_lower = self._topic_last_part.lower()
+    
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return additional attributes about the sensor."""
+        attributes = {}
         
-        if "temp" in topic_lower:
-            return "temperature"
-        elif "humidity" in topic_lower:
-            return "humidity"
-        elif "soc" in topic_lower or "battery" in topic_lower:
-            return "battery"
-        elif "voltage" in topic_lower:
-            return "voltage"
-        elif "current" in topic_lower:
-            return "current"
-        elif "power" in topic_lower:
-            return "power"
-        elif "energy" in topic_lower:
-            return "energy"
-        elif "distance" in topic_lower or "odometer" in topic_lower:
-            return "distance"
-        elif "speed" in topic_lower:
-            return "speed"
+        # Add topic for debugging
+        attributes["mqtt_topic"] = self._topic
         
-        return None
-
-    def _guess_unit(self) -> str:
-        """Guess unit based on topic/name and device class."""
-        topic_lower = self._topic_last_part.lower()
+        # Get the full entity data
+        entity_data = self.hass.data[DOMAIN][self.config_entry.entry_id]["entities"].get(
+            self._unique_id, {}
+        )
         
-        if self._attr_device_class == "temperature":
-            return "°C"
-        elif self._attr_device_class == "humidity":
-            return "%"
-        elif self._attr_device_class == "battery":
-            return "%"
-        elif self._attr_device_class == "voltage":
-            return "V"
-        elif self._attr_device_class == "current":
-            return "A"
-        elif self._attr_device_class == "power":
-            return "W"
-        elif self._attr_device_class == "energy":
-            return "kWh"
-        elif self._attr_device_class == "distance":
-            return "km"
-        elif self._attr_device_class == "speed":
-            return "km/h"
+        # Add last updated timestamp if available
+        if "last_updated" in entity_data:
+            attributes["last_updated"] = entity_data["last_updated"]
         
-        # Check topic for unit hints
-        if "percent" in topic_lower or "%" in topic_lower:
-            return "%"
-        elif "temp" in topic_lower:
-            return "°C"
-        
-        return ""
+        return attributes
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to state updates."""
@@ -178,38 +140,54 @@ class OVMSMQTTSensor(SensorEntity):
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
-                f"{DOMAIN}_{self.entry.entry_id}_state_update",
+                f"{DOMAIN}_{self.config_entry.entry_id}_state_update",
                 self._handle_state_update,
             )
         )
-        
-        # Set initial state
-        self._update_state()
 
     @callback
-    def _handle_state_update(self, entity_id):
+    def _handle_state_update(self, unique_id):
         """Handle state update from dispatcher."""
-        if entity_id == self._entity_id:
+        if unique_id == self._unique_id:
             self._update_state()
             self.async_write_ha_state()
 
     def _update_state(self):
-        """Update state from MQTT data."""
-        entity_data = self.hass.data[DOMAIN][self.entry.entry_id]["entities"].get(self._entity_id)
+        """Update state from stored data."""
+        entity_data = self.hass.data[DOMAIN][self.config_entry.entry_id]["entities"].get(
+            self._unique_id
+        )
         if entity_data:
-            state_value = entity_data.get("state")
+            self._attr_native_value = entity_data.get("state")
             
-            # Convert boolean values to "ON"/"OFF" strings
-            if isinstance(state_value, bool):
-                self._attr_native_value = "ON" if state_value else "OFF"
-            else:
-                self._attr_native_value = state_value
-                
-            # Update unit if available
-            if "unit" in entity_data and entity_data["unit"]:
-                self._attr_native_unit_of_measurement = entity_data["unit"]
+            # Update battery icon based on state if applicable
+            if "soc" in self._topic and isinstance(self._attr_native_value, (int, float)):
+                try:
+                    level = int(float(self._attr_native_value))
+                    if level <= 10:
+                        self._attr_icon = "mdi:battery-10"
+                    elif level <= 20:
+                        self._attr_icon = "mdi:battery-20"
+                    elif level <= 30:
+                        self._attr_icon = "mdi:battery-30"
+                    elif level <= 40:
+                        self._attr_icon = "mdi:battery-40"
+                    elif level <= 50:
+                        self._attr_icon = "mdi:battery-50"
+                    elif level <= 60:
+                        self._attr_icon = "mdi:battery-60"
+                    elif level <= 70:
+                        self._attr_icon = "mdi:battery-70"
+                    elif level <= 80:
+                        self._attr_icon = "mdi:battery-80"
+                    elif level <= 90:
+                        self._attr_icon = "mdi:battery-90"
+                    else:
+                        self._attr_icon = "mdi:battery"
+                except (ValueError, TypeError):
+                    pass
 
     @property
     def available(self) -> bool:
         """Return if entity is available."""
-        return self._entity_id in self.hass.data[DOMAIN][self.entry.entry_id]["entities"]
+        return self._unique_id in self.hass.data[DOMAIN][self.config_entry.entry_id]["entities"]
