@@ -65,9 +65,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             payload_str = str(msg.payload).strip()
         
         if debug_mode:
-            _LOGGER.info(f"MQTT message received: {topic} = {payload_str}")
+            _LOGGER.info(f"MQTT message received: topic={topic}, payload={payload_str}")
         else:
-            _LOGGER.debug(f"MQTT message received: {topic} = {payload_str}")
+            _LOGGER.debug(f"MQTT message received: topic={topic}, payload={payload_str}")
+        
+        # Log detailed topic structure
+        parts = topic.split('/')
+        _LOGGER.info(f"Topic parts: {parts}")
         
         # Process metric topics
         if "/metric/" in topic:
@@ -76,37 +80,52 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     def parse_and_process_metric(hass, topic, payload_str, async_add_entities):
         """Parse MQTT topic and process the metric."""
         # Expected format: ovms/username/vehicle_id/metric/path/to/metric
+        _LOGGER.info(f"Parsing topic structure: {topic}")
         parts = topic.split('/')
+        _LOGGER.info(f"Split into {len(parts)} parts: {parts}")
         
         try:
             # Parse vehicle_id and metric path
             if "metric" in parts:
                 metric_index = parts.index("metric")
+                _LOGGER.info(f"Found 'metric' at index {metric_index}")
+                
                 if metric_index >= 3:  # Need at least prefix/username/vehicle_id
                     vehicle_id = parts[2]  # vehicle_id is at index 2
+                    _LOGGER.info(f"Extracted vehicle_id from index 2: '{vehicle_id}'")
                     
                     if metric_index < len(parts) - 1:
                         metric_path = '/'.join(parts[metric_index+1:])
-                        
-                        # Verify parse was successful
-                        _LOGGER.debug(f"Parsed topic: vehicle_id={vehicle_id}, metric={metric_path}")
+                        _LOGGER.info(f"Extracted metric_path from index {metric_index+1} onwards: '{metric_path}'")
                         
                         # Track discovered vehicle_ids
                         if vehicle_id not in hass.data[DOMAIN]['vehicle_ids']:
                             _LOGGER.info(f"New vehicle discovered: {vehicle_id}")
                             hass.data[DOMAIN]['vehicle_ids'].add(vehicle_id)
+                            _LOGGER.info(f"Current known vehicles: {hass.data[DOMAIN]['vehicle_ids']}")
                             
                             # Create common metrics for this vehicle
                             create_metrics_for_vehicle(hass, vehicle_id, topic_prefix, async_add_entities)
+                        else:
+                            _LOGGER.debug(f"Known vehicle: {vehicle_id}")
                         
                         # Parse and process the value
                         value = parse_value(payload_str)
+                        _LOGGER.info(f"Parsed value: {value} (type: {type(value).__name__})")
+                        
                         create_or_update_entity(hass, vehicle_id, metric_path, value, topic, async_add_entities)
+                    else:
+                        _LOGGER.warning(f"No metric path found after 'metric' in topic: {topic}")
+                else:
+                    _LOGGER.warning(f"Not enough parts before 'metric' in topic: {topic}")
+            else:
+                _LOGGER.warning(f"No 'metric' keyword found in topic: {topic}")
         except Exception as e:
             _LOGGER.error(f"Error parsing topic {topic}: {str(e)}", exc_info=True)
     
     def create_metrics_for_vehicle(hass, vehicle_id, topic_prefix, async_add_entities):
         """Create entities for common metrics for a newly discovered vehicle."""
+        _LOGGER.info(f"Creating common metrics for vehicle: {vehicle_id}")
         entities_to_add = []
         
         for metric_key, friendly_name in METRIC_PATTERNS.items():
@@ -114,9 +133,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             
             # Skip if entity already exists
             if unique_id in hass.data[DOMAIN]['entities']:
+                _LOGGER.debug(f"Skipping existing entity: {unique_id}")
                 continue
                 
-            _LOGGER.debug(f"Creating common metric: {vehicle_id}/{metric_key}")
+            _LOGGER.info(f"Creating common metric: {vehicle_id}/{metric_key}")
             
             # Create entity with None value (will be updated when data arrives)
             sensor = OvmsSensor(
@@ -135,41 +155,57 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         if entities_to_add:
             _LOGGER.info(f"Adding {len(entities_to_add)} common metrics for vehicle {vehicle_id}")
             async_add_entities(entities_to_add)
+            _LOGGER.info(f"Added entities successfully")
     
     def parse_value(payload_str):
         """Parse the payload string into an appropriate data type."""
+        _LOGGER.debug(f"Parsing payload: {payload_str}")
+        
         if not payload_str:
+            _LOGGER.debug("Empty payload, returning None")
             return None
             
         # Try boolean
         if payload_str.lower() in ('true', 'false'):
-            return payload_str.lower() == 'true'
+            result = payload_str.lower() == 'true'
+            _LOGGER.debug(f"Parsed as boolean: {result}")
+            return result
             
         # Try number
         try:
             if '.' in payload_str:
-                return float(payload_str)
+                result = float(payload_str)
+                _LOGGER.debug(f"Parsed as float: {result}")
+                return result
             else:
-                return int(payload_str)
+                result = int(payload_str)
+                _LOGGER.debug(f"Parsed as integer: {result}")
+                return result
         except ValueError:
+            _LOGGER.debug("Not a number")
             pass
             
         # Try JSON
         try:
-            return json.loads(payload_str)
+            result = json.loads(payload_str)
+            _LOGGER.debug(f"Parsed as JSON: {result}")
+            return result
         except json.JSONDecodeError:
+            _LOGGER.debug("Not valid JSON")
             pass
             
         # Return as string
+        _LOGGER.debug(f"Using as string: {payload_str}")
         return payload_str
     
     def create_or_update_entity(hass, vehicle_id, metric_key, value, topic, async_add_entities):
         """Create a new entity or update an existing one."""
         unique_id = f"ovms_{slugify(vehicle_id)}_{slugify(metric_key)}"
+        _LOGGER.info(f"Entity ID: {unique_id} for vehicle: {vehicle_id}, metric: {metric_key}")
         
         if unique_id in hass.data[DOMAIN]['entities']:
             # Update existing entity
-            _LOGGER.debug(f"Updating entity: {unique_id} = {value}")
+            _LOGGER.info(f"Updating existing entity: {unique_id} = {value}")
             entity = hass.data[DOMAIN]['entities'][unique_id]
             entity.update_value(value)
         else:
@@ -178,6 +214,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             
             # Try to get a friendly name for this metric
             friendly_name = METRIC_PATTERNS.get(metric_key)
+            _LOGGER.info(f"Friendly name: {friendly_name if friendly_name else 'None, using default'}")
             
             sensor = OvmsSensor(
                 vehicle_id=vehicle_id,
@@ -188,7 +225,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             )
             
             hass.data[DOMAIN]['entities'][unique_id] = sensor
+            _LOGGER.info(f"Adding entity to Home Assistant: {unique_id}")
             async_add_entities([sensor])
+            _LOGGER.info(f"Entity added successfully")
     
     # Subscribe to OVMS topics
     _LOGGER.info(f"Subscribing to OVMS topics: {topic_prefix}/#")
@@ -198,6 +237,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         handle_mqtt_message, 
         qos
     )
+    _LOGGER.info(f"MQTT subscription successful")
     
     # Store subscription for cleanup
     hass.data[DOMAIN]['subscription'] = subscription
@@ -212,12 +252,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             (f"{topic_prefix}/ovms-user/{test_vehicle}/metric/v/b/range/est", "350")
         ]
         
+        _LOGGER.info(f"Publishing {len(test_topics)} test messages")
         for topic, value in test_topics:
             _LOGGER.info(f"Publishing test data: {topic} = {value}")
             await mqtt.async_publish(hass, topic, value, qos)
+        _LOGGER.info("Test messages published")
     
     # Publish test data only in debug mode
     if debug_mode:
+        _LOGGER.info("Debug mode enabled, publishing test messages")
         await publish_test_messages()
     
     return True
@@ -271,6 +314,6 @@ class OvmsSensor(SensorEntity):
         self._attr_native_value = value
         
         if old_value != value:
-            _LOGGER.debug(f"Updated {self._attr_unique_id}: {old_value} → {value}")
+            _LOGGER.info(f"Updated {self._attr_unique_id}: {old_value} → {value}")
         
         self.async_write_ha_state()
