@@ -153,8 +153,10 @@ class OVMSMQTTSensor(SensorEntity):
 
     def _update_state(self):
         """Update state from stored data."""
-        entity_data = self.hass.data[DOMAIN][self.config_entry.entry_id]["entities"].get(
-            self._unique_id
+        entity_data = (
+            self.hass.data[DOMAIN][self.config_entry.entry_id]["entities"].get(
+                self._unique_id
+            )
         )
         if entity_data:
             self._attr_native_value = entity_data.get("state")
@@ -189,4 +191,7 @@ class OVMSMQTTSensor(SensorEntity):
     @property
     def available(self) -> bool:
         """Return if entity is available."""
-        return self._unique_id in self.hass.data[DOMAIN][self.config_entry.entry_id]["entities"]
+        return (
+            self._unique_id in
+            self.hass.data[DOMAIN][self.config_entry.entry_id]["entities"]
+        )
