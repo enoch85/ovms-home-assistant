@@ -10,7 +10,6 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup(hass: HomeAssistant, config: dict):
     """Set up the OVMS MQTT integration."""
     _LOGGER.debug("Setting up OVMS MQTT integration")
-    # Initialize domain data
     hass.data.setdefault(DOMAIN, {})
     return True
 
@@ -23,11 +22,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         _LOGGER.warning("MQTT integration is not set up. OVMS MQTT integration requires MQTT")
         return False
 
-    # Forward the setup to the sensor platform
-    hass.async_create_task(
-        hass.config_entries.async_forward_entry_setup(entry, "sensor")
-    )
+    # Forward the setup to the sensor platform using the newer method
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
 
+    # Register update listener
     entry.async_on_unload(
         entry.add_update_listener(async_update_options)
     )
@@ -42,13 +40,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload a config entry."""
     _LOGGER.debug("Unloading OVMS MQTT config entry")
 
-    # Unsubscribe from MQTT topics if subscription exists
+    # Unsubscribe from MQTT topics
     if DOMAIN in hass.data and 'subscription' in hass.data[DOMAIN]:
         _LOGGER.debug("Unsubscribing from MQTT topics")
         hass.data[DOMAIN]['subscription']()
     
-    # Forward the unload to the sensor platform
-    result = await hass.config_entries.async_forward_entry_unload(entry, "sensor")
+    # Unload the platform
+    result = await hass.config_entries.async_unload_platforms(entry, ["sensor"])
     
     # Clean up data
     if DOMAIN in hass.data:
