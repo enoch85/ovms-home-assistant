@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Dict
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.util import slugify
 
 from .const import DOMAIN
 from .entity_handler import get_device_info, get_vehicle_device_info
@@ -75,7 +74,7 @@ class OVMSMQTTSensor(SensorEntity):
         hass: HomeAssistant,
         config_entry: ConfigEntry,
         unique_id: str,
-        entity_data: dict,
+        entity_data: Dict,
     ) -> None:
         """Initialize the sensor."""
         self.hass = hass
@@ -114,7 +113,7 @@ class OVMSMQTTSensor(SensorEntity):
         )
     
     @property
-    def extra_state_attributes(self) -> dict:
+    def extra_state_attributes(self) -> Dict:
         """Return additional attributes about the sensor."""
         attributes = {}
         
