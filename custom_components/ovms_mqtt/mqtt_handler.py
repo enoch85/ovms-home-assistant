@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional, List
+from typing import Dict, List, Optional, cast
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.components import mqtt
-from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
+from homeassistant.helpers.entity_registry import (
+    async_get as async_get_entity_registry,
+    EntityRegistry,
+)
 
 from .const import (
     DOMAIN,
@@ -105,7 +108,9 @@ async def async_cleanup_entities(hass: HomeAssistant, entry: ConfigEntry) -> Non
         _LOGGER.error("Error cleaning up entities: %s", e)
 
 
-def async_entries_for_config_entry(registry, config_entry_id):
+def async_entries_for_config_entry(
+    registry: EntityRegistry, config_entry_id: str
+) -> List[str]:
     """Return entries for a specific config entry."""
     return [
         entity_id
