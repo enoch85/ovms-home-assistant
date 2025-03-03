@@ -11,7 +11,7 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 # This integration is config entry only
-CONFIG_SCHEMA = cv.config_entry_only_schema(cv.schema_with_slug_keys)
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(cv.schema_with_slug_keys)
 
 async def async_setup(hass: HomeAssistant, config: dict):
     """Set up the OVMS MQTT integration."""
