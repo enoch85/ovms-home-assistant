@@ -1,217 +1,382 @@
-"""Sensor platform for OVMS MQTT integration."""
-from __future__ import annotations
-
+"""OVMS MQTT sensor platform."""
 import logging
-from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
+import json
+import re
+from typing import Any, Dict, List, Optional, Set, Callable
+import asyncio
 
-from homeassistant.components.sensor import SensorEntity
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.components import mqtt
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity import Entity
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD, CONF_SSL
 
 from .const import (
     DOMAIN,
-    CONF_AVAILABILITY_TIMEOUT,
-    DEFAULT_AVAILABILITY_TIMEOUT,
+    CONF_TOPIC_PREFIX,
+    CONF_VEHICLE_ID,
+    CONF_QOS,
+    DEFAULT_TOPIC_PREFIX,
+    DEFAULT_VEHICLE_ID,
+    DEFAULT_QOS,
+    KNOWN_TOPICS,
+    TOPIC_DISCOVERY_PATTERNS,
 )
-from .entity_handler import get_device_info, get_vehicle_device_info, get_battery_icon
 
 _LOGGER = logging.getLogger(__name__)
 
+# Store discovered topics
+DISCOVERED_TOPICS: Set[str] = set()
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
-) -> None:
-    """Set up OVMS MQTT sensors based on a config entry."""
-    _LOGGER.debug("Setting up OVMS MQTT sensor platform for entry %s", entry.entry_id)
+) -> bool:
+    """Set up OVMS MQTT sensor based on a config entry."""
+    _LOGGER.debug("Setting up OVMS MQTT sensor platform")
     
-    # Get stored entities from hass.data
-    if entry.entry_id not in hass.data[DOMAIN]:
-        _LOGGER.warning("Config entry %s not found in hass.data", entry.entry_id)
-        return
+    config = entry.data
+    topic_prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
+    vehicle_id = config.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID)
+    qos = config.get(CONF_QOS, DEFAULT_QOS)
     
-    entities_data = hass.data[DOMAIN][entry.entry_id].get("entities", {})
+    # Extract vehicle name and VIN from known topics
+    vehicle_name = None
+    vin = None
     
-    # Create entities for existing data
-    sensors = []
-    entity_ids_created = set()
+    # Try to extract vehicle_name and VIN from the first known topic
+    for topic in KNOWN_TOPICS:
+        parts = topic.split('/')
+        if len(parts) >= 4:
+            vehicle_name = parts[1]
+            vin = parts[2]
+            break
     
-    for unique_id, entity_data in entities_data.items():
-        if unique_id in entity_ids_created:
-            continue
-            
-        sensor = OVMSMQTTSensor(hass, entry, unique_id, entity_data)
-        sensors.append(sensor)
-        entity_ids_created.add(unique_id)
+    # Fallback to default values if not found
+    if not vehicle_name:
+        vehicle_name = f"ovms-mqtt-{vehicle_id}"
+    if not vin:
+        vin = vehicle_id.upper()
     
-    if sensors:
-        async_add_entities(sensors)
-    
-    @callback
-    def async_add_sensor(unique_id):
-        """Add sensor for a newly received MQTT topic."""
-        if unique_id in entity_ids_created:
-            return
-            
-        entity_data = hass.data[DOMAIN][entry.entry_id]["entities"].get(unique_id)
-        if not entity_data:
-            return
-            
-        sensor = OVMSMQTTSensor(hass, entry, unique_id, entity_data)
-        async_add_entities([sensor])
-        entity_ids_created.add(unique_id)
-    
-    # Connect to dispatcher to add new sensors
-    entry.async_on_unload(
-        async_dispatcher_connect(
-            hass, f"{DOMAIN}_{entry.entry_id}_new_entity", async_add_sensor
-        )
+    # Initialize data handler
+    data_handler = OVMSDataHandler(
+        hass, topic_prefix, vehicle_name, vin, qos, async_add_entities
     )
+    
+    # Store the data handler in hass.data
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {}
+    hass.data[DOMAIN][entry.entry_id] = data_handler
+    
+    # Start subscribing to topics
+    await data_handler.async_subscribe_topics()
+    
+    return True
 
 
-class OVMSMQTTSensor(SensorEntity):
-    """Representation of an OVMS MQTT sensor."""
-
+class OVMSDataHandler:
+    """Handles MQTT subscriptions and entity updates for OVMS."""
+    
     def __init__(
         self,
         hass: HomeAssistant,
-        config_entry: ConfigEntry,
-        unique_id: str,
-        entity_data: Dict,
+        topic_prefix: str,
+        vehicle_name: str,
+        vin: str,
+        qos: int,
+        async_add_entities: AddEntitiesCallback,
     ) -> None:
-        """Initialize the sensor."""
+        """Initialize the data handler."""
         self.hass = hass
-        self.config_entry = config_entry
-        self._unique_id = unique_id
-        self._attr_unique_id = unique_id
-        self._attr_available = True  # Initially assume available
-        self._last_updated = None
+        self.topic_prefix = topic_prefix
+        self.vehicle_name = vehicle_name
+        self.vin = vin
+        self.qos = qos
+        self.async_add_entities = async_add_entities
+        self.entities: Dict[str, OVMSSensor] = {}
+        self.subscriptions: List[Callable] = []
+        self.discovery_subscriptions: List[Callable] = []
         
-        # Set up various attributes from entity_data
-        self._vehicle_id = entity_data.get("vehicle_id")
-        self._topic = entity_data.get("topic", "")
-        self._category = entity_data.get("category")
+    async def async_subscribe_topics(self) -> None:
+        """Subscribe to all relevant MQTT topics."""
+        _LOGGER.debug(
+            "Subscribing to OVMS MQTT topics: prefix=%s, vehicle=%s, VIN=%s",
+            self.topic_prefix, self.vehicle_name, self.vin
+        )
         
-        # Entity attributes
-        self._attr_name = entity_data.get("name")
-        self._attr_native_unit_of_measurement = entity_data.get("unit")
-        self._attr_device_class = entity_data.get("device_class")
-        self._attr_state_class = entity_data.get("state_class")
-        self._attr_icon = entity_data.get("icon")
-        self._attr_native_value = entity_data.get("state")
-        
-        # Update last updated timestamp if available
-        if "last_updated" in entity_data:
-            try:
-                self._last_updated = datetime.fromisoformat(entity_data["last_updated"])
-            except (ValueError, TypeError):
-                self._last_updated = datetime.now()
-        
-        # Set up device info - group by category
-        if self._category and self._vehicle_id:
-            self._attr_device_info = get_device_info(
-                self._vehicle_id, self._category
+        # Subscribe to metric topics
+        topic_filter = f"{self.topic_prefix}/{self.vehicle_name}/{self.vin}/metric/#"
+        self.subscriptions.append(
+            await mqtt.async_subscribe(
+                self.hass,
+                topic_filter,
+                self._handle_metric_message,
+                self.qos,
             )
+        )
+        _LOGGER.debug("Subscribed to metric topics: %s", topic_filter)
+        
+        # Subscribe to notification topics
+        topic_filter = f"{self.topic_prefix}/{self.vehicle_name}/{self.vin}/notify/#"
+        self.subscriptions.append(
+            await mqtt.async_subscribe(
+                self.hass,
+                topic_filter,
+                self._handle_notification_message,
+                self.qos,
+            )
+        )
+        _LOGGER.debug("Subscribed to notification topics: %s", topic_filter)
+        
+        # Start topic discovery
+        await self._start_topic_discovery()
+    
+    async def _start_topic_discovery(self) -> None:
+        """Start the discovery process for dynamic topics."""
+        _LOGGER.debug("Starting topic discovery")
+        
+        # Subscribe to all topics for discovery
+        for pattern in TOPIC_DISCOVERY_PATTERNS:
+            topic_filter = pattern.format(
+                prefix=self.topic_prefix,
+                vehicle_name=self.vehicle_name,
+                vin=self.vin
+            )
+            
+            # Skip already subscribed patterns
+            if topic_filter.endswith("#") and any(
+                s.endswith("#") and topic_filter.startswith(s[:-1]) 
+                for s in [f"{self.topic_prefix}/{self.vehicle_name}/{self.vin}/metric/#", 
+                          f"{self.topic_prefix}/{self.vehicle_name}/{self.vin}/notify/#"]
+            ):
+                continue
+                
+            self.discovery_subscriptions.append(
+                await mqtt.async_subscribe(
+                    self.hass,
+                    topic_filter,
+                    self._handle_discovery_message,
+                    self.qos,
+                )
+            )
+            _LOGGER.debug("Subscribed to discovery topic: %s", topic_filter)
+    
+    @callback
+    def _handle_discovery_message(self, msg) -> None:
+        """Handle incoming MQTT messages for topic discovery."""
+        topic = msg.topic
+        
+        # Skip if topic is already known
+        if topic in DISCOVERED_TOPICS:
+            return
+            
+        _LOGGER.debug("Discovered new topic: %s", topic)
+        DISCOVERED_TOPICS.add(topic)
+    
+    @callback
+    def _handle_metric_message(self, msg) -> None:
+        """Handle incoming MQTT messages for metrics."""
+        topic = msg.topic
+        payload = msg.payload
+        
+        _LOGGER.debug("Received metric message: %s = %s", topic, payload)
+        
+        # Parse topic to extract the metric key
+        parts = topic.split('/')
+        if len(parts) >= 5 and parts[0] == self.topic_prefix and parts[3] == 'metric':
+            metric_key = '/'.join(parts[4:])
+            
+            try:
+                # Try to parse JSON payload
+                try:
+                    value = json.loads(payload)
+                except json.JSONDecodeError:
+                    # Use raw payload if not JSON
+                    value = payload.decode('utf-8') if isinstance(payload, bytes) else payload
+                
+                # Create or update sensor entity
+                self._update_sensor(metric_key, value)
+                
+            except Exception as e:
+                _LOGGER.error("Error processing metric message: %s", e)
+    
+    @callback
+    def _handle_notification_message(self, msg) -> None:
+        """Handle incoming MQTT messages for notifications."""
+        topic = msg.topic
+        payload = msg.payload
+        
+        _LOGGER.debug("Received notification message: %s = %s", topic, payload)
+        
+        # Parse topic to extract the notification type
+        parts = topic.split('/')
+        if len(parts) >= 5 and parts[0] == self.topic_prefix and parts[3] == 'notify':
+            notification_type = '/'.join(parts[4:])
+            
+            try:
+                # Try to parse JSON payload
+                try:
+                    value = json.loads(payload)
+                except json.JSONDecodeError:
+                    # Use raw payload if not JSON
+                    value = payload.decode('utf-8') if isinstance(payload, bytes) else payload
+                
+                # Create a notification sensor
+                sensor_key = f"notify_{notification_type}"
+                self._update_sensor(sensor_key, value)
+                
+                # For specific notifications, you could trigger events here
+                self.hass.bus.async_fire(
+                    f"{DOMAIN}_notification",
+                    {"type": notification_type, "value": value, "vin": self.vin}
+                )
+                
+            except Exception as e:
+                _LOGGER.error("Error processing notification message: %s", e)
+    
+    def _update_sensor(self, key: str, value: Any) -> None:
+        """Create or update a sensor entity."""
+        # Generate unique ID for the sensor
+        unique_id = f"{self.vin}_{key.replace('/', '_')}"
+        
+        if unique_id not in self.entities:
+            # Create new sensor entity
+            sensor = OVMSSensor(self.vin, key, value)
+            self.entities[unique_id] = sensor
+            self.async_add_entities([sensor])
+            _LOGGER.debug("Created new sensor: %s", unique_id)
         else:
-            # Fallback to main vehicle device
-            self._attr_device_info = get_vehicle_device_info(self._vehicle_id)
+            # Update existing sensor
+            self.entities[unique_id].update_value(value)
+            _LOGGER.debug("Updated existing sensor: %s", unique_id)
+    
+    async def async_unsubscribe(self) -> None:
+        """Unsubscribe from all MQTT topics."""
+        for unsubscribe_cb in self.subscriptions:
+            unsubscribe_cb()
+        self.subscriptions = []
+        
+        for unsubscribe_cb in self.discovery_subscriptions:
+            unsubscribe_cb()
+        self.discovery_subscriptions = []
+        
+        _LOGGER.debug("Unsubscribed from all MQTT topics")
+
+
+class OVMSSensor(SensorEntity):
+    """Representation of an OVMS MQTT sensor."""
+    
+    def __init__(self, vin: str, key: str, value: Any) -> None:
+        """Initialize the sensor."""
+        self._vin = vin
+        self._key = key
+        self._attr_unique_id = f"{vin}_{key.replace('/', '_')}"
+        
+        # Generate user-friendly name
+        name_parts = key.split('/')
+        formatted_name = ' '.join(name_parts).title()
+        self._attr_name = f"OVMS {vin} {formatted_name}"
+        
+        # Set initial state
+        self._attr_native_value = self._process_value(value)
+        
+        # Determine unit of measurement and device class if possible
+        self._attr_native_unit_of_measurement = self._determine_unit(key, value)
+        self._attr_device_class = self._determine_device_class(key, value)
         
         _LOGGER.debug(
-            "Initialized sensor: %s (ID: %s) with device class: %s, unit: %s",
-            self._attr_name,
-            self._attr_unique_id,
-            self._attr_device_class,
-            self._attr_native_unit_of_measurement,
+            "Initialized sensor: unique_id=%s, name=%s, value=%s, unit=%s, device_class=%s",
+            self._attr_unique_id, self._attr_name, self._attr_native_value,
+            self._attr_native_unit_of_measurement, self._attr_device_class
         )
     
-    @property
-    def extra_state_attributes(self) -> Dict[str, Any]:
-        """Return additional attributes about the sensor."""
-        attributes = {}
+    def _process_value(self, value: Any) -> Any:
+        """Process the value for display."""
+        # Handle JSON objects/arrays
+        if isinstance(value, (dict, list)):
+            return json.dumps(value)
+        return value
+    
+    def _determine_unit(self, key: str, value: Any) -> Optional[str]:
+        """Determine the unit of measurement based on the key and value."""
+        key_lower = key.lower()
         
-        # Add topic for debugging
-        attributes["mqtt_topic"] = self._topic
+        # Temperature
+        if 'temp' in key_lower or 'temperature' in key_lower:
+            return "°C"
         
-        # Add last updated timestamp
-        if self._last_updated:
-            attributes["last_updated"] = self._last_updated.isoformat()
+        # Voltage
+        if 'voltage' in key_lower or key_lower.endswith('v'):
+            return "V"
         
-        return attributes
-
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to state updates."""
-        await super().async_added_to_hass()
+        # Current
+        if 'current' in key_lower or key_lower.endswith('a'):
+            return "A"
         
-        # Subscribe to state updates
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                f"{DOMAIN}_{self.config_entry.entry_id}_state_update",
-                self._handle_state_update,
-            )
+        # Power
+        if 'power' in key_lower or key_lower.endswith('w'):
+            return "W"
+        
+        # Energy
+        if 'energy' in key_lower or 'kwh' in key_lower:
+            return "kWh"
+        
+        # Percentage
+        if 'soc' in key_lower or 'percent' in key_lower:
+            return "%"
+        
+        # Distance
+        if 'odometer' in key_lower or 'range' in key_lower or 'distance' in key_lower:
+            return "km"
+        
+        # Speed
+        if 'speed' in key_lower:
+            return "km/h"
+        
+        # Duration
+        if 'duration' in key_lower or 'time' in key_lower:
+            return "min"
+        
+        # No recognized unit
+        return None
+    
+    def _determine_device_class(self, key: str, value: Any) -> Optional[str]:
+        """Determine the device class based on the key and value."""
+        key_lower = key.lower()
+        
+        # Temperature
+        if 'temp' in key_lower or 'temperature' in key_lower:
+            return "temperature"
+        
+        # Voltage
+        if 'voltage' in key_lower:
+            return "voltage"
+        
+        # Current
+        if 'current' in key_lower:
+            return "current"
+        
+        # Power
+        if 'power' in key_lower:
+            return "power"
+        
+        # Energy
+        if 'energy' in key_lower or 'kwh' in key_lower:
+            return "energy"
+        
+        # Battery
+        if 'soc' in key_lower or 'battery' in key_lower:
+            return "battery"
+        
+        # No recognized device class
+        return None
+    
+    def update_value(self, value: Any) -> None:
+        """Update the sensor state."""
+        self._attr_native_value = self._process_value(value)
+        self.async_write_ha_state()
+        _LOGGER.debug(
+            "Updated sensor: unique_id=%s, new_value=%s",
+            self._attr_unique_id, self._attr_native_value
         )
-
-    @callback
-    def _handle_state_update(self, unique_id):
-        """Handle state update from dispatcher."""
-        if unique_id == self._unique_id:
-            self._update_state()
-            self.async_write_ha_state()
-
-    def _update_state(self):
-        """Update state from stored data."""
-        entity_data = (
-            self.hass.data[DOMAIN][self.config_entry.entry_id]["entities"].get(
-                self._unique_id
-            )
-        )
-        if entity_data:
-            # Update state value
-            self._attr_native_value = entity_data.get("state")
-            
-            # Update availability if explicitly set
-            if "available" in entity_data:
-                self._attr_available = entity_data["available"]
-            
-            # Update last updated timestamp
-            if "last_updated" in entity_data:
-                try:
-                    self._last_updated = datetime.fromisoformat(
-                        entity_data["last_updated"]
-                    )
-                except (ValueError, TypeError):
-                    self._last_updated = datetime.now()
-            
-            # Update battery icon based on state if applicable
-            if "soc" in self._topic and isinstance(self._attr_native_value, (int, float)):
-                self._attr_icon = get_battery_icon(self._attr_native_value)
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        # Check if entity exists in data store
-        has_entity = (
-            self._unique_id in
-            self.hass.data[DOMAIN][self.config_entry.entry_id]["entities"]
-        )
-        
-        if not has_entity:
-            return False
-            
-        # If explicitly marked as unavailable
-        if hasattr(self, "_attr_available") and not self._attr_available:
-            return False
-            
-        # Check for timeout if configured
-        availability_timeout = self.config_entry.data.get(
-            CONF_AVAILABILITY_TIMEOUT, DEFAULT_AVAILABILITY_TIMEOUT
-        )
-        if availability_timeout > 0 and self._last_updated:
-            # Check if last update is too old
-            timeout_delta = timedelta(seconds=availability_timeout)
-            if datetime.now() - self._last_updated > timeout_delta:
-                return False
-                
-        return True
