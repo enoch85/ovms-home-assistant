@@ -42,6 +42,7 @@ async def async_setup_entry(
     _LOGGER.debug("MQTT topics subscribed successfully")
     return True
 
+
 async def subscribe_to_topics(
     hass: HomeAssistant,
     topic_prefix: str,
@@ -65,6 +66,7 @@ async def subscribe_to_topics(
         lambda msg: handle_notification_update(hass, msg)
     )
     _LOGGER.debug(f"Subscribed to topic: {topic_prefix}/+/+/notify/#")
+
 
 def handle_metric_update(
     hass: HomeAssistant,
@@ -101,6 +103,7 @@ def handle_metric_update(
     else:
         _LOGGER.warning(f"Topic does not match expected structure: {topic}")
 
+
 def handle_notification_update(hass: HomeAssistant, msg):
     """Handle incoming MQTT messages for notifications."""
     _LOGGER.debug(f"Received MQTT message: topic={msg.topic}, payload={msg.payload}")
@@ -127,6 +130,7 @@ def handle_notification_update(hass: HomeAssistant, msg):
     else:
         _LOGGER.warning(f"Topic does not match expected structure: {topic}")
 
+
 def update_sensor_entity(
     hass: HomeAssistant,
     vin: str,
@@ -150,6 +154,7 @@ def update_sensor_entity(
         # Update the existing entity
         _LOGGER.debug(f"Updating existing sensor entity: {entity_id}")
         entities[entity_id].update_value(value)
+
 
 class OvmsSensor(Entity):
     """Representation of an OVMS MQTT sensor."""
