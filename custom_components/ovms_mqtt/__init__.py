@@ -1,28 +1,23 @@
 """Open Vehicle Monitoring System (OVMS) MQTT Integration for Home Assistant."""
 import logging
 from typing import Any, Dict
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX
-from .mqtt_handler import async_cleanup_entities
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor"]
 
-
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the OVMS MQTT integration."""
     _LOGGER.debug("Setting up OVMS MQTT integration")
-
     # Initialize the domain data
     hass.data.setdefault(DOMAIN, {})
     
     return True
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up OVMS MQTT from a config entry."""
@@ -44,7 +39,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     return True
 
-
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     _LOGGER.info("Unloading OVMS MQTT integration config entry")
@@ -60,7 +54,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Clean up entities from registry
     if unload_ok:
-        await async_cleanup_entities(hass, entry)
+        # We'll handle entity cleanup in a separate function if needed
+        pass
     
     # Remove config entry from hass.data
     if unload_ok and DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
@@ -69,7 +64,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.data.pop(DOMAIN)
     
     return unload_ok
-
 
 async def config_entry_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle config entry update."""
