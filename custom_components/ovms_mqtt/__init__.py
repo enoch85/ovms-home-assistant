@@ -1,73 +1,72 @@
-"""The OVMS MQTT integration."""
-from __future__ import annotations
-
+"""Open Vehicle Monitoring System (OVMS) MQTT Integration for Home Assistant."""
 import logging
+from typing import Any, Dict
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN
-from .mqtt_handler import async_setup_mqtt_handler, async_cleanup_entities
+from .const import DOMAIN, CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = ["sensor"]
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up OVMS MQTT from a config entry."""
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the OVMS MQTT integration."""
     _LOGGER.debug("Setting up OVMS MQTT integration")
-    
-    # Initialize storage for entities
+
+    # Initialize the domain data
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {
-        "entities": {},
-        "config": dict(entry.data),
-        "unsub": [],
-    }
-    
-    # Set up MQTT subscription
-    unsub_list = await async_setup_mqtt_handler(hass, entry)
-    
-    # Store unsubscribe functions
-    hass.data[DOMAIN][entry.entry_id]["unsub"] = unsub_list
-    
-    # Set up platforms
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    
-    # Register update listener
-    entry.async_on_unload(entry.add_update_listener(async_update_options))
     
     return True
 
 
-async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Update options when the config entry options are updated."""
-    _LOGGER.debug("Updating OVMS MQTT configuration")
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up OVMS MQTT from a config entry."""
+    _LOGGER.info("Setting up OVMS MQTT integration from config entry")
     
-    # Update the stored config with the new options
-    if entry.entry_id in hass.data[DOMAIN]:
-        hass.data[DOMAIN][entry.entry_id]["config"].update(entry.options)
+    # Store the entry ID in hass.data
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault(entry.entry_id, {})
     
-    # Reload the integration with the new options
-    await hass.config_entries.async_reload(entry.entry_id)
+    # Log configuration
+    topic_prefix = entry.data.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
+    _LOGGER.info(f"Using MQTT topic prefix: {topic_prefix}")
+    
+    # Forward the setup to the sensor platform
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    
+    # Register update listener for config entry changes
+    entry.async_on_unload(entry.add_update_listener(config_entry_update_listener))
+    
+    return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    # Unload platforms
+    _LOGGER.info("Unloading OVMS MQTT integration config entry")
+    
+    # Unsubscribe from MQTT topics if handler exists
+    if DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
+        data_handler = hass.data[DOMAIN][entry.entry_id].get("data_handler")
+        if data_handler and hasattr(data_handler, "async_unsubscribe"):
+            await data_handler.async_unsubscribe()
+    
+    # Unload the sensor platform
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-
-    if unload_ok and entry.entry_id in hass.data[DOMAIN]:
-        # Unsubscribe from MQTT topics
-        for unsub in hass.data[DOMAIN][entry.entry_id].get("unsub", []):
-            unsub()
-        
-        # Clean up entities from the registry
-        await async_cleanup_entities(hass, entry)
-        
-        # Remove entry data
+    
+    # Remove config entry from hass.data
+    if unload_ok and DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
         hass.data[DOMAIN].pop(entry.entry_id)
+        if not hass.data[DOMAIN]:
+            hass.data.pop(DOMAIN)
     
     return unload_ok
+
+
+async def config_entry_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle config entry update."""
+    _LOGGER.debug("Config entry updated, reloading OVMS MQTT integration")
+    await hass.config_entries.async_reload(entry.entry_id)
