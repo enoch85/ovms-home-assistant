@@ -21,6 +21,11 @@ from .const import (
     DEFAULT_VEHICLE_ID,
     CONF_QOS,
     DEFAULT_QOS,
+    CONF_AVAILABILITY_TIMEOUT,
+    DEFAULT_AVAILABILITY_TIMEOUT,
+    CONF_TLS_INSECURE,
+    DEFAULT_TLS_INSECURE,
+    CONF_CERTIFICATE_PATH,
 )
 from .entity_handler import process_ovms_message
 
@@ -45,8 +50,11 @@ async def async_setup_mqtt_handler(
         }
     
     @callback
-    async def message_received(msg):
-        """Handle new MQTT messages."""
+    def message_received(msg):
+        """Handle new MQTT messages.
+        
+        Note: This must be a synchronous function as it's a callback.
+        """
         topic = msg.topic
         payload = msg.payload
         
@@ -83,6 +91,7 @@ async def async_setup_mqtt_handler(
             entities[unique_id].update({
                 "state": entity_data["state"],
                 "last_updated": entity_data["last_updated"],
+                "available": True,  # Mark entity as available
             })
             
             # Signal state update
@@ -90,14 +99,84 @@ async def async_setup_mqtt_handler(
                 hass, f"{DOMAIN}_{entry.entry_id}_state_update", unique_id
             )
 
+    # Setup availability topic if configured
+    availability_timeout = entry.data.get(
+        CONF_AVAILABILITY_TIMEOUT, DEFAULT_AVAILABILITY_TIMEOUT
+    )
+    if availability_timeout > 0:
+        # Set up availability monitoring for entities
+        async def monitor_availability():
+            """Monitor entity availability based on last update time."""
+            import time
+            from datetime import datetime, timedelta
+            
+            while True:
+                current_time = datetime.now()
+                timeout_delta = timedelta(seconds=availability_timeout)
+                
+                if entry.entry_id in hass.data.get(DOMAIN, {}):
+                    entities = hass.data[DOMAIN][entry.entry_id].get("entities", {})
+                    
+                    for unique_id, entity_data in entities.items():
+                        if "last_updated" in entity_data:
+                            try:
+                                last_updated = datetime.fromisoformat(
+                                    entity_data["last_updated"]
+                                )
+                                if current_time - last_updated > timeout_delta:
+                                    # Mark entity as unavailable
+                                    entity_data["available"] = False
+                                    # Signal state update
+                                    async_dispatcher_send(
+                                        hass,
+                                        f"{DOMAIN}_{entry.entry_id}_state_update",
+                                        unique_id
+                                    )
+                            except (ValueError, TypeError) as e:
+                                _LOGGER.debug(
+                                    "Error parsing timestamp for %s: %s", 
+                                    unique_id, e
+                                )
+                
+                # Check every 60 seconds
+                await asyncio.sleep(60)
+        
+        # Start availability monitoring task
+        hass.async_create_task(monitor_availability())
+
+    # Configure additional MQTT options
+    mqtt_options = {}
+    
+    # Handle SSL/TLS options if configured
+    if entry.data.get(CONF_SSL, False):
+        import ssl
+        
+        # Check if certificate verification should be disabled
+        tls_insecure = entry.data.get(CONF_TLS_INSECURE, DEFAULT_TLS_INSECURE)
+        
+        # Check if a certificate path is provided
+        cert_path = entry.data.get(CONF_CERTIFICATE_PATH)
+        
+        mqtt_options["tls_context"] = ssl.create_default_context(
+            cafile=cert_path if cert_path else None
+        )
+        
+        if tls_insecure:
+            mqtt_options["tls_context"].check_hostname = False
+            mqtt_options["tls_context"].verify_mode = ssl.CERT_NONE
+
     # Subscribe to all topics for this vehicle
     subscribe_topic = f"{topic_prefix}/{vehicle_id}/#"
     _LOGGER.debug("Subscribing to MQTT topic: %s", subscribe_topic)
-    unsub = await mqtt.async_subscribe(
-        hass, subscribe_topic, message_received, qos
-    )
     
-    return [unsub]
+    try:
+        unsub = await mqtt.async_subscribe(
+            hass, subscribe_topic, message_received, qos, **mqtt_options
+        )
+        return [unsub]
+    except Exception as e:
+        _LOGGER.error("Failed to subscribe to MQTT topic %s: %s", subscribe_topic, e)
+        return []
 
 
 async def async_cleanup_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
