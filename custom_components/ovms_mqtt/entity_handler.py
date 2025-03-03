@@ -228,21 +228,22 @@ def parse_topic(topic: str) -> Tuple[Optional[str], Optional[str], list, Optiona
     try:
         parts = topic.split('/')
         
-        # Need at least: ovms/vehicleid/...
-        if len(parts) < 3 or parts[0] != "ovms":
+        # Need at least: prefix/vehicleid/vin/...
+        if len(parts) < 4:
             return None, None, [], None
         
-        vehicle_id = parts[1]
+        # Assume parts[0] is the configured topic prefix (e.g., "ovms")
+        vehicle_id = parts[2]  # The VIN
         
         # Check if this is a metric topic
-        if len(parts) >= 4 and parts[2] == "metric":
+        if len(parts) >= 5 and parts[3] == "metric":
             topic_type = "metric"
-            path_segments = parts[3:-1] if len(parts) > 4 else []
+            path_segments = parts[4:-1] if len(parts) > 5 else []
             metric_name = parts[-1]
         else:
-            topic_type = parts[2] if len(parts) > 2 else None
-            path_segments = parts[3:-1] if len(parts) > 3 else []
-            metric_name = parts[-1] if len(parts) > 3 else None
+            topic_type = parts[3] if len(parts) > 3 else None
+            path_segments = parts[4:-1] if len(parts) > 4 else []
+            metric_name = parts[-1] if len(parts) > 4 else None
         
         return vehicle_id, topic_type, path_segments, metric_name
     except Exception as e:
