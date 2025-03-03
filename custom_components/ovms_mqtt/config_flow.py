@@ -6,6 +6,7 @@ import asyncio
 import logging
 import socket
 import ssl
+import os.path
 
 import voluptuous as vol
 
@@ -19,7 +20,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import selector
+from homeassistant.helpers import selector, config_validation as cv
 
 from .const import (
     DOMAIN,
@@ -40,9 +41,19 @@ from .const import (
     DEFAULT_PORT_WS,
     DEFAULT_PORT_WSS,
     QOS_OPTIONS,
+    CONF_TLS_INSECURE,
+    DEFAULT_TLS_INSECURE,
+    CONF_CERTIFICATE_PATH,
+    CONF_AVAILABILITY_TIMEOUT,
+    DEFAULT_AVAILABILITY_TIMEOUT,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def is_valid_certificate_path(path: str) -> bool:
+    """Validate that the certificate file exists."""
+    return os.path.isfile(path) if path else True
 
 
 async def validate_mqtt_connection(
@@ -52,6 +63,8 @@ async def validate_mqtt_connection(
     username: Optional[str] = None,
     password: Optional[str] = None,
     ssl_enabled: bool = False,
+    tls_insecure: bool = DEFAULT_TLS_INSECURE,
+    certificate_path: Optional[str] = None,
 ) -> Optional[str]:
     """Test if we can connect to the MQTT broker."""
     import paho.mqtt.client as mqtt
@@ -71,11 +84,25 @@ async def validate_mqtt_connection(
             client.username_pw_set(username, password)
 
         if ssl_enabled:
-            client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
-            client.tls_insecure_set(False)
+            # Create SSL context with certificate verification options
+            if tls_insecure:
+                client.tls_set(
+                    ca_certs=certificate_path if certificate_path else None,
+                    cert_reqs=ssl.CERT_NONE
+                )
+                client.tls_insecure_set(True)
+            else:
+                client.tls_set(
+                    ca_certs=certificate_path if certificate_path else None,
+                    cert_reqs=ssl.CERT_REQUIRED
+                )
+                client.tls_insecure_set(False)
 
         # Log connection attempt
-        _LOGGER.debug("Testing connection to %s:%s (SSL: %s)", host, port, ssl_enabled)
+        _LOGGER.debug(
+            "Testing connection to %s:%s (SSL: %s, Verify: %s)",
+            host, port, ssl_enabled, not tls_insecure
+        )
 
         await hass.async_add_executor_job(client.connect, host, port, 5)
         await hass.async_add_executor_job(client.loop_start)
@@ -126,6 +153,16 @@ async def validate_mqtt_connection(
     return None
 
 
+def _deep_update(target: Dict, source: Dict) -> Dict:
+    """Update a nested dictionary with another nested dictionary."""
+    for key, value in source.items():
+        if isinstance(value, Dict) and key in target and isinstance(target[key], Dict):
+            target[key] = _deep_update(target[key], value)
+        else:
+            target[key] = value
+    return target
+
+
 class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for OVMS MQTT."""
 
@@ -164,45 +201,64 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             conn_type = user_input.get(CONF_CONNECTION_TYPE, CONNECTION_TYPE_STANDARD)
             username = user_input.get(CONF_USERNAME)
             password = user_input.get(CONF_PASSWORD)
+            tls_insecure = user_input.get(CONF_TLS_INSECURE, DEFAULT_TLS_INSECURE)
+            certificate_path = user_input.get(CONF_CERTIFICATE_PATH)
 
-            # Determine port and SSL based on connection type
-            ssl_enabled = conn_type in (
-                CONNECTION_TYPE_SECURE, CONNECTION_TYPE_WEBSOCKETS_SECURE
-            )
-            if conn_type == CONNECTION_TYPE_STANDARD:
-                port = DEFAULT_PORT
-            elif conn_type == CONNECTION_TYPE_SECURE:
-                port = DEFAULT_PORT_SSL
-            elif conn_type == CONNECTION_TYPE_WEBSOCKETS:
-                port = DEFAULT_PORT_WS
-            else:  # Secure WebSockets
-                port = DEFAULT_PORT_WSS
+            # Validate certificate path if provided
+            if certificate_path and not is_valid_certificate_path(certificate_path):
+                errors["certificate_path"] = "invalid_certificate"
+            else:
+                # Determine port and SSL based on connection type
+                ssl_enabled = conn_type in (
+                    CONNECTION_TYPE_SECURE, CONNECTION_TYPE_WEBSOCKETS_SECURE
+                )
+                if conn_type == CONNECTION_TYPE_STANDARD:
+                    port = DEFAULT_PORT
+                elif conn_type == CONNECTION_TYPE_SECURE:
+                    port = DEFAULT_PORT_SSL
+                elif conn_type == CONNECTION_TYPE_WEBSOCKETS:
+                    port = DEFAULT_PORT_WS
+                else:  # Secure WebSockets
+                    port = DEFAULT_PORT_WSS
 
-            # Override with manual port if provided
-            if CONF_PORT in user_input and user_input[CONF_PORT]:
-                port = user_input[CONF_PORT]
+                # Override with manual port if provided
+                if CONF_PORT in user_input and user_input[CONF_PORT]:
+                    port = user_input[CONF_PORT]
 
-            # Test connection
-            error = await validate_mqtt_connection(
-                self.hass, host, port, username, password, ssl_enabled
-            )
+                # Validate QoS if provided
+                qos = user_input.get(CONF_QOS)
+                if qos is not None and qos not in QOS_OPTIONS:
+                    errors[CONF_QOS] = "invalid_qos"
 
-            if not error:
-                # Save connection settings
-                self._user_input.update({
-                    CONF_HOST: host,
-                    CONF_PORT: port,
-                    CONF_SSL: ssl_enabled,
-                    CONF_USERNAME: username,
-                    CONF_PASSWORD: password,
-                    CONF_CONNECTION_TYPE: conn_type,
-                })
-                # Proceed to OVMS settings
-                return await self.async_step_ovms()
+                if not errors:
+                    # Test connection
+                    error = await validate_mqtt_connection(
+                        self.hass, host, port, username, password, ssl_enabled,
+                        tls_insecure, certificate_path
+                    )
 
-            errors["base"] = error
+                    if not error:
+                        # Save connection settings
+                        self._user_input.update({
+                            CONF_HOST: host,
+                            CONF_PORT: port,
+                            CONF_SSL: ssl_enabled,
+                            CONF_USERNAME: username,
+                            CONF_PASSWORD: password,
+                            CONF_CONNECTION_TYPE: conn_type,
+                            CONF_TLS_INSECURE: tls_insecure,
+                        })
+                        
+                        # Add certificate path if provided
+                        if certificate_path:
+                            self._user_input[CONF_CERTIFICATE_PATH] = certificate_path
+                            
+                        # Proceed to OVMS settings
+                        return await self.async_step_ovms()
 
-        # Prepare schema
+                    errors["base"] = error
+
+        # Prepare schema for broker configuration
         data_schema = vol.Schema({
             vol.Required(CONF_HOST, default="localhost"): str,
             vol.Required(
@@ -229,6 +285,18 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
             ),
         })
+        
+        # Add SSL/TLS options if a secure connection type is selected
+        if user_input and user_input.get(CONF_CONNECTION_TYPE) in [
+            CONNECTION_TYPE_SECURE, CONNECTION_TYPE_WEBSOCKETS_SECURE
+        ]:
+            advanced_options = {
+                vol.Optional(
+                    CONF_TLS_INSECURE, default=DEFAULT_TLS_INSECURE
+                ): bool,
+                vol.Optional(CONF_CERTIFICATE_PATH): str,
+            }
+            data_schema = data_schema.extend(advanced_options)
 
         return self.async_show_form(
             step_id="broker",
@@ -247,24 +315,32 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             topic_prefix = user_input.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
             vehicle_id = user_input.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID)
             qos = user_input.get(CONF_QOS, DEFAULT_QOS)
-
-            # Update user input
-            self._user_input.update({
-                CONF_TOPIC_PREFIX: topic_prefix,
-                CONF_VEHICLE_ID: vehicle_id,
-                CONF_QOS: qos,
-            })
-
-            # Check for existing entries
-            host = self._user_input.get(CONF_HOST)
-            await self.async_set_unique_id(f"{DOMAIN}_{host}_{vehicle_id}")
-            self._abort_if_unique_id_configured()
-
-            # Create config entry
-            return self.async_create_entry(
-                title=f"OVMS {vehicle_id} on {host}",
-                data=self._user_input,
+            availability_timeout = user_input.get(
+                CONF_AVAILABILITY_TIMEOUT, DEFAULT_AVAILABILITY_TIMEOUT
             )
+
+            # Validate QoS value
+            if not isinstance(qos, int) or qos not in QOS_OPTIONS:
+                errors[CONF_QOS] = "invalid_qos"
+            elif not errors:
+                # Update user input
+                self._user_input.update({
+                    CONF_TOPIC_PREFIX: topic_prefix,
+                    CONF_VEHICLE_ID: vehicle_id,
+                    CONF_QOS: qos,
+                    CONF_AVAILABILITY_TIMEOUT: availability_timeout,
+                })
+
+                # Check for existing entries
+                host = self._user_input.get(CONF_HOST)
+                await self.async_set_unique_id(f"{DOMAIN}_{host}_{vehicle_id}")
+                self._abort_if_unique_id_configured()
+
+                # Create config entry
+                return self.async_create_entry(
+                    title=f"OVMS {vehicle_id} on {host}",
+                    data=self._user_input,
+                )
 
         # Prepare schema with QoS dropdown instead of slider
         data_schema = vol.Schema({
@@ -274,10 +350,21 @@ class OVMSMQTTConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 selector.SelectSelectorConfig(
                     options=[
                         {"value": qos_level, "label": QOS_OPTIONS[qos_level]}
-                        for qos_level in QOS_OPTIONS
+                        for qos_level in sorted(QOS_OPTIONS.keys())
                     ],
                     translation_key="qos_level",
                     mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                CONF_AVAILABILITY_TIMEOUT, default=DEFAULT_AVAILABILITY_TIMEOUT
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=3600,
+                    step=30,
+                    unit_of_measurement="seconds",
+                    mode=selector.NumberSelectorMode.BOX,
                 )
             ),
         })
@@ -298,7 +385,9 @@ class OVMSMQTTOptionsFlow(config_entries.OptionsFlow):
         self.current_config = dict(config_entry.data)
         # Add options to current_config
         if config_entry.options:
-            self.current_config.update(config_entry.options)
+            self.current_config = _deep_update(
+                self.current_config, dict(config_entry.options)
+            )
 
     async def async_step_init(
         self, user_input: Optional[Dict[str, Any]] = None
@@ -331,56 +420,76 @@ class OVMSMQTTOptionsFlow(config_entries.OptionsFlow):
             conn_type = user_input.get(CONF_CONNECTION_TYPE)
             username = user_input.get(CONF_USERNAME)
             password = user_input.get(CONF_PASSWORD)
+            tls_insecure = user_input.get(CONF_TLS_INSECURE, DEFAULT_TLS_INSECURE)
+            certificate_path = user_input.get(CONF_CERTIFICATE_PATH)
             
             # If password is empty, keep the existing one
             if not password and self.current_config.get(CONF_PASSWORD):
                 password = self.current_config[CONF_PASSWORD]
 
-            # Determine port and SSL based on connection type
-            ssl_enabled = conn_type in (
-                CONNECTION_TYPE_SECURE, CONNECTION_TYPE_WEBSOCKETS_SECURE
-            )
-            if conn_type == CONNECTION_TYPE_STANDARD:
-                port = DEFAULT_PORT
-            elif conn_type == CONNECTION_TYPE_SECURE:
-                port = DEFAULT_PORT_SSL
-            elif conn_type == CONNECTION_TYPE_WEBSOCKETS:
-                port = DEFAULT_PORT_WS
-            else:  # Secure WebSockets
-                port = DEFAULT_PORT_WSS
+            # Validate certificate path if provided
+            if certificate_path and not is_valid_certificate_path(certificate_path):
+                errors["certificate_path"] = "invalid_certificate"
+            else:
+                # Determine port and SSL based on connection type
+                ssl_enabled = conn_type in (
+                    CONNECTION_TYPE_SECURE, CONNECTION_TYPE_WEBSOCKETS_SECURE
+                )
+                if conn_type == CONNECTION_TYPE_STANDARD:
+                    port = DEFAULT_PORT
+                elif conn_type == CONNECTION_TYPE_SECURE:
+                    port = DEFAULT_PORT_SSL
+                elif conn_type == CONNECTION_TYPE_WEBSOCKETS:
+                    port = DEFAULT_PORT_WS
+                else:  # Secure WebSockets
+                    port = DEFAULT_PORT_WSS
 
-            # Override with manual port if provided
-            if CONF_PORT in user_input and user_input[CONF_PORT]:
-                port = user_input[CONF_PORT]
+                # Override with manual port if provided
+                if CONF_PORT in user_input and user_input[CONF_PORT]:
+                    port = user_input[CONF_PORT]
 
-            # Test connection
-            error = await validate_mqtt_connection(
-                self.hass, host, port, username, password, ssl_enabled
-            )
+                # Validate QoS if provided
+                qos = user_input.get(CONF_QOS)
+                if qos is not None and qos not in QOS_OPTIONS:
+                    errors[CONF_QOS] = "invalid_qos"
 
-            if not error:
-                # Update configuration
-                updated_config = {
-                    CONF_HOST: host,
-                    CONF_PORT: port,
-                    CONF_SSL: ssl_enabled,
-                    CONF_USERNAME: username,
-                    CONF_PASSWORD: password,
-                    CONF_CONNECTION_TYPE: conn_type,
-                }
+                if not errors:
+                    # Test connection
+                    error = await validate_mqtt_connection(
+                        self.hass, host, port, username, password, ssl_enabled,
+                        tls_insecure, certificate_path
+                    )
 
-                # Check if we should also edit OVMS settings
-                if user_input.get("edit_ovms", False):
-                    self.current_config.update(updated_config)
-                    return await self.async_step_ovms()
-                
-                # Update existing entry data
-                existing_data = dict(self.current_config)
-                existing_data.update(updated_config)
-                
-                return self.async_create_entry(title="", data=existing_data)
+                    if not error:
+                        # Update configuration
+                        updated_config = {
+                            CONF_HOST: host,
+                            CONF_PORT: port,
+                            CONF_SSL: ssl_enabled,
+                            CONF_USERNAME: username,
+                            CONF_PASSWORD: password,
+                            CONF_CONNECTION_TYPE: conn_type,
+                            CONF_TLS_INSECURE: tls_insecure,
+                        }
+                        
+                        # Add certificate path if provided
+                        if certificate_path:
+                            updated_config[CONF_CERTIFICATE_PATH] = certificate_path
 
-            errors["base"] = error
+                        # Check if we should also edit OVMS settings
+                        if user_input.get("edit_ovms", False):
+                            self.current_config = _deep_update(
+                                self.current_config, updated_config
+                            )
+                            return await self.async_step_ovms()
+                        
+                        # Update existing entry data with deep merge
+                        existing_data = dict(self.current_config)
+                        updated_data = _deep_update(existing_data, updated_config)
+                        
+                        return self.async_create_entry(title="", data=updated_data)
+
+                    errors["base"] = error
 
         # Get current connection type
         conn_type = self.get_current_connection_type()
@@ -420,6 +529,28 @@ class OVMSMQTTOptionsFlow(config_entries.OptionsFlow):
             ),
             vol.Required("edit_ovms", default=False): selector.BooleanSelector(),
         })
+        
+        # Add SSL/TLS options if a secure connection type is selected
+        is_secure = conn_type in [
+            CONNECTION_TYPE_SECURE, CONNECTION_TYPE_WEBSOCKETS_SECURE
+        ]
+        
+        if is_secure:
+            ssl_options = {
+                vol.Optional(
+                    CONF_TLS_INSECURE, 
+                    default=self.current_config.get(
+                        CONF_TLS_INSECURE, DEFAULT_TLS_INSECURE
+                    )
+                ): bool,
+                vol.Optional(
+                    CONF_CERTIFICATE_PATH,
+                    description={
+                        "suggested_value": self.current_config.get(CONF_CERTIFICATE_PATH)
+                    }
+                ): str,
+            }
+            data_schema = data_schema.extend(ssl_options)
 
         return self.async_show_form(
             step_id="broker",
@@ -441,14 +572,14 @@ class OVMSMQTTOptionsFlow(config_entries.OptionsFlow):
 
     def get_current_connection_type(self) -> str:
         """Determine the current connection type from settings."""
-        port = self.current_config.get(CONF_PORT, DEFAULT_PORT)
-        ssl_enabled = self.current_config.get(CONF_SSL, False)
-        
         # If connection_type is already set, use it
         if CONF_CONNECTION_TYPE in self.current_config:
             return self.current_config[CONF_CONNECTION_TYPE]
         
         # Otherwise, determine from port and SSL
+        port = self.current_config.get(CONF_PORT, DEFAULT_PORT)
+        ssl_enabled = self.current_config.get(CONF_SSL, False)
+        
         if ssl_enabled and port == DEFAULT_PORT_SSL:
             return CONNECTION_TYPE_SECURE
         if ssl_enabled and port == DEFAULT_PORT_WSS:
@@ -461,23 +592,35 @@ class OVMSMQTTOptionsFlow(config_entries.OptionsFlow):
         self, user_input: Optional[Dict[str, Any]] = None
     ) -> FlowResult:
         """Handle OVMS specific options."""
-        if user_input is not None:
-            # Update options
-            updated_config = {
-                CONF_TOPIC_PREFIX: user_input.get(
-                    CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX
-                ),
-                CONF_VEHICLE_ID: user_input.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID),
-                CONF_QOS: user_input.get(CONF_QOS, DEFAULT_QOS),
-            }
-            
-            # Update existing entry data
-            existing_data = dict(self.current_config)
-            existing_data.update(updated_config)
-            
-            return self.async_create_entry(title="", data=existing_data)
+        errors = {}
 
-        # Prepare schema with QoS dropdown instead of slider
+        if user_input is not None:
+            # Validate QoS
+            qos = user_input.get(CONF_QOS)
+            if qos is not None and qos not in QOS_OPTIONS:
+                errors[CONF_QOS] = "invalid_qos"
+            elif not errors:
+                # Update options
+                updated_config = {
+                    CONF_TOPIC_PREFIX: user_input.get(
+                        CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX
+                    ),
+                    CONF_VEHICLE_ID: user_input.get(
+                        CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID
+                    ),
+                    CONF_QOS: user_input.get(CONF_QOS, DEFAULT_QOS),
+                    CONF_AVAILABILITY_TIMEOUT: user_input.get(
+                        CONF_AVAILABILITY_TIMEOUT, DEFAULT_AVAILABILITY_TIMEOUT
+                    ),
+                }
+                
+                # Update existing entry data with deep merge
+                existing_data = dict(self.current_config)
+                updated_data = _deep_update(existing_data, updated_config)
+                
+                return self.async_create_entry(title="", data=updated_data)
+
+        # Prepare schema with QoS dropdown
         data_schema = vol.Schema({
             vol.Required(
                 CONF_TOPIC_PREFIX,
@@ -494,10 +637,24 @@ class OVMSMQTTOptionsFlow(config_entries.OptionsFlow):
                 selector.SelectSelectorConfig(
                     options=[
                         {"value": qos_level, "label": QOS_OPTIONS[qos_level]}
-                        for qos_level in QOS_OPTIONS
+                        for qos_level in sorted(QOS_OPTIONS.keys())
                     ],
                     translation_key="qos_level",
                     mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                CONF_AVAILABILITY_TIMEOUT,
+                default=self.current_config.get(
+                    CONF_AVAILABILITY_TIMEOUT, DEFAULT_AVAILABILITY_TIMEOUT
+                )
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=3600,
+                    step=30,
+                    unit_of_measurement="seconds",
+                    mode=selector.NumberSelectorMode.BOX,
                 )
             ),
         })
@@ -505,4 +662,5 @@ class OVMSMQTTOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="ovms",
             data_schema=data_schema,
+            errors=errors,
         )
