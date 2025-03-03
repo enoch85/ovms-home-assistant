@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, cast
+from typing import Dict, List, Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -27,7 +27,9 @@ from .entity_handler import process_ovms_message
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_mqtt_handler(hass: HomeAssistant, entry: ConfigEntry) -> List[callable]:
+async def async_setup_mqtt_handler(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> List[callable]:
     """Set up MQTT subscription and message handling."""
     # Extract configuration
     topic_prefix = entry.data.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
@@ -66,11 +68,16 @@ async def async_setup_mqtt_handler(hass: HomeAssistant, entry: ConfigEntry) -> L
         # Store or update entity
         if unique_id not in entities:
             # Store new entity
-            _LOGGER.debug("Creating new entity with unique_id: %s from topic %s", unique_id, topic)
+            _LOGGER.debug(
+                "Creating new entity with unique_id: %s from topic %s",
+                unique_id, topic
+            )
             entities[unique_id] = entity_data
             
             # Signal platform to create entity
-            async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_new_entity", unique_id)
+            async_dispatcher_send(
+                hass, f"{DOMAIN}_{entry.entry_id}_new_entity", unique_id
+            )
         else:
             # Update existing entity state
             entities[unique_id].update({
@@ -79,7 +86,9 @@ async def async_setup_mqtt_handler(hass: HomeAssistant, entry: ConfigEntry) -> L
             })
             
             # Signal state update
-            async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_state_update", unique_id)
+            async_dispatcher_send(
+                hass, f"{DOMAIN}_{entry.entry_id}_state_update", unique_id
+            )
 
     # Subscribe to all topics for this vehicle
     subscribe_topic = f"{topic_prefix}/{vehicle_id}/#"
