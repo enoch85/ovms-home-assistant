@@ -3,6 +3,12 @@
 This integration allows you to fetch all MQTT sensor values from the Open Vehicle Monitoring System (OVMS) into Home Assistant.
 It's written by DeepSeek.
 
+## WIP
+
+The current implementation doesn't work. If you want to test it you need to manually move [this folder](https://github.com/enoch85/ovms-mqtt-integration/tree/main/custom_components/ovms_mqtt) to your Home Assistant and activate the integration.
+
+In it's current state, it installs fine, and produces no errors, but [no enteties are produced](https://github.com/enoch85/ovms-mqtt-integration/issues/12).
+
 ## Installation
 
 1. Add this repository to HACS.
