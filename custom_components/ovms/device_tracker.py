@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, LOGGER_NAME
@@ -45,7 +46,7 @@ async def async_setup_entry(
     )
 
 
-class OVMSDeviceTracker(TrackerEntity):
+class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     """OVMS device tracker."""
     
     def __init__(
@@ -62,6 +63,8 @@ class OVMSDeviceTracker(TrackerEntity):
         self._attr_name = name
         self._topic = topic
         self._device_info = device_info
+        self._attr_source_type = SourceType.GPS
+        self._attr_icon = "mdi:car-electric"
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
