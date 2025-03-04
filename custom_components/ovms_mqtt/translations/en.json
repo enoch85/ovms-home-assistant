@@ -1,0 +1,119 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MQTT Broker Settings",
+        "description": "Configure connection to the MQTT broker where OVMS is publishing data",
+        "data": {
+          "host": "Broker Host",
+          "port": "Port",
+          "protocol": "Protocol",
+          "username": "Username",
+          "password": "Password",
+          "client_id": "Client ID",
+          "qos": "QoS Level",
+          "verify_ssl": "Verify SSL Certificate"
+        }
+      },
+      "topics": {
+        "title": "MQTT Topic Structure",
+        "description": "Configure how OVMS topics are structured",
+        "data": {
+          "topic_prefix": "Topic Prefix",
+          "topic_structure": "Topic Structure",
+          "mqtt_username": "MQTT Username in Topic"
+        }
+      },
+      "custom_topic": {
+        "title": "Custom Topic Structure",
+        "description": "Enter your custom topic structure using the placeholders {prefix}, {vehicle_id}, and optionally {mqtt_username}",
+        "data": {
+          "custom_structure": "Custom Topic Structure"
+        }
+      },
+      "topic_discovery": {
+        "title": "Topic Discovery",
+        "description": "Discovering available OVMS topics...",
+        "data": {
+          "confirm_discovery": "Continue with discovered topics",
+          "retry_discovery": "Retry discovery"
+        }
+      },
+      "vehicle": {
+        "title": "Vehicle Configuration",
+        "description": "Configure your OVMS vehicle",
+        "data": {
+          "vehicle_id": "Vehicle ID"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the broker",
+      "invalid_auth": "Invalid authentication",
+      "timeout": "Connection timeout",
+      "invalid_response": "Invalid response from broker",
+      "no_topics": "No OVMS topics found",
+      "topic_access_denied": "Access denied to OVMS topics",
+      "tls_error": "TLS/SSL configuration error",
+      "unknown": "Unexpected error",
+      "missing_prefix": "Missing required {prefix} placeholder",
+      "missing_vehicle_id": "Missing required {vehicle_id} placeholder",
+      "invalid_placeholder": "Invalid placeholder in custom structure",
+      "invalid_format": "Invalid format in custom structure"
+    },
+    "abort": {
+      "already_configured": "This OVMS vehicle is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OVMS Options",
+        "data": {
+          "qos": "QoS Level",
+          "topic_prefix": "Topic Prefix",
+          "topic_structure": "Topic Structure",
+          "verify_ssl": "Verify SSL Certificate"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_soc": {
+        "name": "Battery State of Charge"
+      },
+      "battery_range": {
+        "name": "Range Estimate"
+      },
+      "power": {
+        "name": "Power"
+      },
+      "energy": {
+        "name": "Energy"
+      },
+      "temperature": {
+        "name": "Temperature"
+      }
+    },
+    "binary_sensor": {
+      "charging": {
+        "name": "Charging Status"
+      },
+      "door_locked": {
+        "name": "Door Lock Status"
+      },
+      "connected": {
+        "name": "Connection Status"
+      }
+    },
+    "switch": {
+      "command_climate": {
+        "name": "Climate Control"
+      },
+      "command_charge": {
+        "name": "Charge Control"
+      }
+    }
+  }
+}
