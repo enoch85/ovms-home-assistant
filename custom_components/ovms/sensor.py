@@ -81,6 +81,35 @@ SENSOR_TYPES = {
         "unit": UnitOfSpeed.KILOMETERS_PER_HOUR,
         "icon": "mdi:speedometer",
     },
+    # Additional icons for EV-specific metrics
+    "odometer": {
+        "icon": "mdi:counter",
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+    },
+    "efficiency": {
+        "icon": "mdi:leaf",
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "charging_time": {
+        "icon": "mdi:timer",
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "climate": {
+        "icon": "mdi:fan",
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "hvac": {
+        "icon": "mdi:air-conditioner", 
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "motor": {
+        "icon": "mdi:engine",
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "trip": {
+        "icon": "mdi:map-marker-path",
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
     # Diagnostic sensors
     "status": {
         "entity_category": EntityCategory.DIAGNOSTIC,
@@ -95,6 +124,14 @@ SENSOR_TYPES = {
         "entity_category": EntityCategory.DIAGNOSTIC,
         "icon": "mdi:package-up",
     },
+    "version": {
+        "entity_category": EntityCategory.DIAGNOSTIC,
+        "icon": "mdi:tag-text",
+    },
+    "task": {
+        "entity_category": EntityCategory.DIAGNOSTIC,
+        "icon": "mdi:list-status",
+    }
 }
 
 
