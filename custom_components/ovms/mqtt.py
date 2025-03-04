@@ -107,6 +107,10 @@ class OVMSMQTTClient:
         self.entity_queue = deque()
         self.platforms_loaded = False
         
+        # Status tracking
+        self._status_topic = None
+        self._connected_payload = "online"
+        
     async def async_setup(self) -> bool:
         """Set up the MQTT client."""
         _LOGGER.debug("Setting up MQTT client")
@@ -176,6 +180,21 @@ class OVMSMQTTClient:
                 context.verify_mode = ssl.CERT_NONE
             
             client.tls_set_context(context)
+        
+        # Add Last Will and Testament message
+        self._status_topic = f"{self.structure_prefix}/status"
+        will_payload = "offline"
+        will_qos = self.config.get(CONF_QOS, 1)
+        will_retain = True
+        
+        client.will_set(self._status_topic, will_payload, will_qos, will_retain)
+        
+        # Add MQTT v5 properties when available
+        if hasattr(mqtt, 'MQTTv5') and hasattr(mqtt, 'Properties'):
+            properties = mqtt.Properties()
+            properties.UserProperty = ("client_type", "home_assistant_ovms")
+            properties.UserProperty = ("version", "1.0.0")
+            client.connect_properties = properties
             
         return client
         
@@ -250,11 +269,21 @@ class OVMSMQTTClient:
     
     def _on_connect_callback(self, client, userdata, flags, rc):
         """Common connection callback for different MQTT versions."""
-        _LOGGER.info("Connected to MQTT broker with result code: %s", rc)
+        if hasattr(mqtt, 'ReasonCodes'):
+            reason_code = mqtt.ReasonCodes(mqtt.CMD_CONNACK, rc)
+            _LOGGER.info("Connected to MQTT broker with result: %s", reason_code)
+        else:
+            _LOGGER.info("Connected to MQTT broker with result code: %s", rc)
+            
         if rc == 0:
             self.connected = True
             # Re-subscribe if we get disconnected
             self._subscribe_topics()
+            
+            # Publish online status when connected
+            if self._status_topic:
+                client.publish(self._status_topic, self._connected_payload, 
+                              qos=self.config.get(CONF_QOS, 1), retain=True)
         else:
             self.connected = False
             _LOGGER.error("Failed to connect to MQTT broker: %s", rc)
@@ -302,8 +331,16 @@ class OVMSMQTTClient:
         
         if not self.connected:  # Avoid reconnecting if we're already connected
             try:
-                # Connect using the executor to avoid blocking
-                await self._async_connect()
+                # Use clean_session=False for persistent sessions
+                if hasattr(mqtt, 'MQTTv5'):
+                    client_options = {'clean_start': False}
+                    await self.hass.async_add_executor_job(
+                        self.client.reconnect, **client_options
+                    )
+                else:
+                    await self.hass.async_add_executor_job(
+                        self.client.reconnect
+                    )
             except Exception as ex:  # pylint: disable=broad-except
                 _LOGGER.exception("Failed to reconnect to MQTT broker: %s", ex)
                 # Schedule another reconnect attempt
