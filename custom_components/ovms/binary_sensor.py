@@ -24,11 +24,24 @@ BINARY_SENSOR_TYPES = {
     "lock": BinarySensorDeviceClass.LOCK,
     "plug": BinarySensorDeviceClass.PLUG,
     "charger": BinarySensorDeviceClass.BATTERY_CHARGING,
+    "charging": BinarySensorDeviceClass.BATTERY_CHARGING,
     "battery": BinarySensorDeviceClass.BATTERY,
     "motion": BinarySensorDeviceClass.MOTION,
     "connectivity": BinarySensorDeviceClass.CONNECTIVITY,
+    "power": BinarySensorDeviceClass.POWER,
+    "running": {
+        "device_class": None,
+        "icon": "mdi:car-electric",
+    },
+    "online": {
+        "device_class": BinarySensorDeviceClass.CONNECTIVITY,
+        "icon": "mdi:car-connected",
+    },
+    "hvac": {
+        "device_class": None,
+        "icon": "mdi:air-conditioner",
+    }
 }
-
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
