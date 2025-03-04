@@ -6,7 +6,7 @@ import time
 import json
 import uuid
 import hashlib
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import paho.mqtt.client as mqtt
 
@@ -49,6 +49,29 @@ SIGNAL_ADD_ENTITIES = f"{DOMAIN}_add_entities"
 SIGNAL_UPDATE_ENTITY = f"{DOMAIN}_update_entity"
 
 
+def ensure_serializable(obj):
+    """Ensure objects are JSON serializable.
+    
+    Converts MQTT-specific types to standard Python types.
+    """
+    if isinstance(obj, dict):
+        return {k: ensure_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [ensure_serializable(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return [ensure_serializable(item) for item in obj]
+    elif hasattr(obj, '__dict__'):  # Convert custom objects to dict
+        return {k: ensure_serializable(v) for k, v in obj.__dict__.items() 
+                if not k.startswith('_')}
+    elif obj.__class__.__name__ == 'ReasonCodes':  # Handle MQTT ReasonCodes specifically
+        try:
+            return [int(code) for code in obj]  # Convert to list of integers
+        except:
+            return str(obj)   # Fall back to string representation
+    else:
+        return obj
+
+
 class OVMSMQTTClient:
     """MQTT Client for OVMS Integration."""
 
@@ -87,7 +110,7 @@ class OVMSMQTTClient:
         _LOGGER.debug("Using structure prefix: %s", self.structure_prefix)
         
         # Create the MQTT client
-        self.client = self._create_mqtt_client()
+        self.client = await self._create_mqtt_client()
         
         # Set up the callbacks
         self._setup_callbacks()
@@ -109,7 +132,7 @@ class OVMSMQTTClient:
         
         return True
         
-    def _create_mqtt_client(self) -> mqtt.Client:
+    async def _create_mqtt_client(self) -> mqtt.Client:
         """Create and configure the MQTT client."""
         client_id = self.config.get(CONF_CLIENT_ID)
         protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
@@ -128,13 +151,15 @@ class OVMSMQTTClient:
             )
             
         # Configure TLS if needed
-        if self.config.get(CONF_PROTOCOL) == "mqtts":
-            _LOGGER.debug("Enabling SSL/TLS for MQTT client")
+        if self.config.get(CONF_PORT) == 8883:
+            _LOGGER.debug("Enabling SSL/TLS for port 8883")
             import ssl
-            context = ssl.create_default_context()
-            
-            # Configure certificate verification based on user preference
             verify_ssl = self.config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+            
+            # Use executor to avoid blocking the event loop
+            context = await self.hass.async_add_executor_job(ssl.create_default_context)
+            
+            # Allow self-signed certificates if verification is disabled
             if not verify_ssl:
                 _LOGGER.debug("SSL certificate verification disabled")
                 context.check_hostname = False
@@ -158,7 +183,7 @@ class OVMSMQTTClient:
                 """Handle connection result for MQTT v3."""
                 self._on_connect_callback(client, userdata, flags, rc)
                 
-        def on_disconnect(client, userdata, rc):
+        def on_disconnect(client, userdata, rc, properties=None):
             """Handle disconnection."""
             _LOGGER.info("Disconnected from MQTT broker: %s", rc)
             self.connected = False
@@ -195,7 +220,9 @@ class OVMSMQTTClient:
             
         def on_subscribe(client, userdata, mid, granted_qos, properties=None):
             """Handle subscription confirmation."""
-            _LOGGER.debug("Subscription confirmed. MID: %s, QoS: %s", mid, granted_qos)
+            # Convert ReasonCodes to a serializable format
+            serialized_qos = ensure_serializable(granted_qos)
+            _LOGGER.debug("Subscription confirmed. MID: %s, QoS: %s", mid, serialized_qos)
             
         # Set the callbacks
         self.client.on_connect = on_connect
@@ -653,13 +680,16 @@ class OVMSMQTTClient:
             except json.JSONDecodeError:
                 # Not JSON, just use the raw payload
                 response_data = response_payload
+            
+            # Make sure response is serializable before returning
+            serializable_response = ensure_serializable(response_data)
                 
             return {
                 "success": True,
                 "command_id": command_id,
                 "command": command,
                 "parameters": parameters,
-                "response": response_data,
+                "response": serializable_response,
             }
             
         except asyncio.TimeoutError:
