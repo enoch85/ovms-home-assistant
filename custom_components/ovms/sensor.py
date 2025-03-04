@@ -2,7 +2,7 @@
 import logging
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -24,6 +24,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, LOGGER_NAME
@@ -81,6 +83,35 @@ SENSOR_TYPES = {
         "unit": UnitOfSpeed.KILOMETERS_PER_HOUR,
         "icon": "mdi:speedometer",
     },
+    # Additional icons for EV-specific metrics
+    "odometer": {
+        "icon": "mdi:counter",
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+    },
+    "efficiency": {
+        "icon": "mdi:leaf",
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "charging_time": {
+        "icon": "mdi:timer",
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "climate": {
+        "icon": "mdi:fan",
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "hvac": {
+        "icon": "mdi:air-conditioner", 
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "motor": {
+        "icon": "mdi:engine",
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "trip": {
+        "icon": "mdi:map-marker-path",
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
     # Diagnostic sensors
     "status": {
         "entity_category": EntityCategory.DIAGNOSTIC,
@@ -95,6 +126,14 @@ SENSOR_TYPES = {
         "entity_category": EntityCategory.DIAGNOSTIC,
         "icon": "mdi:package-up",
     },
+    "version": {
+        "entity_category": EntityCategory.DIAGNOSTIC,
+        "icon": "mdi:tag-text",
+    },
+    "task": {
+        "entity_category": EntityCategory.DIAGNOSTIC,
+        "icon": "mdi:list-status",
+    }
 }
 
 
@@ -127,7 +166,7 @@ async def async_setup_entry(
     )
 
 
-class OVMSSensor(SensorEntity):
+class OVMSSensor(SensorEntity, RestoreEntity):
     """Representation of an OVMS sensor."""
     
     def __init__(
@@ -156,6 +195,12 @@ class OVMSSensor(SensorEntity):
         
         # Try to extract additional attributes from initial state if it's JSON
         self._process_json_payload(initial_state)
+        
+        # Initialize cell sensors tracking
+        self._cell_sensors_created = False
+        self._cell_sensors = []
+        self._cell_registry = {}
+        self._cell_sensor_entities = {}
     
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -213,10 +258,30 @@ class OVMSSensor(SensorEntity):
                 self._attr_entity_category = sensor_type.get("entity_category")
                 self._attr_icon = sensor_type.get("icon")
                 break
-                
+    
     def _parse_value(self, value: str) -> Any:
         """Parse the value from the payload."""
-        # Try to identify the type of value
+        # Check if this is a comma-separated list of numbers (including negative numbers)
+        if isinstance(value, str) and "," in value:
+            try:
+                # Try to parse all parts as floats
+                parts = [float(part.strip()) for part in value.split(",") if part.strip()]
+                if parts:
+                    # Store the array in attributes
+                    self._attr_extra_state_attributes["cell_values"] = parts
+                    self._attr_extra_state_attributes["cell_count"] = len(parts)
+                    
+                    # Create individual cell sensors if they don't exist yet
+                    self._create_cell_sensors(parts)
+                    
+                    # Calculate and return average value
+                    avg_value = sum(parts) / len(parts)
+                    return avg_value
+            except (ValueError, TypeError):
+                # If any part can't be converted to float, fall through to other methods
+                pass
+        
+        # Rest of the original parsing logic follows...
         try:
             # Try parsing as JSON first
             json_val = json.loads(value)
@@ -275,3 +340,128 @@ class OVMSSensor(SensorEntity):
         except (ValueError, json.JSONDecodeError):
             # Not JSON, that's fine
             pass
+            
+    def _create_cell_sensors(self, cell_values):
+        """Create individual sensors for each cell value."""
+        # Only create cell sensors if we haven't done so already
+        if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created:
+            # If we already created them, just update their values
+            self._update_cell_sensor_values(cell_values)
+            return
+            
+        from homeassistant.helpers.entity import async_generate_entity_id
+        from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+        
+        # Get base information to create child sensors
+        base_name = self.name
+        # Clean "voltage" from the name to avoid duplication
+        base_name = base_name.replace("voltage", "").replace("Voltage", "").strip()
+        base_name = base_name.rstrip("_").strip()
+        
+        self._cell_sensors = []
+        registry = {}
+        
+        # Create a sensor for each cell
+        for i, value in enumerate(cell_values):
+            # Create unique ID for this cell sensor
+            cell_unique_id = f"{self.unique_id}_cell_{i+1}"
+            
+            # Generate entity ID
+            entity_id = async_generate_entity_id(
+                SENSOR_DOMAIN + ".{}", 
+                f"{base_name}_cell_{i+1}",
+                hass=self.hass
+            )
+            
+            # Create a sensor configuration to register later
+            sensor_config = {
+                "unique_id": cell_unique_id,
+                "name": f"{base_name} Cell {i+1}",
+                "state": value,
+                "entity_id": entity_id,
+                "device_info": self.device_info,
+                "device_class": self.device_class,
+                "state_class": SensorStateClass.MEASUREMENT,
+                "unit_of_measurement": self.native_unit_of_measurement,
+                "cell_index": i,
+            }
+            
+            # Register this cell sensor
+            registry[cell_unique_id] = sensor_config
+            self._cell_sensors.append(cell_unique_id)
+        
+        # Store in class attribute for future updates
+        self._cell_registry = registry
+        self._cell_sensors_created = True
+        
+        # Schedule registration of these sensors
+        if self.hass:
+            async_call_later(self.hass, 0, self._register_cell_sensors)
+
+    async def _register_cell_sensors(self, _now=None):
+        """Register the cell sensors in Home Assistant."""
+        if not hasattr(self, '_cell_registry') or not self._cell_registry:
+            return
+            
+        from homeassistant.helpers.entity import Entity
+        
+        # Create a custom sensor class for the cell sensors
+        class CellVoltageSensor(SensorEntity, RestoreEntity):
+            """Representation of a cell voltage sensor."""
+            
+            def __init__(self, config):
+                """Initialize the sensor."""
+                self._attr_unique_id = config["unique_id"]
+                self._attr_name = config["name"]
+                self._attr_native_value = config["state"]
+                self._attr_device_info = config["device_info"]
+                self._attr_device_class = config["device_class"]
+                self._attr_state_class = config["state_class"]
+                self._attr_native_unit_of_measurement = config["unit_of_measurement"]
+                self.entity_id = config["entity_id"]
+                self.cell_index = config["cell_index"]
+        
+        # Create and add all cell sensors
+        entities = []
+        for sensor_id, config in self._cell_registry.items():
+            sensor = CellVoltageSensor(config)
+            entities.append(sensor)
+        
+        # Add entities to Home Assistant
+        if entities:
+            try:
+                # Add entities to Home Assistant
+                async_add_entities = self.platform.async_add_entities
+                async_add_entities(entities)
+            except (AttributeError, NameError):
+                _LOGGER.warning("Failed to register cell sensors through platform")
+                try:
+                    # Alternative approach if platform isn't available
+                    from homeassistant.helpers.entity_component import EntityComponent
+                    component = self.hass.data.get('entity_components', {}).get('sensor')
+                    if component and isinstance(component, EntityComponent):
+                        await component.async_add_entities(entities)
+                    else:
+                        _LOGGER.warning("Failed to find sensor component for adding entities")
+                except Exception as ex:
+                    _LOGGER.exception("Error registering cell sensors: %s", ex)
+            
+        # Store entities for future updates
+        self._cell_sensor_entities = {e.unique_id: e for e in entities}
+
+    def _update_cell_sensor_values(self, cell_values):
+        """Update the values of existing cell sensors."""
+        if not hasattr(self, '_cell_sensor_entities') or not self._cell_sensor_entities:
+            return
+            
+        # Update each cell sensor with its new value
+        for i, value in enumerate(cell_values):
+            if i < len(self._cell_sensors):
+                cell_id = self._cell_sensors[i]
+                if cell_id in self._cell_sensor_entities:
+                    entity = self._cell_sensor_entities[cell_id]
+                    entity._attr_native_value = value
+                    
+                    # Schedule an update for this entity
+                    if self.hass:
+                        entity.async_schedule_update_ha_state()
