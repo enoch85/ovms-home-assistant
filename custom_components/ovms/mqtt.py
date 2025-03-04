@@ -190,11 +190,15 @@ class OVMSMQTTClient:
         client.will_set(self._status_topic, will_payload, will_qos, will_retain)
         
         # Add MQTT v5 properties when available
-        if hasattr(mqtt, 'MQTTv5') and hasattr(mqtt, 'Properties'):
-            properties = mqtt.Properties()
-            properties.UserProperty = ("client_type", "home_assistant_ovms")
-            properties.UserProperty = ("version", "1.0.0")
-            client.connect_properties = properties
+        if hasattr(mqtt, 'MQTTv5') and hasattr(mqtt, 'Properties') and hasattr(mqtt, 'PacketTypes'):
+            try:
+                properties = mqtt.Properties(mqtt.PacketTypes.CONNECT)
+                properties.UserProperty = ("client_type", "home_assistant_ovms")
+                properties.UserProperty = ("version", "1.0.0")
+                client.connect_properties = properties
+            except (TypeError, AttributeError) as e:
+                _LOGGER.debug("Failed to set MQTT v5 properties: %s", e)
+                # Continue without properties
             
         return client
         
@@ -270,8 +274,11 @@ class OVMSMQTTClient:
     def _on_connect_callback(self, client, userdata, flags, rc):
         """Common connection callback for different MQTT versions."""
         if hasattr(mqtt, 'ReasonCodes'):
-            reason_code = mqtt.ReasonCodes(mqtt.CMD_CONNACK, rc)
-            _LOGGER.info("Connected to MQTT broker with result: %s", reason_code)
+            try:
+                reason_code = mqtt.ReasonCodes(mqtt.CMD_CONNACK, rc)
+                _LOGGER.info("Connected to MQTT broker with result: %s", reason_code)
+            except (TypeError, AttributeError):
+                _LOGGER.info("Connected to MQTT broker with result code: %s", rc)
         else:
             _LOGGER.info("Connected to MQTT broker with result code: %s", rc)
             
@@ -333,10 +340,16 @@ class OVMSMQTTClient:
             try:
                 # Use clean_session=False for persistent sessions
                 if hasattr(mqtt, 'MQTTv5'):
-                    client_options = {'clean_start': False}
-                    await self.hass.async_add_executor_job(
-                        self.client.reconnect, **client_options
-                    )
+                    try:
+                        client_options = {'clean_start': False}
+                        await self.hass.async_add_executor_job(
+                            self.client.reconnect, **client_options
+                        )
+                    except TypeError:
+                        # Fallback for older clients without clean_start parameter
+                        await self.hass.async_add_executor_job(
+                            self.client.reconnect
+                        )
                 else:
                     await self.hass.async_add_executor_job(
                         self.client.reconnect
