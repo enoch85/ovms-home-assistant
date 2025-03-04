@@ -78,6 +78,16 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.debug("Starting OVMS MQTT broker setup: %s", user_input)
             self.debug_info["broker_setup_start"] = time.time()
             
+            # Extract protocol and port from Port selection
+            if "Port" in user_input:
+                if user_input["Port"] == "mqtts":
+                    user_input[CONF_PROTOCOL] = "mqtts"
+                    user_input[CONF_PORT] = 8883
+                else:  # mqtt option
+                    user_input[CONF_PROTOCOL] = "mqtt"
+                    user_input[CONF_PORT] = 1883
+                del user_input["Port"]
+            
             # Test MQTT connection
             result = await self._test_mqtt_connection(user_input)
             
@@ -99,11 +109,13 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if "details" in result:
                     errors["details"] = result["details"]
 
-        # Build the schema
+        # Build the schema using radio buttons for connection options
         data_schema = vol.Schema({
             vol.Required(CONF_HOST): str,
-            vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
-            vol.Required(CONF_PROTOCOL, default=DEFAULT_PROTOCOL): vol.In(PROTOCOLS),
+            vol.Required("Port", default="mqtts"): vol.In({
+                "mqtts": "port 8883 (mqtts://)",
+                "mqtt": "port 1883 (mqtt://)",
+            }),
             vol.Optional(CONF_USERNAME): str,
             vol.Optional(CONF_PASSWORD): str,
             vol.Required(CONF_CLIENT_ID, default=f"ha_ovms_{uuid.uuid4().hex[:8]}"): str,
@@ -403,7 +415,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
             _LOGGER.debug("%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags)
             
-        def on_disconnect(client, userdata, rc):
+        def on_disconnect(client, userdata, rc, properties=None):
             """Handle disconnection."""
             connection_status["connected"] = False
             connection_status["disconnect_rc"] = rc
@@ -433,11 +445,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 password=config[CONF_PASSWORD] if CONF_PASSWORD in config else None,
             )
             
-        if config[CONF_PROTOCOL] == "mqtts":
-            _LOGGER.debug("%s - Enabling SSL/TLS", log_prefix)
+        if config[CONF_PORT] == 8883:
+            _LOGGER.debug("%s - Enabling SSL/TLS for port 8883", log_prefix)
             verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
             try:
-                context = ssl.create_default_context()
+                # Use executor to avoid blocking the event loop
+                context = await self.hass.async_add_executor_job(ssl.create_default_context)
                 # Allow self-signed certificates if verification is disabled
                 if not verify_ssl:
                     _LOGGER.debug("%s - SSL certificate verification disabled", log_prefix)
@@ -561,15 +574,26 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 debug_info["subscription_test"] = sub_result
                 
                 if not sub_result["success"]:
-                    mqttc.disconnect()
+                    try:
+                        mqttc.disconnect()
+                    except Exception:
+                        pass
+                    
+                    # Prepare detailed error message
+                    error_details = sub_result.get("details", "Could not subscribe to test topics")
+                    error_topic = sub_result.get("topic", "unknown")
+                    
                     return {
                         "success": False,
                         "error_type": ERROR_TOPIC_ACCESS_DENIED,
-                        "message": "Topic subscription test failed",
-                        "details": sub_result.get("message", "Could not subscribe to topics"),
+                        "message": f"Topic subscription test failed for {error_topic}",
+                        "details": error_details,
                     }
                 
-                mqttc.disconnect()
+                try:
+                    mqttc.disconnect()
+                except Exception:
+                    pass
                 self.debug_info.update(debug_info)
                 return {
                     "success": True,
@@ -638,8 +662,8 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "message": f"Connection error: {err}",
                 "details": f"Socket error when connecting to {config[CONF_HOST]}:{config[CONF_PORT]}: {err}",
             }
-        except mqtt.MQTTException as ex:
-            _LOGGER.error("%s - MQTT error: %s", log_prefix, ex)
+        except Exception as ex:  # pylint: disable=broad-except
+            _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
             error_type = ERROR_UNKNOWN
             
             if "failed to connect" in str(ex).lower():
@@ -648,28 +672,14 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 error_type = ERROR_INVALID_AUTH
                 
             debug_info["error"] = {
-                "type": "mqtt",
-                "message": str(ex),
-            }
-            self.debug_info.update(debug_info)
-            
-            return {
-                "success": False,
-                "error_type": error_type,
-                "message": f"MQTT Error: {ex}",
-                "details": f"MQTT protocol error: {ex}",
-            }
-        except Exception as ex:  # pylint: disable=broad-except
-            _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
-            debug_info["error"] = {
                 "type": "unexpected",
                 "message": str(ex),
             }
             self.debug_info.update(debug_info)
             return {
                 "success": False,
-                "error_type": ERROR_UNKNOWN,
-                "message": f"Unexpected error: {ex}",
+                "error_type": error_type,
+                "message": f"MQTT Error: {ex}",
                 "details": f"An unexpected error occurred: {ex}",
             }
             
@@ -677,7 +687,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Test if we can subscribe to a topic."""
         log_prefix = f"MQTT subscription test for {config[CONF_HOST]}:{config[CONF_PORT]}"
         
-        # Use a test topic
+        # Use a test topic that should be accessible to all users
         test_topic = f"homeassistant/{config[CONF_CLIENT_ID]}/test"
         qos = config.get(CONF_QOS, DEFAULT_QOS)
         
@@ -720,23 +730,18 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("%s - Subscription not confirmed", log_prefix)
                 return {
                     "success": False,
-                    "message": "Subscription request was not confirmed by broker",
+                    "message": "Subscription request was not confirmed by the broker",
                     "topic": test_topic,
+                    "details": "The MQTT broker did not confirm the subscription request. This may be due to ACL rules on the broker preventing subscription to the test topic, connectivity issues, or broker configuration. Check the broker's logs and access control settings."
                 }
                 
-        except mqtt.MQTTException as ex:
-            _LOGGER.error("%s - Subscription error: %s", log_prefix, ex)
+        except Exception as ex:  # pylint: disable=broad-except
+            _LOGGER.exception("%s - Subscription error: %s", log_prefix, ex)
             return {
                 "success": False,
                 "message": f"Subscription error: {ex}",
                 "topic": test_topic,
-            }
-        except Exception as ex:  # pylint: disable=broad-except
-            _LOGGER.exception("%s - Unexpected subscription error: %s", log_prefix, ex)
-            return {
-                "success": False,
-                "message": f"Unexpected subscription error: {ex}",
-                "topic": test_topic,
+                "details": f"Error while attempting to subscribe to the test topic '{test_topic}'. Check your broker connection and permissions. Full error: {ex}"
             }
 
     async def _discover_topics(self, config):
@@ -788,7 +793,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                          log_prefix, msg.topic, len(msg.payload))
             discovered_topics.add(msg.topic)
             
-        def on_disconnect(client, userdata, rc):
+        def on_disconnect(client, userdata, rc, properties=None):
             """Handle disconnection."""
             connection_status["connected"] = False
             connection_status["disconnect_rc"] = rc
@@ -818,10 +823,11 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 password=config[CONF_PASSWORD] if CONF_PASSWORD in config else None,
             )
             
-        if config[CONF_PROTOCOL] == "mqtts":
+        if config[CONF_PORT] == 8883:
             verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
             try:
-                context = ssl.create_default_context()
+                # Use executor to avoid blocking the event loop
+                context = await self.hass.async_add_executor_job(ssl.create_default_context)
                 # Allow self-signed certificates if verification is disabled
                 if not verify_ssl:
                     context.check_hostname = False
@@ -896,7 +902,10 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
             # Clean up
             mqttc.loop_stop()
-            mqttc.disconnect()
+            try:
+                mqttc.disconnect()
+            except Exception:
+                pass
             
             # Return the results
             topics_count = len(discovered_topics)
@@ -926,19 +935,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "error_type": ERROR_CANNOT_CONNECT,
                 "message": f"Connection error during topic discovery: {err}",
             }
-        except mqtt.MQTTException as ex:
+        except Exception as ex:  # Catch all exceptions
             _LOGGER.error("%s - MQTT error: %s", log_prefix, ex)
             return {
                 "success": False,
                 "error_type": ERROR_UNKNOWN,
-                "message": f"MQTT Error during topic discovery: {ex}",
-            }
-        except Exception as ex:  # pylint: disable=broad-except
-            _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
-            return {
-                "success": False,
-                "error_type": ERROR_UNKNOWN,
-                "message": f"Unexpected error during topic discovery: {ex}",
+                "message": f"Error during topic discovery: {ex}",
             }
 
     async def _test_topic_availability(self, config):
@@ -1034,7 +1036,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.debug("%s - Response received for command!", log_prefix)
                 responses_received.append(message_info)
             
-        def on_disconnect(client, userdata, rc):
+        def on_disconnect(client, userdata, rc, properties=None):
             """Handle disconnection."""
             connection_status["connected"] = False
             connection_status["disconnect_rc"] = rc
@@ -1067,7 +1069,8 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if config[CONF_PROTOCOL] == "mqtts":
             verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
             try:
-                context = ssl.create_default_context()
+                # Use executor to avoid blocking the event loop
+                context = await self.hass.async_add_executor_job(ssl.create_default_context)
                 # Allow self-signed certificates if verification is disabled
                 if not verify_ssl:
                     context.check_hostname = False
@@ -1160,7 +1163,10 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
             # Clean up
             mqttc.loop_stop()
-            mqttc.disconnect()
+            try:
+                mqttc.disconnect()
+            except Exception:
+                pass
             
             # Check if we received any messages
             messages_count = len(messages_received)
@@ -1225,20 +1231,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "message": f"Connection error: {err}",
                 "details": f"Socket error during topic testing: {err}",
             }
-        except mqtt.MQTTException as ex:
-            _LOGGER.error("%s - MQTT error: %s", log_prefix, ex)
-            debug_info["error"] = {
-                "type": "mqtt",
-                "message": str(ex),
-            }
-            self.debug_info.update(debug_info)
-            return {
-                "success": False,
-                "error_type": ERROR_UNKNOWN,
-                "message": f"MQTT Error: {ex}",
-                "details": f"MQTT protocol error during topic testing: {ex}",
-            }
-        except Exception as ex:  # pylint: disable=broad-except
+        except Exception as ex:  # Catch all exceptions
             _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
             debug_info["error"] = {
                 "type": "unexpected",
