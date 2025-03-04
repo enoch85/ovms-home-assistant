@@ -62,6 +62,8 @@ class OVMSDeviceTracker(TrackerEntity):
         self._attr_name = name
         self._topic = topic
         self._device_info = device_info
+        self._attr_source_type = SourceType.GPS
+        self._attr_icon = "mdi:car-electric"
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
