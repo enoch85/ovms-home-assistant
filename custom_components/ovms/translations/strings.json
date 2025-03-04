@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "OVMS MQTT Configuration",
+        "description": "Set up OVMS MQTT integration to fetch vehicle data",
+        "data": {
+          "broker": "MQTT Broker",
+          "port": "MQTT Port",
+          "username": "MQTT Username",
+          "password": "MQTT Password",
+          "topic_prefix": "Topic Prefix",
+          "qos": "QoS Level",
+          "debug_logging": "Enable Debug Logging"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to MQTT broker"
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OVMS MQTT Options",
+        "data": {
+          "topic_prefix": "Topic Prefix",
+          "qos": "QoS Level",
+          "debug_logging": "Enable Debug Logging"
+        }
+      }
+    }
+  }
+}
