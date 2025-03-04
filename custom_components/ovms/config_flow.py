@@ -183,7 +183,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         data_schema = vol.Schema({
             vol.Required(CONF_TOPIC_PREFIX, default=DEFAULT_TOPIC_PREFIX): str,
             vol.Required(CONF_TOPIC_STRUCTURE, default=DEFAULT_TOPIC_STRUCTURE): vol.In(TOPIC_STRUCTURES),
-            vol.Optional(CONF_MQTT_USERNAME): str,
+            vol.Optional(CONF_MQTT_USERNAME, default=self.mqtt_config.get(CONF_USERNAME, "")): str,
         })
 
         return self.async_show_form(
