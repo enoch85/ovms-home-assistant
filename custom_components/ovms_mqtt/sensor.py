@@ -1,319 +1,277 @@
+"""Support for OVMS sensors."""
 import logging
 import json
-import re
-from datetime import timedelta
-from homeassistant.core import HomeAssistant, callback
+from datetime import datetime
+from typing import Any, Dict, Optional
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfElectricCurrent,
+    UnitOfElectricPotential,
+    UnitOfEnergy,
+    UnitOfLength,
+    UnitOfPower,
+    UnitOfSpeed,
+    UnitOfTemperature,
+)
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.components.sensor import SensorEntity
-from homeassistant.components import mqtt
-from homeassistant.util import slugify
-from .const import DOMAIN, CONF_BROKER, CONF_PORT, CONF_USERNAME, CONF_PASSWORD, CONF_TOPIC_PREFIX, CONF_QOS, CONF_DEBUG_LOGGING
+from homeassistant.util import dt as dt_util
 
-_LOGGER = logging.getLogger(__name__)
+from .const import DOMAIN, LOGGER_NAME
+from .mqtt import SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
 
-# Common OVMS metric patterns and friendly names
-METRIC_PATTERNS = {
-    "v/b/soc": "Battery State of Charge",
-    "v/b/range/est": "Estimated Range",
-    "v/b/12v/voltage": "12V Battery Voltage",
-    "v/b/p/temp/avg": "Battery Temperature",
-    "xvu/b/soc/abs": "Absolute Battery SOC",
-    "xvu/b/soh/vw": "Battery Health",
-    "v/p/latitude": "Latitude",
-    "v/p/longitude": "Longitude",
-    "v/p/odometer": "Odometer",
-    "v/p/gpssq": "GPS Signal Quality",
-    "v/c/limit/soc": "Charge Limit",
-    "v/c/duration/full": "Full Charge Duration",
-    "xvu/c/eff/calc": "Charging Efficiency",
-    "xvu/c/ac/p": "AC Charging Power",
-    "xvu/e/hv/chgmode": "Charging Mode",
-    "v/e/batteryage": "Battery Age",
+_LOGGER = logging.getLogger(LOGGER_NAME)
+
+# A mapping of sensor name patterns to device classes and units
+SENSOR_TYPES = {
+    "soc": {
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "icon": "mdi:battery",
+    },
+    "range": {
+        "device_class": SensorDeviceClass.DISTANCE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfLength.KILOMETERS,
+        "icon": "mdi:map-marker-distance",
+    },
+    "temperature": {
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+        "icon": "mdi:thermometer",
+    },
+    "power": {
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.WATT,
+        "icon": "mdi:flash",
+    },
+    "current": {
+        "device_class": SensorDeviceClass.CURRENT,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricCurrent.AMPERE,
+        "icon": "mdi:current-ac",
+    },
+    "voltage": {
+        "device_class": SensorDeviceClass.VOLTAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricPotential.VOLT,
+        "icon": "mdi:flash",
+    },
+    "energy": {
+        "device_class": SensorDeviceClass.ENERGY,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,
+        "icon": "mdi:battery-charging",
+    },
+    "speed": {
+        "device_class": SensorDeviceClass.SPEED,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfSpeed.KILOMETERS_PER_HOUR,
+        "icon": "mdi:speedometer",
+    },
+    # Diagnostic sensors
+    "status": {
+        "entity_category": EntityCategory.DIAGNOSTIC,
+        "icon": "mdi:information-outline",
+    },
+    "signal": {
+        "entity_category": EntityCategory.DIAGNOSTIC,
+        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
+        "icon": "mdi:signal",
+    },
+    "firmware": {
+        "entity_category": EntityCategory.DIAGNOSTIC,
+        "icon": "mdi:package-up",
+    },
 }
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
-    """Set up OVMS MQTT sensor platform from a config entry."""
-    _LOGGER.info("Setting up OVMS MQTT sensor platform")
 
-    config = entry.data
-    topic_prefix = config.get(CONF_TOPIC_PREFIX, "ovms")
-    qos = config.get(CONF_QOS, 1)
-    debug_mode = config.get(CONF_DEBUG_LOGGING, False)
-
-    # Initialize data structure
-    if DOMAIN not in hass.data:
-        hass.data[DOMAIN] = {}
-    
-    hass.data[DOMAIN] = {
-        'entities': {},
-        'config': config,
-        'vehicle_ids': set(),
-    }
-    
-    _LOGGER.info(f"OVMS MQTT config: prefix={topic_prefix}, QoS={qos}, debug={debug_mode}")
-    
-    # MQTT message handler
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up OVMS sensors based on a config entry."""
     @callback
-    def handle_mqtt_message(msg):
-        """Handle incoming MQTT messages."""
-        topic = msg.topic
+    def async_add_sensor(data: Dict[str, Any]) -> None:
+        """Add sensor based on discovery data."""
+        if data["entity_type"] != "sensor":
+            return
+            
+        _LOGGER.info("Adding sensor: %s", data["name"])
         
-        try:
-            payload_str = msg.payload.decode('utf-8').strip()
-        except (UnicodeDecodeError, AttributeError):
-            payload_str = str(msg.payload).strip()
+        sensor = OVMSSensor(
+            data["unique_id"],
+            data["name"],
+            data["topic"],
+            data["payload"],
+            data["device_info"],
+            data["attributes"],
+        )
         
-        if debug_mode:
-            _LOGGER.info(f"MQTT message received: topic={topic}, payload={payload_str}")
-        else:
-            _LOGGER.debug(f"MQTT message received: topic={topic}, payload={payload_str}")
-        
-        # Log detailed topic structure
-        parts = topic.split('/')
-        _LOGGER.info(f"Topic parts: {parts}")
-        
-        # Process metric topics
-        if "/metric/" in topic:
-            parse_and_process_metric(hass, topic, payload_str, async_add_entities)
+        async_add_entities([sensor])
     
-    def parse_and_process_metric(hass, topic, payload_str, async_add_entities):
-        """Parse MQTT topic and process the metric."""
-        # Expected format: ovms/username/vehicle_id/metric/path/to/metric
-        _LOGGER.info(f"Parsing topic structure: {topic}")
-        parts = topic.split('/')
-        _LOGGER.info(f"Split into {len(parts)} parts: {parts}")
-        
-        try:
-            # Parse vehicle_id and metric path
-            if "metric" in parts:
-                metric_index = parts.index("metric")
-                _LOGGER.info(f"Found 'metric' at index {metric_index}")
-                
-                if metric_index >= 3:  # Need at least prefix/username/vehicle_id
-                    vehicle_id = parts[2]  # vehicle_id is at index 2
-                    _LOGGER.info(f"Extracted vehicle_id from index 2: '{vehicle_id}'")
-                    
-                    if metric_index < len(parts) - 1:
-                        metric_path = '/'.join(parts[metric_index+1:])
-                        _LOGGER.info(f"Extracted metric_path from index {metric_index+1} onwards: '{metric_path}'")
-                        
-                        # Track discovered vehicle_ids
-                        if vehicle_id not in hass.data[DOMAIN]['vehicle_ids']:
-                            _LOGGER.info(f"New vehicle discovered: {vehicle_id}")
-                            hass.data[DOMAIN]['vehicle_ids'].add(vehicle_id)
-                            _LOGGER.info(f"Current known vehicles: {hass.data[DOMAIN]['vehicle_ids']}")
-                            
-                            # Create common metrics for this vehicle
-                            create_metrics_for_vehicle(hass, vehicle_id, topic_prefix, async_add_entities)
-                        else:
-                            _LOGGER.debug(f"Known vehicle: {vehicle_id}")
-                        
-                        # Parse and process the value
-                        value = parse_value(payload_str)
-                        _LOGGER.info(f"Parsed value: {value} (type: {type(value).__name__})")
-                        
-                        create_or_update_entity(hass, vehicle_id, metric_path, value, topic, async_add_entities)
-                    else:
-                        _LOGGER.warning(f"No metric path found after 'metric' in topic: {topic}")
-                else:
-                    _LOGGER.warning(f"Not enough parts before 'metric' in topic: {topic}")
-            else:
-                _LOGGER.warning(f"No 'metric' keyword found in topic: {topic}")
-        except Exception as e:
-            _LOGGER.error(f"Error parsing topic {topic}: {str(e)}", exc_info=True)
-    
-    def create_metrics_for_vehicle(hass, vehicle_id, topic_prefix, async_add_entities):
-        """Create entities for common metrics for a newly discovered vehicle."""
-        _LOGGER.info(f"Creating common metrics for vehicle: {vehicle_id}")
-        entities_to_add = []
-        
-        for metric_key, friendly_name in METRIC_PATTERNS.items():
-            unique_id = f"ovms_{slugify(vehicle_id)}_{slugify(metric_key)}"
-            
-            # Skip if entity already exists
-            if unique_id in hass.data[DOMAIN]['entities']:
-                _LOGGER.debug(f"Skipping existing entity: {unique_id}")
-                continue
-                
-            _LOGGER.info(f"Creating common metric: {vehicle_id}/{metric_key}")
-            
-            # Create entity with None value (will be updated when data arrives)
-            sensor = OvmsSensor(
-                vehicle_id=vehicle_id,
-                metric_key=metric_key,
-                value=None,
-                topic=f"{topic_prefix}/+/{vehicle_id}/metric/{metric_key}",
-                friendly_name=friendly_name
-            )
-            
-            # Store and queue for addition
-            hass.data[DOMAIN]['entities'][unique_id] = sensor
-            entities_to_add.append(sensor)
-        
-        # Add all entities at once
-        if entities_to_add:
-            _LOGGER.info(f"Adding {len(entities_to_add)} common metrics for vehicle {vehicle_id}")
-            async_add_entities(entities_to_add)
-            _LOGGER.info(f"Added entities successfully")
-    
-    def parse_value(payload_str):
-        """Parse the payload string into an appropriate data type."""
-        _LOGGER.debug(f"Parsing payload: {payload_str}")
-        
-        if not payload_str:
-            _LOGGER.debug("Empty payload, returning None")
-            return None
-            
-        # Try boolean
-        if payload_str.lower() in ('true', 'false'):
-            result = payload_str.lower() == 'true'
-            _LOGGER.debug(f"Parsed as boolean: {result}")
-            return result
-            
-        # Try number
-        try:
-            if '.' in payload_str:
-                result = float(payload_str)
-                _LOGGER.debug(f"Parsed as float: {result}")
-                return result
-            else:
-                result = int(payload_str)
-                _LOGGER.debug(f"Parsed as integer: {result}")
-                return result
-        except ValueError:
-            _LOGGER.debug("Not a number")
-            pass
-            
-        # Try JSON
-        try:
-            result = json.loads(payload_str)
-            _LOGGER.debug(f"Parsed as JSON: {result}")
-            return result
-        except json.JSONDecodeError:
-            _LOGGER.debug("Not valid JSON")
-            pass
-            
-        # Return as string
-        _LOGGER.debug(f"Using as string: {payload_str}")
-        return payload_str
-    
-    def create_or_update_entity(hass, vehicle_id, metric_key, value, topic, async_add_entities):
-        """Create a new entity or update an existing one."""
-        unique_id = f"ovms_{slugify(vehicle_id)}_{slugify(metric_key)}"
-        _LOGGER.info(f"Entity ID: {unique_id} for vehicle: {vehicle_id}, metric: {metric_key}")
-        
-        if unique_id in hass.data[DOMAIN]['entities']:
-            # Update existing entity
-            _LOGGER.info(f"Updating existing entity: {unique_id} = {value}")
-            entity = hass.data[DOMAIN]['entities'][unique_id]
-            entity.update_value(value)
-        else:
-            # Create new entity
-            _LOGGER.info(f"Creating new entity: {vehicle_id}/{metric_key}")
-            
-            # Try to get a friendly name for this metric
-            friendly_name = METRIC_PATTERNS.get(metric_key)
-            _LOGGER.info(f"Friendly name: {friendly_name if friendly_name else 'None, using default'}")
-            
-            sensor = OvmsSensor(
-                vehicle_id=vehicle_id,
-                metric_key=metric_key,
-                value=value,
-                topic=topic,
-                friendly_name=friendly_name
-            )
-            
-            hass.data[DOMAIN]['entities'][unique_id] = sensor
-            _LOGGER.info(f"Adding entity to Home Assistant: {unique_id}")
-            async_add_entities([sensor])
-            _LOGGER.info(f"Entity added successfully")
-    
-    # Subscribe to OVMS topics
-    _LOGGER.info(f"Subscribing to OVMS topics: {topic_prefix}/#")
-    subscription = await mqtt.async_subscribe(
-        hass, 
-        f"{topic_prefix}/#", 
-        handle_mqtt_message, 
-        qos
+    # Subscribe to discovery events
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, SIGNAL_ADD_ENTITIES, async_add_sensor)
     )
-    _LOGGER.info(f"MQTT subscription successful")
-    
-    # Store subscription for cleanup
-    hass.data[DOMAIN]['subscription'] = subscription
-    
-    # Create test messages only in debug mode
-    async def publish_test_messages():
-        """Publish test MQTT messages."""
-        test_vehicle = "TEST123"
-        test_topics = [
-            (f"{topic_prefix}/ovms-user/{test_vehicle}/metric/v/b/soc", "75.5"),
-            (f"{topic_prefix}/ovms-user/{test_vehicle}/metric/v/p/odometer", "12345"),
-            (f"{topic_prefix}/ovms-user/{test_vehicle}/metric/v/b/range/est", "350")
-        ]
-        
-        _LOGGER.info(f"Publishing {len(test_topics)} test messages")
-        for topic, value in test_topics:
-            _LOGGER.info(f"Publishing test data: {topic} = {value}")
-            await mqtt.async_publish(hass, topic, value, qos)
-        _LOGGER.info("Test messages published")
-    
-    # Publish test data only in debug mode
-    if debug_mode:
-        _LOGGER.info("Debug mode enabled, publishing test messages")
-        await publish_test_messages()
-    
-    return True
 
 
-class OvmsSensor(SensorEntity):
-    """Representation of an OVMS MQTT sensor."""
-
-    def __init__(self, vehicle_id, metric_key, value, topic, friendly_name=None):
+class OVMSSensor(SensorEntity):
+    """Representation of an OVMS sensor."""
+    
+    def __init__(
+        self,
+        unique_id: str,
+        name: str,
+        topic: str,
+        initial_state: str,
+        device_info: DeviceInfo,
+        attributes: Dict[str, Any],
+    ) -> None:
         """Initialize the sensor."""
-        super().__init__()
-        self._vehicle_id = vehicle_id
-        self._metric_key = metric_key
+        self._attr_unique_id = unique_id
+        self._attr_name = name
         self._topic = topic
-        self._attr_native_value = value
-        
-        # Create a unique ID
-        self._attr_unique_id = f"ovms_{slugify(vehicle_id)}_{slugify(metric_key)}"
-        
-        # Make a user-friendly name
-        if friendly_name:
-            self._attr_name = f"OVMS {vehicle_id} {friendly_name}"
-        else:
-            self._attr_name = f"OVMS {vehicle_id} {metric_key.replace('/', ' ').title()}"
-        
-        # Set attributes
-        self._attr_available = True
+        self._attr_native_value = self._parse_value(initial_state)
+        self._attr_device_info = device_info
         self._attr_extra_state_attributes = {
-            "vehicle_id": vehicle_id,
-            "metric_key": metric_key,
-            "mqtt_topic": topic,
-            "source": "OVMS MQTT Integration"
+            **attributes,
+            "topic": topic,
+            "last_updated": dt_util.utcnow().isoformat(),
         }
         
-        _LOGGER.debug(f"Initialized entity: {self._attr_unique_id}")
-    
-    @property
-    def device_info(self):
-        """Return device info for this sensor."""
-        return {
-            "identifiers": {(DOMAIN, self._vehicle_id)},
-            "name": f"OVMS Vehicle {self._vehicle_id}",
-            "manufacturer": "Open Vehicle Monitoring System",
-            "model": "OVMS",
-            "sw_version": "1.0.0",
-        }
-    
-    def update_value(self, value):
-        """Update the sensor's value."""
-        old_value = self._attr_native_value
-        self._attr_native_value = value
+        # Try to determine device class and unit
+        self._determine_sensor_type()
         
-        if old_value != value:
-            _LOGGER.info(f"Updated {self._attr_unique_id}: {old_value} → {value}")
+        # Try to extract additional attributes from initial state if it's JSON
+        self._process_json_payload(initial_state)
+    
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to updates."""
+        await super().async_added_to_hass()
         
-        self.async_write_ha_state()
+        # Restore previous state if available
+        if (state := await self.async_get_last_state()) is not None:
+            self._attr_native_value = state.state
+            # Restore attributes if available
+            if state.attributes:
+                # Don't overwrite entity attributes like unit, etc.
+                saved_attributes = {
+                    k: v for k, v in state.attributes.items()
+                    if k not in ["device_class", "state_class", "unit_of_measurement"]
+                }
+                self._attr_extra_state_attributes.update(saved_attributes)
+        
+        @callback
+        def update_state(payload: str) -> None:
+            """Update the sensor state."""
+            self._attr_native_value = self._parse_value(payload)
+            
+            # Update timestamp attribute
+            now = dt_util.utcnow()
+            self._attr_extra_state_attributes["last_updated"] = now.isoformat()
+            
+            # Try to extract additional attributes from payload if it's JSON
+            self._process_json_payload(payload)
+            
+            self.async_write_ha_state()
+            
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
+                update_state,
+            )
+        )
+    
+    def _determine_sensor_type(self) -> None:
+        """Determine the sensor type based on name patterns."""
+        # Default values
+        self._attr_device_class = None
+        self._attr_state_class = None
+        self._attr_native_unit_of_measurement = None
+        self._attr_entity_category = None
+        self._attr_icon = None
+        
+        # Check for matching patterns in name
+        for key, sensor_type in SENSOR_TYPES.items():
+            if key in self._attr_name.lower() or key in self._topic.lower():
+                self._attr_device_class = sensor_type.get("device_class")
+                self._attr_state_class = sensor_type.get("state_class")
+                self._attr_native_unit_of_measurement = sensor_type.get("unit")
+                self._attr_entity_category = sensor_type.get("entity_category")
+                self._attr_icon = sensor_type.get("icon")
+                break
+                
+    def _parse_value(self, value: str) -> Any:
+        """Parse the value from the payload."""
+        # Try to identify the type of value
+        try:
+            # Try parsing as JSON first
+            json_val = json.loads(value)
+            
+            # If JSON is a dict, extract likely value
+            if isinstance(json_val, dict):
+                if "value" in json_val:
+                    return json_val["value"]
+                if "state" in json_val:
+                    return json_val["state"]
+                # Return first numeric value found
+                for key, val in json_val.items():
+                    if isinstance(val, (int, float)):
+                        return val
+                # Fall back to string representation
+                return str(json_val)
+            
+            # If JSON is a scalar, use it directly
+            if isinstance(json_val, (int, float, str, bool)):
+                return json_val
+                
+            # For arrays or other types, convert to string
+            return str(json_val)
+            
+        except (ValueError, json.JSONDecodeError):
+            # Not JSON, try numeric
+            try:
+                # Check if it's a float
+                if "." in value:
+                    return float(value)
+                # Check if it's an int
+                return int(value)
+            except (ValueError, TypeError):
+                # Return as string
+                return value
+    
+    def _process_json_payload(self, payload: str) -> None:
+        """Process JSON payload to extract additional attributes."""
+        try:
+            json_data = json.loads(payload)
+            if isinstance(json_data, dict):
+                # Add useful attributes from the data
+                for key, value in json_data.items():
+                    if key not in ["value", "state", "data"] and key not in self._attr_extra_state_attributes:
+                        self._attr_extra_state_attributes[key] = value
+                        
+                # If there's a timestamp in the JSON, use it
+                if "timestamp" in json_data:
+                    self._attr_extra_state_attributes["device_timestamp"] = json_data["timestamp"]
+                    
+                # If there's a unit in the JSON, use it for native unit
+                if "unit" in json_data and not self._attr_native_unit_of_measurement:
+                    unit = json_data["unit"]
+                    self._attr_native_unit_of_measurement = unit
+                    
+        except (ValueError, json.JSONDecodeError):
+            # Not JSON, that's fine
+            pass
