@@ -68,6 +68,25 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.debug_info = {}
         self.discovered_topics = set()
 
+    def _ensure_serializable(self, obj):
+        """Convert MQTT objects to serializable types."""
+        if isinstance(obj, dict):
+            return {k: self._ensure_serializable(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._ensure_serializable(item) for item in obj]
+        elif isinstance(obj, tuple):
+            return [self._ensure_serializable(item) for item in obj]
+        elif hasattr(obj, '__dict__'):
+            return {k: self._ensure_serializable(v) for k, v in obj.__dict__.items() 
+                    if not k.startswith('_')}
+        elif obj.__class__.__name__ == 'ReasonCodes':
+            try:
+                return [int(code) for code in obj]
+            except:
+                return str(obj)
+        else:
+            return obj
+
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         errors = {}
@@ -105,7 +124,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.debug("MQTT Connection test successful: %s", result.get("details", ""))
                 self.mqtt_config.update(user_input)
                 # Store debug info for later
-                self.mqtt_config["debug_info"] = self.debug_info
+                self.mqtt_config["debug_info"] = self._ensure_serializable(self.debug_info)
                 return await self.async_step_topics()
             else:
                 _LOGGER.error("MQTT Connection test failed: %s", result["message"])
@@ -308,6 +327,9 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
 
+                # Ensure everything is serializable
+                self.mqtt_config["debug_info"] = self._ensure_serializable(self.debug_info)
+                
                 title = f"OVMS - {self.mqtt_config[CONF_VEHICLE_ID]}"
                 return self.async_create_entry(
                     title=title, 
@@ -335,25 +357,6 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
-    def _ensure_serializable(self, obj):
-        """Convert MQTT objects to serializable types."""
-        if isinstance(obj, dict):
-            return {k: self._ensure_serializable(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [self._ensure_serializable(item) for item in obj]
-        elif isinstance(obj, tuple):
-            return [self._ensure_serializable(item) for item in obj]
-        elif hasattr(obj, '__dict__'):
-            return {k: self._ensure_serializable(v) for k, v in obj.__dict__.items() 
-                    if not k.startswith('_')}
-        elif obj.__class__.__name__ == 'ReasonCodes':
-            try:
-                return [int(code) for code in obj]
-            except:
-                return str(obj)
-        else:
-            return obj
-        
     def _extract_vehicle_ids(self, topics, config):
         """Extract potential vehicle IDs from discovered topics."""
         _LOGGER.debug("Extracting potential vehicle IDs from %d topics", len(topics))
@@ -598,7 +601,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             debug_info["mqtt_connect"] = {
                 "success": connected,
                 "time_taken": connect_time,
-                "status": connection_status,
+                "status": self._ensure_serializable(connection_status),
             }
             
             mqttc.loop_stop()
@@ -608,7 +611,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Test subscribing to a topic as a further check
                 _LOGGER.debug("%s - Testing topic subscription", log_prefix)
                 sub_result = await self._test_subscription(mqttc, config, client_id)
-                debug_info["subscription_test"] = sub_result
+                debug_info["subscription_test"] = self._ensure_serializable(sub_result)
                 
                 if not sub_result["success"]:
                     try:
@@ -749,7 +752,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             _LOGGER.debug("%s - Subscribing to test topic: %s", log_prefix, test_topic)
             result = mqtt_client.subscribe(test_topic, qos=qos)
-            subscription_result["subscribe_result"] = result
+            subscription_result["subscribe_result"] = self._ensure_serializable(result)
             
             # Check if subscription was initiated successfully
             if result and result[0] == 0:  # MQTT_ERR_SUCCESS
@@ -1218,7 +1221,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             debug_info["messages_received"] = messages_count
             debug_info["topics_found"] = topics_count
             debug_info["topics_list"] = list(topics_found)
-            debug_info["messages"] = messages_received
+            debug_info["messages"] = self._ensure_serializable(messages_received)
             debug_info["responses_received"] = len(responses_received)
             
             _LOGGER.debug("%s - Test complete. Messages: %d, Topics: %d, Responses: %d", 
