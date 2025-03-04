@@ -7,6 +7,7 @@ import json
 import uuid
 import hashlib
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from collections import deque
 
 import paho.mqtt.client as mqtt
 
@@ -47,6 +48,7 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 # Signal constants
 SIGNAL_ADD_ENTITIES = f"{DOMAIN}_add_entities"
 SIGNAL_UPDATE_ENTITY = f"{DOMAIN}_update_entity"
+SIGNAL_PLATFORMS_LOADED = f"{DOMAIN}_platforms_loaded"
 
 
 def ensure_serializable(obj):
@@ -101,6 +103,10 @@ class OVMSMQTTClient:
         self.reconnect_count = 0
         self.last_reconnect_time = 0
         
+        # Entity queue for those discovered before platforms are ready
+        self.entity_queue = deque()
+        self.platforms_loaded = False
+        
     async def async_setup(self) -> bool:
         """Set up the MQTT client."""
         _LOGGER.debug("Setting up MQTT client")
@@ -124,8 +130,12 @@ class OVMSMQTTClient:
         # Subscribe to topics
         self._subscribe_topics()
         
-        # Start the discovery process
-        asyncio.create_task(self._async_discover_entities())
+        # Set up listener for when all platforms are loaded
+        async_dispatcher_connect(
+            self.hass, 
+            SIGNAL_PLATFORMS_LOADED, 
+            self._async_platforms_loaded
+        )
         
         # Start the cleanup task for pending commands
         self._cleanup_task = asyncio.create_task(self._async_cleanup_pending_commands())
@@ -489,20 +499,46 @@ class OVMSMQTTClient:
         # Register this entity
         self.entity_registry[topic] = unique_id
         
-        # Send signal to create the entity
-        async_dispatcher_send(
-            self.hass,
-            SIGNAL_ADD_ENTITIES,
-            {
-                "topic": topic,
-                "payload": payload,
-                "entity_type": entity_type,
-                "unique_id": unique_id,
-                "name": entity_info["name"],
-                "device_info": self._get_device_info(),
-                "attributes": entity_info.get("attributes", {}),
-            },
-        )
+        # Create entity data
+        entity_data = {
+            "topic": topic,
+            "payload": payload,
+            "entity_type": entity_type,
+            "unique_id": unique_id,
+            "name": entity_info["name"],
+            "device_info": self._get_device_info(),
+            "attributes": entity_info.get("attributes", {}),
+        }
+        
+        # If platforms are loaded, send the entity to be created
+        # Otherwise, queue it for later
+        if self.platforms_loaded:
+            async_dispatcher_send(
+                self.hass,
+                SIGNAL_ADD_ENTITIES,
+                entity_data,
+            )
+        else:
+            _LOGGER.debug("Platforms not yet loaded, queuing entity: %s", entity_info["name"])
+            self.entity_queue.append(entity_data)
+        
+    async def _async_platforms_loaded(self) -> None:
+        """Handle platforms loaded signal."""
+        _LOGGER.info("All platforms loaded, processing %d queued entities", len(self.entity_queue))
+        self.platforms_loaded = True
+        
+        # Process any queued entities
+        while self.entity_queue:
+            entity_data = self.entity_queue.popleft()
+            _LOGGER.debug("Processing queued entity: %s", entity_data["name"])
+            async_dispatcher_send(
+                self.hass,
+                SIGNAL_ADD_ENTITIES,
+                entity_data,
+            )
+            
+        # Start entity discovery
+        await self._async_discover_entities()
         
     def _parse_topic(self, topic) -> Tuple[Optional[str], Optional[Dict]]:
         """Parse a topic to determine the entity type and info."""
