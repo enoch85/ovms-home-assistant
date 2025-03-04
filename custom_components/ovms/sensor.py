@@ -257,15 +257,13 @@ class OVMSSensor(SensorEntity):
                 self._attr_entity_category = sensor_type.get("entity_category")
                 self._attr_icon = sensor_type.get("icon")
                 break
-                
+    
     def _parse_value(self, value: str) -> Any:
         """Parse the value from the payload."""
-        # Check if this is a comma-separated list of numbers (cell voltages)
-        if isinstance(value, str) and "," in value and all(
-            part.replace(".", "").strip().isdigit() or part.strip() == "" 
-            for part in value.split(",")
-        ):
+        # Check if this is a comma-separated list of numbers (including negative numbers)
+        if isinstance(value, str) and "," in value:
             try:
+                # Try to parse all parts as floats
                 parts = [float(part.strip()) for part in value.split(",") if part.strip()]
                 if parts:
                     # Store the array in attributes
@@ -279,9 +277,10 @@ class OVMSSensor(SensorEntity):
                     avg_value = sum(parts) / len(parts)
                     return avg_value
             except (ValueError, TypeError):
+                # If any part can't be converted to float, fall through to other methods
                 pass
-                
-        # Existing parsing logic follows
+        
+        # Rest of the original parsing logic follows...
         try:
             # Try parsing as JSON first
             json_val = json.loads(value)
