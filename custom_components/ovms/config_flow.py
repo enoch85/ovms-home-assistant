@@ -334,6 +334,25 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "debug_info": str(self.debug_info) if self.debug_info else "",
             },
         )
+
+    def _ensure_serializable(self, obj):
+        """Convert MQTT objects to serializable types."""
+        if isinstance(obj, dict):
+            return {k: self._ensure_serializable(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._ensure_serializable(item) for item in obj]
+        elif isinstance(obj, tuple):
+            return [self._ensure_serializable(item) for item in obj]
+        elif hasattr(obj, '__dict__'):
+            return {k: self._ensure_serializable(v) for k, v in obj.__dict__.items() 
+                    if not k.startswith('_')}
+        elif obj.__class__.__name__ == 'ReasonCodes':
+            try:
+                return [int(code) for code in obj]
+            except:
+                return str(obj)
+        else:
+            return obj
         
     def _extract_vehicle_ids(self, topics, config):
         """Extract potential vehicle IDs from discovered topics."""
