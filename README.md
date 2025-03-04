@@ -1,34 +1,38 @@
 # OVMS MQTT Integration for Home Assistant
 
+![OVMS Banner](https://raw.githubusercontent.com/enoch85/ovms-mqtt-integration/main/assets/ovms-ha-banner.png)
+
 This integration connects your Open Vehicle Monitoring System (OVMS) with Home Assistant via MQTT, automatically creating sensors for all vehicle metrics.
 
-## WIP
+## Overview
 
-The current implementation does *not* work. If you want to test it you need to manually move [this folder](https://github.com/enoch85/ovms-mqtt-integration/tree/main/custom_components/ovms_mqtt) to your Home Assistant and activate the integration.
+The OVMS MQTT Integration discovers and creates Home Assistant entities from MQTT topics published by your OVMS module. The integration automatically:
 
-In its current state, it installs fine, and produces no errors, but [no enteties are produced](https://github.com/enoch85/ovms-mqtt-integration/issues/12).
-
-## First look
-
-![image](https://github.com/user-attachments/assets/4494a2f9-4534-4e3a-8486-51100b6f1bb3)
+- Identifies vehicle data and creates appropriate entity types (sensors, binary sensors, device trackers)
+- Categorizes entities by data type (battery, climate, location, etc.)
+- Maintains entity state based on real-time MQTT updates
+- Provides services to send commands to your vehicle
 
 ## Features
 
-- Automatic discovery of OVMS vehicles and metrics
-- CAutomatically create sensors for battery state, location, charging status, soc and more
-- Organizes sensors by vehicle_id
-- Handles notifications and client commands
-- User-friendly entity naming
+- **Automatic Discovery**: Detects all metrics published by your OVMS module
+- **Entity Creation**: Creates appropriate Home Assistant entities based on data type
+- **Smart Categorization**: Organizes entities into logical groups
+- **Real-time Updates**: Entities update as new data is published
+- **Command Interface**: Send commands to your vehicle through services
+- **Vehicle Status**: Track online/offline status of your vehicle
+- **Secure Communication**: Supports TLS/SSL connections to MQTT brokers
 
 ## Requirements
 
 - Home Assistant (2023.10.0 or newer)
 - MQTT integration configured in Home Assistant
 - OVMS module publishing to the same MQTT broker
+- OVMS firmware 3.3.001 or newer recommended
 
 ## Installation
 
-### HACS Installation
+### HACS Installation (Recommended)
 
 1. Add this repository to HACS:
    - Go to HACS → Integrations → ⋮ (menu) → Custom repositories
@@ -43,57 +47,233 @@ In its current state, it installs fine, and produces no errors, but [no enteties
 
 ### Manual Installation
 
-1. Copy the `custom_components/ovms_mqtt` folder to your Home Assistant's `custom_components` directory
-2. Restart Home Assistant
+1. Download the repository as a ZIP file and extract it
+2. Copy the `custom_components/ovms` folder to your Home Assistant's `custom_components` directory
+3. Restart Home Assistant
 
-## Configuration
+## OVMS Configuration
 
-1. Make sure your OVMS module is configured to publish to your MQTT broker
-   - In OVMS web UI: Config → Server V3 (MQTT)
-   - Set server address, credentials, and topic prefix (default: `ovms`)
+Before using this integration, you need to configure your OVMS module to publish data to your MQTT broker:
 
-2. Add the integration in Home Assistant:
-   - Settings → Devices & Services → Add Integration
-   - Search for "OVMS MQTT Integration"
-   - Enter your MQTT broker details:
-     - Broker address
-     - Port (1883 for unsecured, 8883 for SSL)
-     - Username/password
-     - Topic prefix (must match OVMS config)
+1. In the OVMS web UI, go to Config → Server V3 (MQTT)
+2. Configure the following settings:
+   - Server: Your MQTT broker address
+   - Port: 1883 (standard) or 8883 (TLS/SSL)
+   - Username/Password: If required by your broker
+   - Topic Prefix: `ovms` (default, can be customized)
+   - Enable Auto-Start: YES
 
-## Testing
+![OVMS MQTT Configuration](https://raw.githubusercontent.com/enoch85/ovms-mqtt-integration/main/assets/ovms-mqtt-config.png)
 
-1. Check Home Assistant logs for successful connection messages
-2. Verify entity creation:
-   - Go to Settings → Devices & Services → Entities
-   - Filter by "OVMS" to see discovered sensors
-   - Entities should appear within 1-2 minutes of OVMS publishing data
+## Home Assistant Configuration
 
-3. Troubleshooting:
-   - Enable debug logging by adding to configuration.yaml:
-     ```yaml
-     logger:
-       default: info
-       logs:
-         custom_components.ovms_mqtt: debug
-     ```
-   - Use an MQTT client (like MQTT Explorer) to verify topics are being published
-   - Manually publish a test message to `ovms/test` to check MQTT connectivity
+### Basic Setup
 
-## Topic Structure
+1. Go to Settings → Devices & Services → Add Integration
+2. Search for "OVMS MQTT Integration" and select it
+3. Enter the MQTT broker details:
+   - MQTT Broker: Your broker address
+   - Port: Choose between standard (1883) or TLS/SSL (8883)
+   - Username/Password: If required by your broker
+4. Configure topic structure:
+   - Topic Prefix: Should match your OVMS setting (default: `ovms`)
+   - MQTT Username: Username that OVMS uses in its topics
+5. The integration will scan for available OVMS vehicles
+6. Select your vehicle ID when prompted
 
-The integration processes these MQTT topics:
-- `ovms/username/vehicle_id/metric/...` - Vehicle metrics
-- `ovms/username/vehicle_id/notify/...` - Notifications
-- `ovms/username/vehicle_id/client/...` - Client commands/responses
+![Setup Flow](https://raw.githubusercontent.com/enoch85/ovms-mqtt-integration/main/assets/setup-flow.png)
 
-Example metrics include:
-- `v/b/soc` - Battery state of charge
-- `v/p/latitude` and `v/p/longitude` - Location
-- `v/b/range/est` - Estimated range
-- `v/c/limit/soc` - Charge limit
-- `v/b/12v/voltage` - 12V battery voltage
+### Testing Configuration
+
+For testing purposes, you can:
+
+1. Enable debug logging by adding to your `configuration.yaml`:
+   ```yaml
+   logger:
+     default: info
+     logs:
+       custom_components.ovms: debug
+   ```
+
+2. Monitor MQTT messages using an external tool like MQTT Explorer to verify what your OVMS is publishing
+
+3. Check the Home Assistant logs for detailed information about discovered topics and created entities
+
+## Using the Integration
+
+### Available Entities
+
+After setup, entities will be created for your vehicle metrics. These include:
+
+- **Battery**: State of charge, range, power, voltage, etc.
+- **Climate**: Temperature readings from various vehicle sensors
+- **Location**: GPS position of the vehicle
+- **Status**: Connection state, operational parameters
+- **Vehicle-specific**: Other metrics specific to your vehicle model
+
+Entities are grouped under a device representing your vehicle, identified by the vehicle ID.
+
+![Entity Overview](https://raw.githubusercontent.com/enoch85/ovms-mqtt-integration/main/assets/entity-overview.png)
+
+### Services
+
+The integration provides several services to interact with your vehicle:
+
+#### `ovms.send_command`
+Send any command to the OVMS module.
+
+```yaml
+service: ovms.send_command
+data:
+  vehicle_id: your_vehicle_id
+  command: stat
+  parameters: range
+```
+
+#### `ovms.set_feature`
+Set an OVMS configuration feature.
+
+```yaml
+service: ovms.set_feature
+data:
+  vehicle_id: your_vehicle_id
+  feature: feature_name
+  value: feature_value
+```
+
+#### `ovms.control_climate`
+Control the vehicle's climate system.
+
+```yaml
+service: ovms.control_climate
+data:
+  vehicle_id: your_vehicle_id
+  temperature: 21.5
+  hvac_mode: heat
+  duration: 30
+```
+
+#### `ovms.control_charging`
+Control the vehicle's charging functions.
+
+```yaml
+service: ovms.control_charging
+data:
+  vehicle_id: your_vehicle_id
+  action: start
+  mode: range
+  limit: 80
+```
+
+## Technical Details
+
+### Topic Structure
+
+The integration supports these MQTT topic structures:
+
+- Default: `ovms/username/vehicle_id/metric/...`
+- Alternative: `ovms/client/vehicle_id/...`
+- Simple: `ovms/vehicle_id/...`
+- Custom: Define your own structure with placeholders
+
+### Communication Flow
+
+1. OVMS module publishes metrics to MQTT broker
+2. Integration subscribes to all topics under the configured prefix
+3. Received messages are parsed to determine entity type and attributes
+4. Entities are created or updated based on the incoming data
+5. Commands are sent via MQTT and responses are tracked
+
+### Entity Classification
+
+The integration uses pattern matching to determine entity types:
+
+- Metrics with temperature data become temperature sensors
+- Location data becomes device trackers
+- Binary states (on/off, connected/disconnected) become binary sensors
+- Numeric values become standard sensors
+
+### Command Protocol
+
+Commands use a request-response pattern:
+1. Command is published to: `{prefix}/{username}/{vehicle_id}/client/rr/command/{command_id}`
+2. Response is received on: `{prefix}/{username}/{vehicle_id}/client/rr/response/{command_id}`
+3. Unique command IDs ensure responses are matched to requests
+
+## Troubleshooting
+
+### No Entities Created
+
+1. Check if your OVMS module is publishing to the MQTT broker
+2. Verify the topic structure matches what's configured in the integration
+3. Enable debug logging and check for errors in the Home Assistant logs
+4. Ensure your MQTT broker allows wildcard subscriptions (#)
+
+### Connection Issues
+
+1. Verify MQTT broker credentials are correct
+2. Check if TLS/SSL settings match between OVMS, Home Assistant, and the broker
+3. Test connection using an external MQTT client
+4. Check firewall rules if using different networks
+
+### Command Failures
+
+1. Ensure the OVMS module is online
+2. Check if the command syntax is correct for your vehicle
+3. Verify MQTT QoS settings allow reliable message delivery
+4. Look for command responses in the logs
+
+## Advanced Usage
+
+### Custom Topic Structure
+
+If your OVMS uses a non-standard topic structure, you can define a custom pattern during setup using these placeholders:
+
+- `{prefix}`: The base MQTT topic prefix
+- `{mqtt_username}`: The username portion of the topic
+- `{vehicle_id}`: The vehicle identifier
+
+### Dashboard Example
+
+Here's an example card configuration for a vehicle dashboard:
+
+```yaml
+type: vertical-stack
+cards:
+  - type: entities
+    title: Vehicle Status
+    entities:
+      - entity: sensor.ovms_v_b_soc
+        name: Battery
+      - entity: sensor.ovms_v_b_range_est
+        name: Range
+      - entity: sensor.ovms_v_c_charging
+        name: Charging
+      - entity: sensor.ovms_v_p_odometer
+        name: Odometer
+  - type: map
+    entities:
+      - entity: device_tracker.ovms_location
+```
+
+## FAQ
+
+**Q: Can I use multiple vehicles with this integration?**  
+A: Yes, you can set up multiple instances of the integration, one for each vehicle.
+
+**Q: Does this work with all OVMS-supported vehicles?**  
+A: Yes, the integration is vehicle-agnostic and works with any vehicle supported by OVMS.
+
+**Q: Can I use this without internet access?**  
+A: Yes, as long as your OVMS module, MQTT broker, and Home Assistant can communicate on the same network.
+
+**Q: How frequent are the updates?**  
+A: Updates happen in real-time as the OVMS module publishes new data, typically every few seconds while the vehicle is active.
 
 ## License
 
 MIT License - see LICENSE file
+
+---
+
+*This integration is not officially affiliated with the Open Vehicles project.*
