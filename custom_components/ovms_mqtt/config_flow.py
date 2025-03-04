@@ -6,6 +6,7 @@ import socket
 import uuid
 import time
 import re
+import hashlib
 from typing import Any, Dict, Optional
 
 import voluptuous as vol
@@ -24,18 +25,22 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import (
     DOMAIN,
+    CONFIG_VERSION,
     DEFAULT_PORT,
     DEFAULT_QOS,
     DEFAULT_PROTOCOL,
     DEFAULT_CLIENT_ID,
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_TOPIC_STRUCTURE,
+    DEFAULT_VERIFY_SSL,
     CONF_VEHICLE_ID,
     CONF_QOS,
     CONF_TOPIC_PREFIX,
     CONF_CLIENT_ID,
     CONF_MQTT_USERNAME,
     CONF_TOPIC_STRUCTURE,
+    CONF_VERIFY_SSL,
+    CONF_ORIGINAL_VEHICLE_ID,
     PROTOCOLS,
     TOPIC_STRUCTURES,
     LOGGER_NAME,
@@ -56,7 +61,7 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for OVMS."""
 
-    VERSION = 1
+    VERSION = CONFIG_VERSION
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_PUSH
 
     def __init__(self):
@@ -103,6 +108,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Optional(CONF_PASSWORD): str,
             vol.Required(CONF_CLIENT_ID, default=f"ha_ovms_{uuid.uuid4().hex[:8]}"): str,
             vol.Required(CONF_QOS, default=DEFAULT_QOS): vol.In([0, 1, 2]),
+            vol.Required(CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL): bool,
         })
 
         return self.async_show_form(
@@ -126,7 +132,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if user_input[CONF_TOPIC_STRUCTURE] == "custom":
                 return await self.async_step_custom_topic()
             
-            # Otherwise continue to vehicle step
+            # Otherwise continue to topic discovery
             return await self.async_step_topic_discovery()
 
         # Build the schema
@@ -147,10 +153,31 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            self.mqtt_config.update(user_input)
-            _LOGGER.debug("Custom topic structure configured: %s", user_input["custom_structure"])
-            self.mqtt_config[CONF_TOPIC_STRUCTURE] = user_input["custom_structure"]
-            return await self.async_step_topic_discovery()
+            # Validate the custom structure
+            custom_structure = user_input["custom_structure"]
+            
+            # Check for required placeholders
+            if "{prefix}" not in custom_structure:
+                errors["custom_structure"] = "missing_prefix"
+            elif "{vehicle_id}" not in custom_structure:
+                errors["custom_structure"] = "missing_vehicle_id"
+            else:
+                # Test for valid format (no invalid placeholders)
+                try:
+                    test_format = custom_structure.format(
+                        prefix="test",
+                        vehicle_id="test",
+                        mqtt_username="test"
+                    )
+                    self.mqtt_config[CONF_TOPIC_STRUCTURE] = custom_structure
+                    return await self.async_step_topic_discovery()
+                except KeyError as ex:
+                    errors["custom_structure"] = "invalid_placeholder"
+                    _LOGGER.error("Invalid placeholder in custom structure: %s", ex)
+                    
+                except ValueError as ex:
+                    errors["custom_structure"] = "invalid_format"
+                    _LOGGER.error("Invalid format in custom structure: %s", ex)
 
         # Build the schema
         data_schema = vol.Schema({
@@ -246,8 +273,14 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if result["success"]:
                 _LOGGER.debug("Topic availability test successful: %s", result.get("details", ""))
                 
-                # Create entry
-                await self.async_set_unique_id(f"ovms_{self.mqtt_config[CONF_VEHICLE_ID]}")
+                # Store original vehicle ID for maintaining entity ID consistency
+                self.mqtt_config[CONF_ORIGINAL_VEHICLE_ID] = user_input[CONF_VEHICLE_ID]
+                
+                # Create a stable unique ID that won't change if vehicle_id changes
+                unique_id_base = f"{self.mqtt_config[CONF_HOST]}_{user_input[CONF_VEHICLE_ID]}"
+                unique_id = f"ovms_{hashlib.md5(unique_id_base.encode()).hexdigest()}"
+                
+                await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
                 
                 title = f"OVMS - {self.mqtt_config[CONF_VEHICLE_ID]}"
@@ -402,13 +435,17 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
         if config[CONF_PROTOCOL] == "mqtts":
             _LOGGER.debug("%s - Enabling SSL/TLS", log_prefix)
+            verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
             try:
                 context = ssl.create_default_context()
-                # Allow self-signed certificates
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
+                # Allow self-signed certificates if verification is disabled
+                if not verify_ssl:
+                    _LOGGER.debug("%s - SSL certificate verification disabled", log_prefix)
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
                 mqttc.tls_set_context(context)
                 debug_info["tls_enabled"] = True
+                debug_info["tls_verify"] = verify_ssl
             except ssl.SSLError as ssl_err:
                 _LOGGER.error("%s - SSL/TLS setup error: %s", log_prefix, ssl_err)
                 debug_info["ssl_error"] = str(ssl_err)
@@ -782,13 +819,16 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             
         if config[CONF_PROTOCOL] == "mqtts":
+            verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
             try:
                 context = ssl.create_default_context()
-                # Allow self-signed certificates
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
+                # Allow self-signed certificates if verification is disabled
+                if not verify_ssl:
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
                 mqttc.tls_set_context(context)
                 debug_info["tls_enabled"] = True
+                debug_info["tls_verify"] = verify_ssl
             except ssl.SSLError as ssl_err:
                 _LOGGER.error("%s - SSL/TLS setup error: %s", log_prefix, ssl_err)
                 debug_info["ssl_error"] = str(ssl_err)
@@ -1025,13 +1065,16 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             
         if config[CONF_PROTOCOL] == "mqtts":
+            verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
             try:
                 context = ssl.create_default_context()
-                # Allow self-signed certificates
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
+                # Allow self-signed certificates if verification is disabled
+                if not verify_ssl:
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
                 mqttc.tls_set_context(context)
                 debug_info["tls_enabled"] = True
+                debug_info["tls_verify"] = verify_ssl
             except ssl.SSLError as ssl_err:
                 _LOGGER.error("%s - SSL/TLS setup error: %s", log_prefix, ssl_err)
                 debug_info["ssl_error"] = str(ssl_err)
@@ -1249,6 +1292,13 @@ class OVMSOptionsFlow(config_entries.OptionsFlow):
                     self.config_entry.data.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
                 ),
             ): vol.In(TOPIC_STRUCTURES),
+            vol.Required(
+                CONF_VERIFY_SSL,
+                default=self.config_entry.options.get(
+                    CONF_VERIFY_SSL,
+                    self.config_entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+                ),
+            ): bool,
         }
 
         return self.async_show_form(step_id="init", data_schema=vol.Schema(options))
