@@ -83,9 +83,16 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if user_input["Port"] == "mqtts":
                     user_input[CONF_PROTOCOL] = "mqtts"
                     user_input[CONF_PORT] = 8883
+                    # Handle the inverted SSL verification setting
+                    if "allow_insecure_ssl" in user_input:
+                        user_input[CONF_VERIFY_SSL] = not user_input["allow_insecure_ssl"]
+                        del user_input["allow_insecure_ssl"]
+                    else:
+                        user_input[CONF_VERIFY_SSL] = True
                 else:  # mqtt option
                     user_input[CONF_PROTOCOL] = "mqtt"
                     user_input[CONF_PORT] = 1883
+                    user_input[CONF_VERIFY_SSL] = False  # Not applicable for unencrypted
                 del user_input["Port"]
             
             # Test MQTT connection
@@ -110,7 +117,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["details"] = result["details"]
 
         # Build the schema using radio buttons for connection options
-        data_schema = vol.Schema({
+        schema_dict = {
             vol.Required(CONF_HOST): str,
             vol.Required("Port", default="mqtts"): vol.In({
                 "mqtts": "port 8883 (mqtts://)",
@@ -120,8 +127,17 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Optional(CONF_PASSWORD): str,
             vol.Required(CONF_CLIENT_ID, default=f"ha_ovms_{uuid.uuid4().hex[:8]}"): str,
             vol.Required(CONF_QOS, default=DEFAULT_QOS): vol.In([0, 1, 2]),
-            vol.Required(CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL): bool,
-        })
+        }
+        
+        # Add SSL verification option only if port 8883 is selected
+        if user_input and user_input.get("Port") == "mqtt":
+            # Don't include SSL verification for unencrypted connections
+            pass
+        else:
+            # For encrypted connections, include SSL verification but invert the meaning
+            schema_dict[vol.Required("allow_insecure_ssl", default=False)] = bool
+        
+        data_schema = vol.Schema(schema_dict)
 
         return self.async_show_form(
             step_id="user",
@@ -451,9 +467,9 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 # Use executor to avoid blocking the event loop
                 context = await self.hass.async_add_executor_job(ssl.create_default_context)
-                # Allow self-signed certificates if verification is disabled
+                # Allow self-signed certificates if insecure is allowed
                 if not verify_ssl:
-                    _LOGGER.debug("%s - SSL certificate verification disabled", log_prefix)
+                    _LOGGER.debug("%s - SSL certificate verification disabled (insecure TLS/SSL allowed)", log_prefix)
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
                 mqttc.tls_set_context(context)
@@ -587,7 +603,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "success": False,
                         "error_type": ERROR_TOPIC_ACCESS_DENIED,
                         "message": f"Topic subscription test failed for {error_topic}",
-                        "details": error_details,
+                        "details": f"Access denied to the test topic '{error_topic}'. This is likely due to MQTT ACL (Access Control List) restrictions. For EMQX broker, ensure the client ID '{config[CONF_CLIENT_ID]}' has 'Subscribe' permission for '{error_topic}' or 'homeassistant/#' wildcard topic. {error_details}",
                     }
                 
                 try:
