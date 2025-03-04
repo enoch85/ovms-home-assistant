@@ -1,6 +1,10 @@
 {
-  "name": "OVMS MQTT Integration",
-  "domains": ["sensor"],
-  "homeassistant": "2023.10.0",
+  "name": "Open Vehicle Monitoring System (OVMS)",
+  "render_readme": true,
+  "content_in_root": false,
+  "domains": ["ovms"],
+  "country": ["ALL"],
+  "homeassistant": "2025.2.0",
+  "persistent_directory": "userfiles",
   "iot_class": "local_push"
 }
