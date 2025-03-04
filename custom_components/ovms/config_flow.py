@@ -179,7 +179,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Otherwise continue to topic discovery
             return await self.async_step_topic_discovery()
 
-        # Build the schema
+        # Build the schema with default MQTT username set to broker username
         data_schema = vol.Schema({
             vol.Required(CONF_TOPIC_PREFIX, default=DEFAULT_TOPIC_PREFIX): str,
             vol.Required(CONF_TOPIC_STRUCTURE, default=DEFAULT_TOPIC_STRUCTURE): vol.In(TOPIC_STRUCTURES),
@@ -361,38 +361,50 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Extract potential vehicle IDs from discovered topics."""
         _LOGGER.debug("Extracting potential vehicle IDs from %d topics", len(topics))
         potential_ids = set()
+        discovered_username = None
 
         # Get the topic prefix
         prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
         mqtt_username = config.get(CONF_MQTT_USERNAME, "")
 
-        # We know the structure is always prefix/username/vehicle_id/...
-        # For example: ovms/ovms-username/regnumber/...
-        pattern = fr"^{re.escape(prefix)}/{re.escape(mqtt_username)}/([^/]+)/"
+        # Try with the configured username first if available
+        if mqtt_username:
+            pattern = fr"^{re.escape(prefix)}/{re.escape(mqtt_username)}/([^/]+)/"
+            _LOGGER.debug("Using pattern to extract vehicle IDs: %s", pattern)
 
-        _LOGGER.debug("Using pattern to extract vehicle IDs: %s", pattern)
-
-        for topic in topics:
-            match = re.match(pattern, topic)
-            if match:
-                vehicle_id = match.group(1)
-                # Skip client and rr paths
-                if vehicle_id not in ["client", "rr"]:
-                    _LOGGER.debug("Found potential vehicle ID '%s' from topic '%s'", vehicle_id, topic)
-                    potential_ids.add(vehicle_id)
+            for topic in topics:
+                match = re.match(pattern, topic)
+                if match:
+                    vehicle_id = match.group(1)
+                    # Skip client and rr paths
+                    if vehicle_id not in ["client", "rr"]:
+                        _LOGGER.debug("Found potential vehicle ID '%s' from topic '%s'", vehicle_id, topic)
+                        potential_ids.add(vehicle_id)
 
         # If no matches found with the username pattern, try a more general pattern
         if not potential_ids:
-            general_pattern = fr"^{re.escape(prefix)}/[^/]+/([^/]+)/"
+            general_pattern = fr"^{re.escape(prefix)}/([^/]+)/([^/]+)/"
             _LOGGER.debug("No matches found. Using more general pattern: %s", general_pattern)
 
             for topic in topics:
                 match = re.match(general_pattern, topic)
                 if match:
-                    vehicle_id = match.group(1)
+                    username = match.group(1)
+                    vehicle_id = match.group(2)
                     if vehicle_id not in ["client", "rr"]:
-                        _LOGGER.debug("Found potential vehicle ID '%s' from topic '%s'", vehicle_id, topic)
+                        _LOGGER.debug("Found potential vehicle ID '%s' with username '%s' from topic '%s'", 
+                                    vehicle_id, username, topic)
+                        # Save the discovered username for future use
+                        discovered_username = username
                         potential_ids.add(vehicle_id)
+            
+            # Update the MQTT username in config if discovered
+            if discovered_username and discovered_username != mqtt_username:
+                _LOGGER.debug("Updating MQTT username from '%s' to discovered '%s'", 
+                            mqtt_username, discovered_username)
+                config[CONF_MQTT_USERNAME] = discovered_username
+                # Also update the mqtt_config in the class
+                self.mqtt_config[CONF_MQTT_USERNAME] = discovered_username
 
         _LOGGER.debug("Extracted %d potential vehicle IDs: %s", len(potential_ids), potential_ids)
         return potential_ids
