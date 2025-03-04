@@ -338,40 +338,45 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
-    def _extract_vehicle_ids(self, topics, config):
-        """Extract potential vehicle IDs from discovered topics."""
-        _LOGGER.debug("Extracting potential vehicle IDs from %d topics", len(topics))
-        potential_ids = set()
-        
-        # Get the topic prefix
-        prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
-        mqtt_username = config.get(CONF_MQTT_USERNAME, "")
-        
-        # Different patterns to try
-        patterns = [
-            # ovms/username/vehicleid pattern
-            fr"^{re.escape(prefix)}/{re.escape(mqtt_username)}/([^/]+)",
-            # ovms/client/vehicleid pattern
-            fr"^{re.escape(prefix)}/client/([^/]+)",
-            # ovms/vehicleid pattern
-            fr"^{re.escape(prefix)}/([^/]+)",
-        ]
-        
-        _LOGGER.debug("Using patterns to extract vehicle IDs: %s", patterns)
+def _extract_vehicle_ids(self, topics, config):
+    """Extract potential vehicle IDs from discovered topics."""
+    _LOGGER.debug("Extracting potential vehicle IDs from %d topics", len(topics))
+    potential_ids = set()
+    
+    # Get the topic prefix
+    prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
+    mqtt_username = config.get(CONF_MQTT_USERNAME, "")
+    
+    # We know the structure is always prefix/username/vehicle_id/...
+    # For example: ovms/ovms-mqtt-integration/GGK97E/...
+    pattern = fr"^{re.escape(prefix)}/{re.escape(mqtt_username)}/([^/]+)/"
+    
+    _LOGGER.debug("Using pattern to extract vehicle IDs: %s", pattern)
+    
+    for topic in topics:
+        match = re.match(pattern, topic)
+        if match:
+            vehicle_id = match.group(1)
+            # Skip client and rr paths
+            if vehicle_id not in ["client", "rr"]:
+                _LOGGER.debug("Found potential vehicle ID '%s' from topic '%s'", vehicle_id, topic)
+                potential_ids.add(vehicle_id)
+    
+    # If no matches found with the username pattern, try a more general pattern
+    if not potential_ids:
+        general_pattern = fr"^{re.escape(prefix)}/[^/]+/([^/]+)/"
+        _LOGGER.debug("No matches found. Using more general pattern: %s", general_pattern)
         
         for topic in topics:
-            for pattern in patterns:
-                match = re.match(pattern, topic)
-                if match:
-                    potential_id = match.group(1)
-                    # Skip client/rr paths which are for request-response, not vehicle IDs
-                    if potential_id not in ["client", "rr"]:
-                        _LOGGER.debug("Found potential vehicle ID '%s' from topic '%s'", potential_id, topic)
-                        potential_ids.add(potential_id)
-                    break
-        
-        _LOGGER.debug("Extracted %d potential vehicle IDs: %s", len(potential_ids), potential_ids)
-        return potential_ids
+            match = re.match(general_pattern, topic)
+            if match:
+                vehicle_id = match.group(1)
+                if vehicle_id not in ["client", "rr"]:
+                    _LOGGER.debug("Found potential vehicle ID '%s' from topic '%s'", vehicle_id, topic)
+                    potential_ids.add(vehicle_id)
+    
+    _LOGGER.debug("Extracted %d potential vehicle IDs: %s", len(potential_ids), potential_ids)
+    return potential_ids
 
     def _format_structure_prefix(self, config):
         """Format the topic structure prefix based on the configuration."""
