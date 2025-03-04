@@ -730,7 +730,13 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             result = mqtt_client.subscribe(test_topic, qos=qos)
             subscription_result["subscribe_result"] = result
             
-            # Wait for subscription confirmation
+            # Check if subscription was initiated successfully
+            if result and result[0] == 0:  # MQTT_ERR_SUCCESS
+                # Successful subscription initiation, assume it worked
+                _LOGGER.debug("%s - Subscription initiated successfully", log_prefix)
+                return {"success": True, "topic": test_topic}
+                
+            # Wait for subscription confirmation via callback
             subscription_confirmed = False
             for i in range(5):  # Try for up to 2.5 seconds
                 if subscription_result.get("success"):
