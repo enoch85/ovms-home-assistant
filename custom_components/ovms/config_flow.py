@@ -29,14 +29,12 @@ from .const import (
     DEFAULT_PORT,
     DEFAULT_QOS,
     DEFAULT_PROTOCOL,
-    DEFAULT_CLIENT_ID,
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_TOPIC_STRUCTURE,
     DEFAULT_VERIFY_SSL,
     CONF_VEHICLE_ID,
     CONF_QOS,
     CONF_TOPIC_PREFIX,
-    CONF_CLIENT_ID,
     CONF_MQTT_USERNAME,
     CONF_TOPIC_STRUCTURE,
     CONF_VERIFY_SSL,
@@ -125,7 +123,6 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }),
             vol.Optional(CONF_USERNAME): str,
             vol.Optional(CONF_PASSWORD): str,
-            vol.Required(CONF_CLIENT_ID, default=f"ha_ovms_{uuid.uuid4().hex[:8]}"): str,
             vol.Required(CONF_QOS, default=DEFAULT_QOS): vol.In([0, 1, 2]),
         }
         
@@ -145,21 +142,21 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders={"debug_info": str(self.debug_info) if self.debug_info else ""},
         )
-
+        
     async def async_step_topics(self, user_input=None):
         """Configure topic structure."""
         errors = {}
 
         if user_input is not None:
             self.mqtt_config.update(user_input)
-            
+
             _LOGGER.debug("Topic structure configured: %s", user_input)
             self.debug_info["topic_structure"] = user_input[CONF_TOPIC_STRUCTURE]
-            
+
             # If custom structure was selected, go to custom topic step
             if user_input[CONF_TOPIC_STRUCTURE] == "custom":
                 return await self.async_step_custom_topic()
-            
+
             # Otherwise continue to topic discovery
             return await self.async_step_topic_discovery()
 
@@ -183,7 +180,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             # Validate the custom structure
             custom_structure = user_input["custom_structure"]
-            
+
             # Check for required placeholders
             if "{prefix}" not in custom_structure:
                 errors["custom_structure"] = "missing_prefix"
@@ -202,7 +199,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 except KeyError as ex:
                     errors["custom_structure"] = "invalid_placeholder"
                     _LOGGER.error("Invalid placeholder in custom structure: %s", ex)
-                    
+
                 except ValueError as ex:
                     errors["custom_structure"] = "invalid_format"
                     _LOGGER.error("Invalid format in custom structure: %s", ex)
@@ -232,20 +229,20 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Discover topics using the broad wildcard
         _LOGGER.debug("Starting topic discovery")
         discovery_result = await self._discover_topics(self.mqtt_config)
-        
+
         if discovery_result["success"]:
             self.discovered_topics = discovery_result.get("topics", set())
             _LOGGER.debug("Discovered %d topics", len(self.discovered_topics))
-            
+
             # Extract potential vehicle IDs from discovered topics
             potential_vehicle_ids = self._extract_vehicle_ids(self.discovered_topics, self.mqtt_config)
             self.debug_info["potential_vehicle_ids"] = list(potential_vehicle_ids)
-            
+
             # Create a schema with the discovered info
             data_schema = vol.Schema({
                 vol.Required("confirm_discovery", default=True): bool,
             })
-            
+
             return self.async_show_form(
                 step_id="topic_discovery",
                 data_schema=data_schema,
@@ -262,7 +259,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema = vol.Schema({
                 vol.Required("retry_discovery", default=True): bool,
             })
-            
+
             return self.async_show_form(
                 step_id="topic_discovery",
                 data_schema=data_schema,
@@ -275,42 +272,42 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_vehicle(self, user_input=None):
         """Configure vehicle settings."""
         errors = {}
-        
+
         # Suggest vehicle IDs from discovery if available
         suggested_vehicle_ids = self._extract_vehicle_ids(self.discovered_topics, self.mqtt_config)
         default_vehicle_id = next(iter(suggested_vehicle_ids), "")
 
         if user_input is not None:
             self.mqtt_config.update(user_input)
-            
+
             _LOGGER.debug("Starting OVMS topic availability test for vehicle: %s", user_input[CONF_VEHICLE_ID])
             self.debug_info["topic_test_start"] = time.time()
-            
+
             # Format the structure prefix for this vehicle
             structure_prefix = self._format_structure_prefix(self.mqtt_config)
             _LOGGER.debug("Formatted structure prefix: %s", structure_prefix)
             self.debug_info["structure_prefix"] = structure_prefix
-            
+
             # Test topic availability with the specific vehicle ID
             result = await self._test_topic_availability(self.mqtt_config)
-            
+
             self.debug_info["topic_test_end"] = time.time()
             self.debug_info["topic_test_duration"] = self.debug_info["topic_test_end"] - self.debug_info["topic_test_start"]
             _LOGGER.debug("Topic availability test completed in %.2f seconds", self.debug_info["topic_test_duration"])
-            
+
             if result["success"]:
                 _LOGGER.debug("Topic availability test successful: %s", result.get("details", ""))
-                
+
                 # Store original vehicle ID for maintaining entity ID consistency
                 self.mqtt_config[CONF_ORIGINAL_VEHICLE_ID] = user_input[CONF_VEHICLE_ID]
-                
+
                 # Create a stable unique ID that won't change if vehicle_id changes
                 unique_id_base = f"{self.mqtt_config[CONF_HOST]}_{user_input[CONF_VEHICLE_ID]}"
                 unique_id = f"ovms_{hashlib.md5(unique_id_base.encode()).hexdigest()}"
-                
+
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
-                
+
                 title = f"OVMS - {self.mqtt_config[CONF_VEHICLE_ID]}"
                 return self.async_create_entry(
                     title=title, 
@@ -337,46 +334,46 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "debug_info": str(self.debug_info) if self.debug_info else "",
             },
         )
-
-def _extract_vehicle_ids(self, topics, config):
-    """Extract potential vehicle IDs from discovered topics."""
-    _LOGGER.debug("Extracting potential vehicle IDs from %d topics", len(topics))
-    potential_ids = set()
-    
-    # Get the topic prefix
-    prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
-    mqtt_username = config.get(CONF_MQTT_USERNAME, "")
-    
-    # We know the structure is always prefix/username/vehicle_id/...
-    # For example: ovms/ovms-username/regnumber/...
-    pattern = fr"^{re.escape(prefix)}/{re.escape(mqtt_username)}/([^/]+)/"
-    
-    _LOGGER.debug("Using pattern to extract vehicle IDs: %s", pattern)
-    
-    for topic in topics:
-        match = re.match(pattern, topic)
-        if match:
-            vehicle_id = match.group(1)
-            # Skip client and rr paths
-            if vehicle_id not in ["client", "rr"]:
-                _LOGGER.debug("Found potential vehicle ID '%s' from topic '%s'", vehicle_id, topic)
-                potential_ids.add(vehicle_id)
-    
-    # If no matches found with the username pattern, try a more general pattern
-    if not potential_ids:
-        general_pattern = fr"^{re.escape(prefix)}/[^/]+/([^/]+)/"
-        _LOGGER.debug("No matches found. Using more general pattern: %s", general_pattern)
         
+    def _extract_vehicle_ids(self, topics, config):
+        """Extract potential vehicle IDs from discovered topics."""
+        _LOGGER.debug("Extracting potential vehicle IDs from %d topics", len(topics))
+        potential_ids = set()
+
+        # Get the topic prefix
+        prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
+        mqtt_username = config.get(CONF_MQTT_USERNAME, "")
+
+        # We know the structure is always prefix/username/vehicle_id/...
+        # For example: ovms/ovms-username/regnumber/...
+        pattern = fr"^{re.escape(prefix)}/{re.escape(mqtt_username)}/([^/]+)/"
+
+        _LOGGER.debug("Using pattern to extract vehicle IDs: %s", pattern)
+
         for topic in topics:
-            match = re.match(general_pattern, topic)
+            match = re.match(pattern, topic)
             if match:
                 vehicle_id = match.group(1)
+                # Skip client and rr paths
                 if vehicle_id not in ["client", "rr"]:
                     _LOGGER.debug("Found potential vehicle ID '%s' from topic '%s'", vehicle_id, topic)
                     potential_ids.add(vehicle_id)
-    
-    _LOGGER.debug("Extracted %d potential vehicle IDs: %s", len(potential_ids), potential_ids)
-    return potential_ids
+
+        # If no matches found with the username pattern, try a more general pattern
+        if not potential_ids:
+            general_pattern = fr"^{re.escape(prefix)}/[^/]+/([^/]+)/"
+            _LOGGER.debug("No matches found. Using more general pattern: %s", general_pattern)
+
+            for topic in topics:
+                match = re.match(general_pattern, topic)
+                if match:
+                    vehicle_id = match.group(1)
+                    if vehicle_id not in ["client", "rr"]:
+                        _LOGGER.debug("Found potential vehicle ID '%s' from topic '%s'", vehicle_id, topic)
+                        potential_ids.add(vehicle_id)
+
+        _LOGGER.debug("Extracted %d potential vehicle IDs: %s", len(potential_ids), potential_ids)
+        return potential_ids
 
     def _format_structure_prefix(self, config):
         """Format the topic structure prefix based on the configuration."""
@@ -384,17 +381,17 @@ def _extract_vehicle_ids(self, topics, config):
         prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
         vehicle_id = config.get(CONF_VEHICLE_ID, "")
         mqtt_username = config.get(CONF_MQTT_USERNAME, "")
-        
+
         _LOGGER.debug("Formatting structure prefix with: structure=%s, prefix=%s, vehicle_id=%s, mqtt_username=%s", 
                      structure, prefix, vehicle_id, mqtt_username)
-        
+
         # Replace the variables in the structure
         structure_prefix = structure.format(
             prefix=prefix,
             vehicle_id=vehicle_id,
             mqtt_username=mqtt_username
         )
-        
+
         _LOGGER.debug("Formatted structure prefix: %s", structure_prefix)
         return structure_prefix
 
@@ -409,11 +406,11 @@ def _extract_vehicle_ids(self, topics, config):
             "port": config[CONF_PORT],
             "protocol": config[CONF_PROTOCOL],
             "has_username": bool(config.get(CONF_USERNAME)),
-            "client_id": config[CONF_CLIENT_ID],
             "test_start_time": time.time(),
         }
         
-        client_id = config[CONF_CLIENT_ID]
+        # Generate a random client ID for this connection test
+        client_id = f"ha_ovms_{uuid.uuid4().hex[:8]}"
         protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
         
         debug_info["mqtt_protocol_version"] = "MQTTv5" if hasattr(mqtt, 'MQTTv5') else "MQTTv311"
@@ -591,7 +588,7 @@ def _extract_vehicle_ids(self, topics, config):
                 _LOGGER.debug("%s - Connection successful", log_prefix)
                 # Test subscribing to a topic as a further check
                 _LOGGER.debug("%s - Testing topic subscription", log_prefix)
-                sub_result = await self._test_subscription(mqttc, config)
+                sub_result = await self._test_subscription(mqttc, config, client_id)
                 debug_info["subscription_test"] = sub_result
                 
                 if not sub_result["success"]:
@@ -608,7 +605,7 @@ def _extract_vehicle_ids(self, topics, config):
                         "success": False,
                         "error_type": ERROR_TOPIC_ACCESS_DENIED,
                         "message": f"Topic subscription test failed for {error_topic}",
-                        "details": f"Access denied to the test topic '{error_topic}'. This is likely due to MQTT ACL (Access Control List) restrictions. For EMQX broker, ensure the client ID '{config[CONF_CLIENT_ID]}' has 'Subscribe' permission for '{error_topic}' or 'homeassistant/#' wildcard topic. {error_details}",
+                        "details": f"Access denied to the test topic '{error_topic}'. This is likely due to MQTT ACL (Access Control List) restrictions. For EMQX broker, ensure the user has 'Subscribe' permission for '{error_topic}' or 'homeassistant/#' wildcard topic. {error_details}",
                     }
                 
                 try:
@@ -704,12 +701,12 @@ def _extract_vehicle_ids(self, topics, config):
                 "details": f"An unexpected error occurred: {ex}",
             }
             
-    async def _test_subscription(self, mqtt_client, config):
+    async def _test_subscription(self, mqtt_client, config, client_id):
         """Test if we can subscribe to a topic."""
         log_prefix = f"MQTT subscription test for {config[CONF_HOST]}:{config[CONF_PORT]}"
         
         # Use a test topic that should be accessible to all users
-        test_topic = f"homeassistant/{config[CONF_CLIENT_ID]}/test"
+        test_topic = f"homeassistant/{client_id}/test"
         qos = config.get(CONF_QOS, DEFAULT_QOS)
         
         subscription_result = {"success": False, "topic": test_topic}
@@ -792,7 +789,7 @@ def _extract_vehicle_ids(self, topics, config):
         debug_info["discovery_topic"] = discovery_topic
         
         # Set up a test client
-        client_id = f"{config[CONF_CLIENT_ID]}_discovery"
+        client_id = f"ha_ovms_discovery_{uuid.uuid4().hex[:8]}"
         protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
         
         _LOGGER.debug("%s - Creating client with ID: %s", log_prefix, client_id)
@@ -1006,7 +1003,7 @@ def _extract_vehicle_ids(self, topics, config):
         debug_info["response_topic"] = response_topic
         
         # Set up a test client
-        client_id = f"{config[CONF_CLIENT_ID]}_vehicle_test"
+        client_id = f"ha_ovms_topic_test_{uuid.uuid4().hex[:8]}"
         protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
         
         _LOGGER.debug("%s - Creating client with ID: %s", log_prefix, client_id)
