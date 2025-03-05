@@ -35,6 +35,9 @@ CATEGORY_NETWORK = "network"
 CATEGORY_SYSTEM = "system"
 CATEGORY_TIRE = "tire"
 
+# Custom unit constants
+UNIT_AMPERE_HOUR = "Ah"
+
 # A comprehensive mapping of metric paths to friendly names and attributes
 METRIC_DEFINITIONS = {
     # System metrics
@@ -347,7 +350,7 @@ METRIC_DEFINITIONS = {
         "icon": "mdi:battery",
         "device_class": SensorDeviceClass.ENERGY_STORAGE,
         "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfElectricCurrent.AMPERE_HOUR,
+        "unit": UNIT_AMPERE_HOUR,
         "category": CATEGORY_BATTERY,
     },
     "v.b.capacity": {
@@ -374,7 +377,7 @@ METRIC_DEFINITIONS = {
         "icon": "mdi:battery-plus",
         "device_class": SensorDeviceClass.CURRENT,
         "state_class": SensorStateClass.TOTAL_INCREASING,
-        "unit": UnitOfElectricCurrent.AMPERE_HOUR,
+        "unit": UNIT_AMPERE_HOUR,
         "category": CATEGORY_BATTERY,
     },
     "v.b.coulomb.recd.total": {
@@ -383,7 +386,7 @@ METRIC_DEFINITIONS = {
         "icon": "mdi:battery-plus",
         "device_class": SensorDeviceClass.CURRENT,
         "state_class": SensorStateClass.TOTAL_INCREASING,
-        "unit": UnitOfElectricCurrent.AMPERE_HOUR,
+        "unit": UNIT_AMPERE_HOUR,
         "category": CATEGORY_BATTERY,
     },
     "v.b.coulomb.used": {
@@ -392,7 +395,7 @@ METRIC_DEFINITIONS = {
         "icon": "mdi:battery-minus",
         "device_class": SensorDeviceClass.CURRENT,
         "state_class": SensorStateClass.TOTAL_INCREASING,
-        "unit": UnitOfElectricCurrent.AMPERE_HOUR,
+        "unit": UNIT_AMPERE_HOUR,
         "category": CATEGORY_BATTERY,
     },
     "v.b.coulomb.used.total": {
@@ -401,7 +404,7 @@ METRIC_DEFINITIONS = {
         "icon": "mdi:battery-minus",
         "device_class": SensorDeviceClass.CURRENT,
         "state_class": SensorStateClass.TOTAL_INCREASING,
-        "unit": UnitOfElectricCurrent.AMPERE_HOUR,
+        "unit": UNIT_AMPERE_HOUR,
         "category": CATEGORY_BATTERY,
     },
     "v.b.current": {
