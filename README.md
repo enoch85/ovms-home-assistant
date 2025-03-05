@@ -11,6 +11,8 @@ The OVMS MQTT Integration discovers and creates Home Assistant entities from MQT
 - Maintains entity state based on real-time MQTT updates
 - Provides services to send commands to your vehicle
 
+![Entity Overview](/assets/entity-overview.svg)
+
 ## Features
 
 - **Automatic Discovery**: Detects all metrics published by your OVMS module
@@ -88,6 +90,8 @@ Configure your OVMS module to publish data to your MQTT broker:
    - Topic Prefix: `ovms` (default, can be customized)
    - Enable Auto-Start: YES
 
+![OVMS MQTT Configuration](/assets/ovms-mqtt-config.svg)
+
 ## Home Assistant Configuration
 
 ### Basic Setup
@@ -103,6 +107,8 @@ Configure your OVMS module to publish data to your MQTT broker:
    - MQTT Username: Username that OVMS uses in its topics
 5. The integration will scan for available OVMS vehicles
 6. Select your vehicle ID when prompted
+
+![Setup Flow](/assets/setup-flow.svg)
 
 ### Testing Configuration
 
