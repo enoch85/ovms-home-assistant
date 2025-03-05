@@ -136,6 +136,22 @@ SENSOR_TYPES = {
     }
 }
 
+# List of device classes that should have numeric values
+NUMERIC_DEVICE_CLASSES = [
+    SensorDeviceClass.BATTERY,
+    SensorDeviceClass.CURRENT,
+    SensorDeviceClass.ENERGY,
+    SensorDeviceClass.HUMIDITY,
+    SensorDeviceClass.POWER,
+    SensorDeviceClass.TEMPERATURE,
+    SensorDeviceClass.VOLTAGE,
+    SensorDeviceClass.DISTANCE,
+    SensorDeviceClass.SPEED,
+]
+
+# Special string values that should be converted to None for numeric sensors
+SPECIAL_STATE_VALUES = ["unavailable", "unknown", "none", "", "null", "nan"]
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
@@ -215,7 +231,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         
         # Restore previous state if available
         if (state := await self.async_get_last_state()) is not None:
-            self._attr_native_value = state.state
+            if state.state not in ["unavailable", "unknown", None]:
+                # Only restore the state if it's not a special state
+                self._attr_native_value = state.state
             # Restore attributes if available
             if state.attributes:
                 # Don't overwrite entity attributes like unit, etc.
@@ -266,8 +284,27 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 self._attr_icon = sensor_type.get("icon")
                 break
     
+    def _requires_numeric_value(self) -> bool:
+        """Check if this sensor requires a numeric value based on its device class."""
+        return (
+            self._attr_device_class in NUMERIC_DEVICE_CLASSES or
+            self._attr_state_class in [SensorStateClass.MEASUREMENT, SensorStateClass.TOTAL, SensorStateClass.TOTAL_INCREASING]
+        )
+    
+    def _is_special_state_value(self, value) -> bool:
+        """Check if a value is a special state value that should be converted to None."""
+        if value is None:
+            return True
+        if isinstance(value, str) and value.lower() in SPECIAL_STATE_VALUES:
+            return True
+        return False
+        
     def _parse_value(self, value: str) -> Any:
         """Parse the value from the payload."""
+        # Handle special state values for numeric sensors
+        if self._requires_numeric_value() and self._is_special_state_value(value):
+            return None
+            
         # Check if this is a comma-separated list of numbers (including negative numbers)
         if isinstance(value, str) and "," in value:
             try:
@@ -293,36 +330,78 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Try parsing as JSON first
             json_val = json.loads(value)
             
+            # Handle special JSON values
+            if self._is_special_state_value(json_val):
+                return None
+                
             # If JSON is a dict, extract likely value
             if isinstance(json_val, dict):
+                result = None
                 if "value" in json_val:
-                    return json_val["value"]
-                if "state" in json_val:
-                    return json_val["state"]
-                # Return first numeric value found
-                for key, val in json_val.items():
-                    if isinstance(val, (int, float)):
-                        return val
-                # Fall back to string representation
+                    result = json_val["value"]
+                elif "state" in json_val:
+                    result = json_val["state"]
+                else:
+                    # Return first numeric value found
+                    for key, val in json_val.items():
+                        if isinstance(val, (int, float)):
+                            result = val
+                            break
+                
+                # Handle special values in result
+                if self._is_special_state_value(result):
+                    return None
+                    
+                # If we have a result, return it; otherwise fall back to string representation
+                if result is not None:
+                    return result
+                
+                # If we need a numeric value but couldn't extract one, return None
+                if self._requires_numeric_value():
+                    return None
                 return str(json_val)
             
             # If JSON is a scalar, use it directly
-            if isinstance(json_val, (int, float, str, bool)):
+            if isinstance(json_val, (int, float)):
+                return json_val
+            
+            if isinstance(json_val, str):
+                # Handle special string values
+                if self._is_special_state_value(json_val):
+                    return None
+                    
+                # If we need a numeric value but got a string, try to convert it
+                if self._requires_numeric_value():
+                    try:
+                        return float(json_val)
+                    except (ValueError, TypeError):
+                        return None
                 return json_val
                 
-            # For arrays or other types, convert to string
+            if isinstance(json_val, bool):
+                # If we need a numeric value, convert bool to int
+                if self._requires_numeric_value():
+                    return 1 if json_val else 0
+                return json_val
+                
+            # For arrays or other types, convert to string if not numeric
+            if self._requires_numeric_value():
+                return None
             return str(json_val)
             
         except (ValueError, json.JSONDecodeError):
             # Not JSON, try numeric
             try:
                 # Check if it's a float
-                if "." in value:
+                if isinstance(value, str) and "." in value:
                     return float(value)
                 # Check if it's an int
                 return int(value)
             except (ValueError, TypeError):
-                # Return as string
+                # If we need a numeric value but couldn't convert, return None
+                if self._requires_numeric_value():
+                    return None
+                # Otherwise return as string
                 return value
     
     def _process_json_payload(self, payload: str) -> None:
@@ -392,12 +471,18 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Create friendly name for cell
             friendly_name = f"{friendly_base_name} Cell {i+1}"
             
+            # Ensure value is numeric for sensors with device class
+            if self._requires_numeric_value() and self._is_special_state_value(value):
+                parsed_value = None
+            else:
+                parsed_value = value
+            
             # Create a sensor configuration to register later
             sensor_config = {
                 "unique_id": cell_unique_id,
                 "name": entity_id_name,
                 "friendly_name": friendly_name,
-                "state": value,
+                "state": parsed_value,
                 "entity_id": entity_id,
                 "device_info": self.device_info,
                 "device_class": self.device_class,
@@ -451,9 +536,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Add entities to Home Assistant
         if entities:
             try:
-                # Add entities to Home Assistant
+                # Add entities to Home Assistant - FIX: Added await here
                 async_add_entities = self.platform.async_add_entities
-                async_add_entities(entities)
+                await async_add_entities(entities)
             except (AttributeError, NameError):
                 _LOGGER.warning("Failed to register cell sensors through platform")
                 try:
@@ -481,8 +566,25 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 cell_id = self._cell_sensors[i]
                 if cell_id in self._cell_sensor_entities:
                     entity = self._cell_sensor_entities[cell_id]
-                    entity._attr_native_value = value
+                    
+                    # Ensure value is numeric for sensors with device class
+                    if hasattr(entity, '_attr_device_class') and entity._attr_device_class in NUMERIC_DEVICE_CLASSES:
+                        if isinstance(value, str) and value.lower() in SPECIAL_STATE_VALUES:
+                            entity._attr_native_value = None
+                        else:
+                            try:
+                                entity._attr_native_value = float(value)
+                            except (ValueError, TypeError):
+                                entity._attr_native_value = None
+                    else:
+                        entity._attr_native_value = value
                     
                     # Schedule an update for this entity
                     if self.hass:
-                        entity.async_schedule_update_ha_state()
+                        try:
+                            entity.async_schedule_update_ha_state()
+                        except RuntimeError as e:
+                            if "Attribute hass is None" in str(e):
+                                _LOGGER.debug("Cell sensor entity not ready for update: %s", e)
+                            else:
+                                raise
