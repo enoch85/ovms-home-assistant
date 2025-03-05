@@ -15,6 +15,13 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import DOMAIN, LOGGER_NAME
 from .mqtt import SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
+from .metrics import (
+    METRIC_DEFINITIONS,
+    TOPIC_PATTERNS,
+    BINARY_METRICS,
+    get_metric_by_path,
+    get_metric_by_pattern,
+)
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -147,11 +154,41 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
             return False
     
     def _determine_device_class(self) -> None:
-        """Determine the device class based on name patterns."""
+        """Determine the device class based on metrics definitions."""
         # Default value
         self._attr_device_class = None
+        self._attr_icon = None
         
-        # Check for matching patterns in name
+        # Try to find matching metric by converting topic to dot notation
+        topic_suffix = self._topic
+        if self._topic.count('/') >= 3:  # Skip the prefix part
+            parts = self._topic.split('/')
+            # Find where the actual metric path starts
+            for i, part in enumerate(parts):
+                if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
+                    topic_suffix = '/'.join(parts[i:])
+                    break
+        
+        metric_path = topic_suffix.replace("/", ".")
+        
+        # Try exact match first
+        metric_info = get_metric_by_path(metric_path)
+        
+        # If no exact match, try by pattern in name and topic
+        if not metric_info:
+            topic_parts = topic_suffix.split('/')
+            name_parts = self._internal_name.split('_')
+            metric_info = get_metric_by_pattern(topic_parts) or get_metric_by_pattern(name_parts)
+        
+        # Apply metric info if found
+        if metric_info:
+            if "device_class" in metric_info:
+                self._attr_device_class = metric_info["device_class"]
+            if "icon" in metric_info:
+                self._attr_icon = metric_info["icon"]
+            return
+        
+        # If no metric info was found, use the original pattern matching as fallback
         for key, device_class in BINARY_SENSOR_TYPES.items():
             if key in self._internal_name.lower():
                 if isinstance(device_class, dict):
