@@ -499,8 +499,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Create unique ID for this cell sensor
             cell_unique_id = f"{self.unique_id}_cell_{i+1}"
             
-            # Create entity ID with vehicle prefix
-            # FIXED: Removed vehicle_id from the entity name to avoid duplication
+            # Create entity ID without explicitly adding vehicle_id
             entity_id_name = f"{base_name}_cell_{i+1}"
             
             # Generate entity ID
