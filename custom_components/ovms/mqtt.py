@@ -529,31 +529,55 @@ class OVMSMQTTClient:
         # Use a hash of the full topic to ensure uniqueness
         topic_hash = hashlib.md5(topic.encode()).hexdigest()[:8]
         
-        # Store original name for display
-        entity_info["original_name"] = entity_info["name"]
+        # Extract topic components for better naming
+        topic_parts = topic.split('/')
         
-        # Get vehicle ID for prefixing
-        vehicle_id = self.config.get(CONF_VEHICLE_ID)
+        # Get vehicle ID for entity naming
+        vehicle_id = self.config.get(CONF_VEHICLE_ID).lower()
+        
+        # Determine the entity type category (metric, status, location, etc.)
+        entity_category = "unknown"
+        original_name = entity_info["name"]
+        
+        # Extract category from topic path
+        if len(topic_parts) >= 4:
+            for part in topic_parts:
+                if part.lower() in ["metric", "status", "location", "notify", "command"]:
+                    entity_category = part.lower()
+                    break
+        
+        # Extract the actual metric path (everything after the category)
+        metric_path = ""
+        metric_parts = []
+        try:
+            category_index = topic_parts.index(entity_category)
+            if category_index < len(topic_parts) - 1:
+                metric_parts = topic_parts[category_index + 1:]
+                metric_path = "_".join(metric_parts)
+        except ValueError:
+            # If category not found in topic, use original name
+            metric_path = original_name
+            metric_parts = original_name.split('_')
+        
+        # Create entity ID with proper format: sensor.ovms_{vehicle_id}_{category}_{metric_path}
+        prefixed_name = f"ovms_{vehicle_id}_{entity_category}_{metric_path}".lower()
         
         # Check for existing entities with similar names
         similar_name_count = 0
         for eid in self.entity_registry.values():
-            if eid.startswith(f"{vehicle_id}_{entity_info['name']}"):
+            if eid.startswith(f"ovms_{vehicle_id}_{entity_category}_{metric_path}"):
                 similar_name_count += 1
         
         # If this is a duplicate, append a number
         if similar_name_count > 0:
-            entity_info["name"] = f"{entity_info['name']}_{similar_name_count}"
-            
-        # Create an entity_id style name with vehicle_id prefix
-        prefixed_name = f"{vehicle_id}_{entity_info['name']}"
-            
-        # Create a friendly name for display in UI
-        friendly_name = entity_info["original_name"].replace("_", " ").title()
+            prefixed_name = f"{prefixed_name}_{similar_name_count}"
         
-        # Use the original vehicle ID for entity unique IDs for consistency
+        # Create a user-friendly name based on metric path
+        friendly_name = self._create_friendly_name(metric_parts, entity_category)
+        
+        # Use the original vehicle ID for unique IDs for consistency
         original_vehicle_id = self.config.get(CONF_ORIGINAL_VEHICLE_ID, self.config.get(CONF_VEHICLE_ID))
-        unique_id = f"{original_vehicle_id}_{entity_info['name']}_{topic_hash}"
+        unique_id = f"{original_vehicle_id}_{entity_category}_{metric_path}_{topic_hash}"
         
         # Register this entity
         self.entity_registry[topic] = unique_id
@@ -581,6 +605,181 @@ class OVMSMQTTClient:
         else:
             _LOGGER.debug("Platforms not yet loaded, queuing entity: %s", entity_info["name"])
             self.entity_queue.append(entity_data)
+    
+    def _create_friendly_name(self, metric_parts, entity_category):
+        """Create a user-friendly name based on metric path and category."""
+        if not metric_parts:
+            return "Unknown"
+        
+        # Check if this is a notification
+        if entity_category == "notify":
+            if len(metric_parts) >= 2 and metric_parts[0] == "alert":
+                # Format: notify/alert/charge.stopped -> "Alert: Charge Stopped"
+                alert_type = metric_parts[1].replace(".", " ").title()
+                return f"Alert: {alert_type}"
+            return " ".join(part.title() for part in metric_parts)
+        
+        # Primary namespace (v, xvu, etc.)
+        namespace = metric_parts[0] if metric_parts else ""
+        
+        # Get remaining parts for specific categorization
+        remaining_parts = metric_parts[1:] if len(metric_parts) > 1 else []
+        
+        # Check if we have at least one part to categorize
+        if not remaining_parts:
+            return namespace.upper()
+        
+        # Main category/group (b for battery, p for position, c for charging, etc.)
+        main_category = remaining_parts[0]
+        
+        # Further subgroup and metric name
+        subparts = remaining_parts[1:] if len(remaining_parts) > 1 else []
+        
+        # Check for version-related metrics - put under "Device Info" category
+        version_keywords = ["version", "firmware", "hardware", "sw", "hw"]
+        if any(keyword in subparts or keyword in main_category for keyword in version_keywords):
+            metric_name = subparts[-1] if subparts else main_category
+            return f"Device Info: {metric_name.title()}"
+        
+        # Handle specific common formats based on main category
+        if main_category == "b":  # Battery metrics
+            # Handle specific battery metrics
+            if len(subparts) > 0:
+                metric_name = subparts[-1]  # Last component is the actual metric
+                
+                # Known battery metrics
+                if metric_name == "soc":
+                    return "Battery Level"
+                elif metric_name == "soh" or "soh" in subparts:
+                    return "Battery Health"
+                elif "range" in subparts:
+                    return "Range"
+                elif "temp" in subparts:
+                    # Check temperature location context
+                    if "p" in subparts and "avg" in subparts:
+                        return "Outside Temperature"
+                    else:
+                        return "Battery Temperature"
+                elif "voltage" in subparts:
+                    if "12v" in subparts:
+                        return "12V Battery"
+                    return "Battery Voltage"
+                elif "power" in subparts or "current" in subparts:
+                    return "Battery Power"
+                
+                # Generic battery metric with hierarchy
+                friendly_name = metric_name.title()
+                hierarchy = subparts[:-1]  # All but the last part
+                if hierarchy:
+                    return f"{friendly_name} {' '.join(part.upper() for part in hierarchy)}"
+                return friendly_name
+            
+            return "Battery"
+        
+        elif main_category == "p":  # Position/Location metrics
+            # Handle specific position metrics
+            if len(subparts) > 0:
+                metric_name = subparts[0]  # First component after 'p' is the metric
+                
+                # Known position metrics
+                if metric_name == "latitude":
+                    return "GPS Latitude"
+                elif metric_name == "longitude":
+                    return "GPS Longitude"
+                elif metric_name == "altitude":
+                    return "GPS Altitude"
+                elif metric_name == "direction":
+                    return "GPS Direction"
+                elif metric_name == "odometer":
+                    return "Odometer"
+                elif metric_name == "speed":
+                    return "Speed"
+                elif metric_name == "gpssq" or metric_name == "gpshdop":
+                    return "GPS Quality"
+                
+                # Generic position metric
+                return metric_name.title()
+            
+            return "Location"
+        
+        elif main_category == "c":  # Charging metrics
+            # Handle specific charging metrics
+            if len(subparts) > 0:
+                metric_name = subparts[-1]  # Last component is the metric
+                
+                # Known charging metrics
+                if metric_name == "charging" or metric_name == "state":
+                    return "Charging"
+                elif metric_name == "mode":
+                    return "Charge Mode"
+                elif metric_name == "power":
+                    return "Charging Power"
+                elif metric_name == "voltage":
+                    return "Charging Voltage"
+                elif metric_name == "current":
+                    return "Charging Current"
+                elif metric_name == "efficiency" or metric_name == "eff" or metric_name == "calc":
+                    if "eff" in subparts[:-1]:
+                        return "Charging Efficiency"
+                    return "Efficiency"
+                elif metric_name == "soc" and "limit" in subparts:
+                    return "Charge Limit"
+                elif metric_name == "time" or metric_name == "duration":
+                    return "Charging Time"
+                elif metric_name == "full" and "duration" in subparts:
+                    return "Charging Time to Full"
+                elif metric_name == "p" and "ac" in subparts:
+                    return "AC Power"
+                
+                # Generic charging metric with hierarchy
+                friendly_name = metric_name.title()
+                hierarchy = subparts[:-1]  # All but the last part
+                if hierarchy:
+                    return f"{friendly_name} {' '.join(part.upper() for part in hierarchy)}"
+                return friendly_name
+            
+            return "Charging"
+        
+        elif main_category == "e":  # Energy/motor/electrical system metrics
+            # Handle specific energy metrics
+            if len(subparts) > 0:
+                metric_name = subparts[-1]  # Last component is the metric
+                
+                # Known energy metrics
+                if metric_name == "consumption" or metric_name == "used":
+                    return "Energy Consumption"
+                elif metric_name == "chgmode" and "hv" in subparts:
+                    return "HV Charging Mode"
+                elif metric_name == "mode":
+                    return "Energy Mode"
+                elif metric_name == "power":
+                    return "Power"
+                
+                # Generic energy metric with hierarchy
+                friendly_name = metric_name.title()
+                hierarchy = subparts[:-1]  # All but the last part
+                if hierarchy:
+                    return f"{friendly_name} {' '.join(part.upper() for part in hierarchy)}"
+                return friendly_name
+            
+            return "Energy"
+        
+        # Generic approach for other categories
+        if subparts:
+            # Use the last component as the main name
+            main_name = subparts[-1].replace("_", " ").title()
+            
+            # Add parent components as uppercase suffixes
+            parent_components = []
+            for part in [main_category] + subparts[:-1]:
+                parent_components.append(part.upper())
+            
+            if parent_components:
+                return f"{main_name} {' '.join(parent_components)}"
+            return main_name
+        
+        # Fall back to just using the main category if no subparts
+        return main_category.title()
         
     async def _async_platforms_loaded(self) -> None:
         """Handle platforms loaded signal."""
