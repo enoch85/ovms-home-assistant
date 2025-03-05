@@ -280,6 +280,14 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_entity_category = None
         self._attr_icon = None
         
+        # Special check for timer mode sensors to avoid numeric conversion issues
+        if "timermode" in self._internal_name.lower() or "timer_mode" in self._internal_name.lower():
+            # For timer mode sensors, explicitly override device class and state class
+            self._attr_device_class = None
+            self._attr_state_class = None
+            self._attr_icon = "mdi:timer-outline"
+            return
+        
         # Try to find matching metric by converting topic to dot notation
         topic_suffix = self._topic
         if self._topic.count('/') >= 3:  # Skip the prefix part
@@ -345,6 +353,14 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Handle special state values for numeric sensors
         if self._requires_numeric_value() and self._is_special_state_value(value):
             return None
+            
+        # Special handling for yes/no values in numeric sensors
+        if self._requires_numeric_value() and isinstance(value, str):
+            # Convert common boolean strings to numeric values
+            if value.lower() in ["no", "off", "false", "disabled"]:
+                return 0
+            if value.lower() in ["yes", "on", "true", "enabled"]:
+                return 1
             
         # Check if this is a comma-separated list of numbers (including negative numbers)
         if isinstance(value, str) and "," in value:
@@ -499,8 +515,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Create unique ID for this cell sensor
             cell_unique_id = f"{self.unique_id}_cell_{i+1}"
             
-            # Create entity ID without explicitly adding vehicle_id
-            entity_id_name = f"{base_name}_cell_{i+1}"
+            # Create entity ID with proper naming for consistency
+            entity_id_name = f"ovms_{vehicle_id}_{base_name}_cell_{i+1}"
             
             # Generate entity ID
             entity_id = async_generate_entity_id(
