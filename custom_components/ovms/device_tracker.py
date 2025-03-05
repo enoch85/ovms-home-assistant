@@ -67,6 +67,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         # Set the entity name that will display in UI to friendly name or name
         self._attr_name = friendly_name or name.replace("_", " ").title()
         self._topic = topic
+
         self._attr_device_info = device_info
         self._attr_source_type = SourceType.GPS
         self._attr_icon = "mdi:car-electric"
