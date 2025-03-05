@@ -566,6 +566,9 @@ class OVMSMQTTClient:
             "unique_id": unique_id,
             "name": prefixed_name,
             "friendly_name": friendly_name,
+            "device_info": self._get_device_info(),
+            "attributes": entity_info["attributes"],
+        }
         
         # If platforms are loaded, send the entity to be created
         # Otherwise, queue it for later
