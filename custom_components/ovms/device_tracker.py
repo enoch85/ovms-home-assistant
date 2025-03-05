@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, LOGGER_NAME
@@ -35,6 +36,7 @@ async def async_setup_entry(
             data["payload"],
             data["device_info"],
             data["attributes"],
+            data.get("friendly_name"),
         )
         
         async_add_entities([tracker])
@@ -45,7 +47,7 @@ async def async_setup_entry(
     )
 
 
-class OVMSDeviceTracker(TrackerEntity):
+class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     """OVMS device tracker."""
     
     def __init__(
@@ -56,12 +58,17 @@ class OVMSDeviceTracker(TrackerEntity):
         initial_payload: str,
         device_info: DeviceInfo,
         attributes: Dict[str, Any],
+        friendly_name: Optional[str] = None,
     ) -> None:
         """Initialize the device tracker."""
         self._attr_unique_id = unique_id
-        self._attr_name = name
+        # Use the entity_id compatible name for internal use
+        self._internal_name = name
+        # Set the entity name that will display in UI to friendly name or name
+        self._attr_name = friendly_name or name.replace("_", " ").title()
         self._topic = topic
-        self._device_info = device_info
+
+        self._attr_device_info = device_info
         self._attr_source_type = SourceType.GPS
         self._attr_icon = "mdi:car-electric"
         self._attr_extra_state_attributes = {

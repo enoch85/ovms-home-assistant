@@ -70,6 +70,7 @@ async def async_setup_entry(
             data["device_info"],
             data["attributes"],
             mqtt_client.async_send_command,
+            data.get("friendly_name"),
         )
         
         async_add_entities([switch])
@@ -92,10 +93,14 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         device_info: DeviceInfo,
         attributes: Dict[str, Any],
         command_function: Callable,
+        friendly_name: Optional[str] = None,
     ) -> None:
         """Initialize the switch."""
         self._attr_unique_id = unique_id
-        self._attr_name = name
+        # Use the entity_id compatible name for internal use
+        self._internal_name = name
+        # Set the entity name that will display in UI to friendly name or name
+        self._attr_name = friendly_name or name.replace("_", " ").title()
         self._topic = topic
         self._attr_device_info = device_info
         self._attr_extra_state_attributes = {
@@ -205,7 +210,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         
         # Check each switch type for a match in the name or topic
         for key, switch_type in SWITCH_TYPES.items():
-            if key in self._attr_name.lower() or key in self._topic.lower():
+            if key in self._internal_name.lower() or key in self._topic.lower():
                 self._attr_icon = switch_type.get("icon")
                 self._attr_entity_category = switch_type.get("category")
                 break
@@ -221,7 +226,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         
         # Otherwise try to determine from the name
         for key, switch_type in SWITCH_TYPES.items():
-            if key in self._attr_name.lower():
+            if key in self._internal_name.lower():
                 if "command" in switch_type:
                     return switch_type["command"]
         
@@ -230,7 +235,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             return self._attr_extra_state_attributes["command"]
             
         # Fall back to the base name
-        command = self._attr_name.lower().replace("command_", "")
+        command = self._internal_name.lower().replace("command_", "")
         return command
     
     def _process_json_payload(self, payload: str) -> None:

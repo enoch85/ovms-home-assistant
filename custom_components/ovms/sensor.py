@@ -25,6 +25,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, LOGGER_NAME
@@ -155,6 +156,7 @@ async def async_setup_entry(
             data["payload"],
             data["device_info"],
             data["attributes"],
+            data.get("friendly_name"),
         )
         
         async_add_entities([sensor])
@@ -165,7 +167,7 @@ async def async_setup_entry(
     )
 
 
-class OVMSSensor(SensorEntity):
+class OVMSSensor(SensorEntity, RestoreEntity):
     """Representation of an OVMS sensor."""
     
     def __init__(
@@ -176,12 +178,15 @@ class OVMSSensor(SensorEntity):
         initial_state: str,
         device_info: DeviceInfo,
         attributes: Dict[str, Any],
+        friendly_name: Optional[str] = None,
     ) -> None:
         """Initialize the sensor."""
         self._attr_unique_id = unique_id
-        self._attr_name = name
+        # Use the entity_id compatible name for internal use
+        self._internal_name = name
+        # Set the entity name that will display in UI to friendly name or name
+        self._attr_name = friendly_name or name.replace("_", " ").title()
         self._topic = topic
-        self._attr_native_value = self._parse_value(initial_state)
         self._attr_device_info = device_info
         self._attr_extra_state_attributes = {
             **attributes,
@@ -191,6 +196,9 @@ class OVMSSensor(SensorEntity):
         
         # Try to determine device class and unit
         self._determine_sensor_type()
+        
+        # Only set native value after attributes are initialized
+        self._attr_native_value = self._parse_value(initial_state)
         
         # Try to extract additional attributes from initial state if it's JSON
         self._process_json_payload(initial_state)
@@ -250,7 +258,7 @@ class OVMSSensor(SensorEntity):
         
         # Check for matching patterns in name
         for key, sensor_type in SENSOR_TYPES.items():
-            if key in self._attr_name.lower() or key in self._topic.lower():
+            if key in self._internal_name.lower() or key in self._topic.lower():
                 self._attr_device_class = sensor_type.get("device_class")
                 self._attr_state_class = sensor_type.get("state_class")
                 self._attr_native_unit_of_measurement = sensor_type.get("unit")
@@ -352,10 +360,16 @@ class OVMSSensor(SensorEntity):
         from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
         
         # Get base information to create child sensors
-        base_name = self.name
+        base_name = self._internal_name  # Use internal name for entity_id
+        # Get readable base name for friendly names from attribute name
+        friendly_base_name = self.name  # Use the friendly name for display
+        
         # Clean "voltage" from the name to avoid duplication
         base_name = base_name.replace("voltage", "").replace("Voltage", "").strip()
         base_name = base_name.rstrip("_").strip()
+        
+        # Get vehicle ID from unique_id for prefixing
+        vehicle_id = self.unique_id.split("_")[0]
         
         self._cell_sensors = []
         registry = {}
@@ -365,17 +379,24 @@ class OVMSSensor(SensorEntity):
             # Create unique ID for this cell sensor
             cell_unique_id = f"{self.unique_id}_cell_{i+1}"
             
+            # Create entity ID with vehicle prefix
+            entity_id_name = f"{vehicle_id}_{base_name}_cell_{i+1}"
+            
             # Generate entity ID
             entity_id = async_generate_entity_id(
                 SENSOR_DOMAIN + ".{}", 
-                f"{base_name}_cell_{i+1}",
+                entity_id_name,
                 hass=self.hass
             )
+            
+            # Create friendly name for cell
+            friendly_name = f"{friendly_base_name} Cell {i+1}"
             
             # Create a sensor configuration to register later
             sensor_config = {
                 "unique_id": cell_unique_id,
-                "name": f"{base_name} Cell {i+1}",
+                "name": entity_id_name,
+                "friendly_name": friendly_name,
                 "state": value,
                 "entity_id": entity_id,
                 "device_info": self.device_info,
@@ -405,13 +426,14 @@ class OVMSSensor(SensorEntity):
         from homeassistant.helpers.entity import Entity
         
         # Create a custom sensor class for the cell sensors
-        class CellVoltageSensor(SensorEntity):
+        class CellVoltageSensor(SensorEntity, RestoreEntity):
             """Representation of a cell voltage sensor."""
             
             def __init__(self, config):
                 """Initialize the sensor."""
                 self._attr_unique_id = config["unique_id"]
-                self._attr_name = config["name"]
+                self._internal_name = config["name"]
+                self._attr_name = config["friendly_name"]
                 self._attr_native_value = config["state"]
                 self._attr_device_info = config["device_info"]
                 self._attr_device_class = config["device_class"]

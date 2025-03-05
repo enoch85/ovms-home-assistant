@@ -1,5 +1,6 @@
 # OVMS MQTT Integration for Home Assistant
 
+
 ![OVMS Banner](https://raw.githubusercontent.com/enoch85/ovms-mqtt-integration/refs/heads/main/assets/ovms-ha-banner.png)
 
 This integration connects your Open Vehicle Monitoring System (OVMS) with Home Assistant via MQTT, automatically creating sensors for all vehicle metrics.
@@ -63,7 +64,7 @@ Before using this integration, you need to configure your OVMS module to publish
    - Topic Prefix: `ovms` (default, can be customized)
    - Enable Auto-Start: YES
 
-![OVMS MQTT Configuration](https://raw.githubusercontent.com/enoch85/ovms-mqtt-integration/refs/heads/main/assets/ovms-mqtt-config.svg)
+![OVMS MQTT Configuration](https://raw.githubusercontent.com/enoch85/ovms-mqtt-integration/main/assets/ovms-mqtt-config.png)
 
 ## Home Assistant Configuration
 
@@ -81,7 +82,7 @@ Before using this integration, you need to configure your OVMS module to publish
 5. The integration will scan for available OVMS vehicles
 6. Select your vehicle ID when prompted
 
-![Setup Flow](https://raw.githubusercontent.com/enoch85/ovms-mqtt-integration/refs/heads/main/assets/setup-flow.svg)
+![Setup Flow](https://raw.githubusercontent.com/enoch85/ovms-mqtt-integration/main/assets/setup-flow.png)
 
 ### Testing Configuration
 
@@ -113,7 +114,8 @@ After setup, entities will be created for your vehicle metrics. These include:
 
 Entities are grouped under a device representing your vehicle, identified by the vehicle ID.
 
-![Entity Overview](https://raw.githubusercontent.com/enoch85/ovms-mqtt-integration/refs/heads/main/assets/entity-overview.svg)
+![Entity Overview](https://raw.githubusercontent.com/enoch85/ovms-mqtt-integration/main/assets/entity-overview.png)
+
 
 ### Services
 

@@ -532,16 +532,25 @@ class OVMSMQTTClient:
         # Store original name for display
         entity_info["original_name"] = entity_info["name"]
         
+        # Get vehicle ID for prefixing
+        vehicle_id = self.config.get(CONF_VEHICLE_ID)
+        
         # Check for existing entities with similar names
         similar_name_count = 0
         for eid in self.entity_registry.values():
-            if eid.startswith(f"{self.config.get(CONF_VEHICLE_ID)}_{entity_info['name']}"):
+            if eid.startswith(f"{vehicle_id}_{entity_info['name']}"):
                 similar_name_count += 1
         
         # If this is a duplicate, append a number
         if similar_name_count > 0:
             entity_info["name"] = f"{entity_info['name']}_{similar_name_count}"
             
+        # Create an entity_id style name with vehicle_id prefix
+        prefixed_name = f"{vehicle_id}_{entity_info['name']}"
+            
+        # Create a friendly name for display in UI
+        friendly_name = entity_info["original_name"].replace("_", " ").title()
+        
         # Use the original vehicle ID for entity unique IDs for consistency
         original_vehicle_id = self.config.get(CONF_ORIGINAL_VEHICLE_ID, self.config.get(CONF_VEHICLE_ID))
         unique_id = f"{original_vehicle_id}_{entity_info['name']}_{topic_hash}"
@@ -555,10 +564,8 @@ class OVMSMQTTClient:
             "payload": payload,
             "entity_type": entity_type,
             "unique_id": unique_id,
-            "name": entity_info["name"],
-            "device_info": self._get_device_info(),
-            "attributes": entity_info.get("attributes", {}),
-        }
+            "name": prefixed_name,
+            "friendly_name": friendly_name,
         
         # If platforms are loaded, send the entity to be created
         # Otherwise, queue it for later
