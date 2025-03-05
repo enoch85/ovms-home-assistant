@@ -225,6 +225,10 @@ Commands use a request-response pattern:
 2. Response is received on: `{prefix}/{username}/{vehicle_id}/client/rr/response/{command_id}`
 3. Unique command IDs ensure responses are matched to requests
 
+You can for example use the developer tool in Home Assistant to update all the metrics at once with this command:
+
+![send update all](/assets/send_update_all.png)
+
 ## Troubleshooting
 
 ### No Entities Created
