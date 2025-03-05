@@ -14,6 +14,12 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, LOGGER_NAME
 from .mqtt import SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
+from .metrics import (
+    METRIC_DEFINITIONS,
+    TOPIC_PATTERNS,
+    get_metric_by_path,
+    get_metric_by_pattern,
+)
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -208,7 +214,36 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         self._attr_icon = None
         self._attr_entity_category = None
         
-        # Check each switch type for a match in the name or topic
+        # Try to find matching metric by converting topic to dot notation
+        topic_suffix = self._topic
+        if self._topic.count('/') >= 3:  # Skip the prefix part
+            parts = self._topic.split('/')
+            # Find where the actual metric path starts
+            for i, part in enumerate(parts):
+                if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
+                    topic_suffix = '/'.join(parts[i:])
+                    break
+        
+        metric_path = topic_suffix.replace("/", ".")
+        
+        # Try exact match first
+        metric_info = get_metric_by_path(metric_path)
+        
+        # If no exact match, try by pattern in name and topic
+        if not metric_info:
+            topic_parts = topic_suffix.split('/')
+            name_parts = self._internal_name.split('_')
+            metric_info = get_metric_by_pattern(topic_parts) or get_metric_by_pattern(name_parts)
+        
+        # Apply metric info if found
+        if metric_info:
+            if "icon" in metric_info:
+                self._attr_icon = metric_info["icon"]
+            if "entity_category" in metric_info:
+                self._attr_entity_category = metric_info["entity_category"]
+            return
+            
+        # If no metric info found, use original method as fallback
         for key, switch_type in SWITCH_TYPES.items():
             if key in self._internal_name.lower() or key in self._topic.lower():
                 self._attr_icon = switch_type.get("icon")
