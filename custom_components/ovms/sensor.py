@@ -500,7 +500,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             cell_unique_id = f"{self.unique_id}_cell_{i+1}"
             
             # Create entity ID with vehicle prefix
-            entity_id_name = f"{vehicle_id}_{base_name}_cell_{i+1}"
+            # FIXED: Removed vehicle_id from the entity name to avoid duplication
+            entity_id_name = f"{base_name}_cell_{i+1}"
             
             # Generate entity ID
             entity_id = async_generate_entity_id(
@@ -577,7 +578,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Add entities to Home Assistant
         if entities:
             try:
-                # Add entities to Home Assistant - FIX: Added await here
+                # Add entities to Home Assistant
                 async_add_entities = self.platform.async_add_entities
                 await async_add_entities(entities)
             except (AttributeError, NameError):
