@@ -763,9 +763,8 @@ class OVMSMQTTClient:
         vehicle_id = self.config.get(CONF_VEHICLE_ID)
         
         return {
-            # Use a prefixed identifier to prevent Home Assistant from adding vehicle_id
-            # to entity IDs, since we already include it in our entity names
-            "identifiers": {(DOMAIN, f"ovms_{vehicle_id}")},
+            # Use a domain-only identifier to prevent Home Assistant from prefixing entities
+            "identifiers": {(DOMAIN,)},
             "name": f"OVMS - {vehicle_id}",
             "manufacturer": "Open Vehicles",
             "model": "OVMS Module",
