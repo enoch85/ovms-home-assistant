@@ -627,8 +627,14 @@ class OVMSMQTTClient:
         temperature_pattern = re.compile(r'temp|temperature', re.IGNORECASE)
         door_pattern = re.compile(r'door|lock|window|trunk|hood', re.IGNORECASE)
         location_pattern = re.compile(r'location|gps|position|coordinates', re.IGNORECASE)
-        switch_pattern = re.compile(r'command|toggle|switch|set', re.IGNORECASE)
+        # Removed 'command' from the switch pattern to avoid creating switches for commands
+        switch_pattern = re.compile(r'toggle|switch|set', re.IGNORECASE)
         binary_pattern = re.compile(r'connected|enabled|active|status|state', re.IGNORECASE)
+        
+        # Check if this is a command/response topic - don't create entities for these
+        if ('client/rr/command' in topic_suffix or 'client/rr/response' in topic_suffix):
+            _LOGGER.debug("Skipping command/response topic: %s", topic)
+            return None, None
         
         # First determine the category from the topic parts
         category = "other"
