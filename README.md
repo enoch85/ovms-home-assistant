@@ -1,4 +1,5 @@
-# OVMS MQTT Integration for Home Assistant
+# OVMS MQTT Integration for Home Assistant 
+![logo](/assets/logo.png)
 
 This integration connects your Open Vehicle Monitoring System (OVMS) with Home Assistant via MQTT, automatically creating sensors for all vehicle metrics.
 
