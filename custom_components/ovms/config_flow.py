@@ -1315,7 +1315,8 @@ class OVMSOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self, config_entry):
         """Initialize options flow."""
-        self.config_entry = config_entry
+        # Fix: Use a different attribute name to avoid deprecation warning
+        self._config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
@@ -1325,29 +1326,29 @@ class OVMSOptionsFlow(config_entries.OptionsFlow):
         options = {
             vol.Required(
                 CONF_QOS,
-                default=self.config_entry.options.get(
-                    CONF_QOS, self.config_entry.data.get(CONF_QOS, DEFAULT_QOS)
+                default=self._config_entry.options.get(
+                    CONF_QOS, self._config_entry.data.get(CONF_QOS, DEFAULT_QOS)
                 ),
             ): vol.In([0, 1, 2]),
             vol.Required(
                 CONF_TOPIC_PREFIX,
-                default=self.config_entry.options.get(
+                default=self._config_entry.options.get(
                     CONF_TOPIC_PREFIX, 
-                    self.config_entry.data.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
+                    self._config_entry.data.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
                 ),
             ): str,
             vol.Optional(
                 CONF_TOPIC_STRUCTURE,
-                default=self.config_entry.options.get(
+                default=self._config_entry.options.get(
                     CONF_TOPIC_STRUCTURE,
-                    self.config_entry.data.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
+                    self._config_entry.data.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
                 ),
             ): vol.In(TOPIC_STRUCTURES),
             vol.Required(
                 CONF_VERIFY_SSL,
-                default=self.config_entry.options.get(
+                default=self._config_entry.options.get(
                     CONF_VERIFY_SSL,
-                    self.config_entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+                    self._config_entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
                 ),
             ): bool,
         }
