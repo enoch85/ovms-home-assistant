@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+          body: |
+            ## Changelog
+            - Automated release for OVMS MQTT Integration
+            - See README for detailed changes and installation instructions
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir release
+          cp -r custom_components/ovms release/
+          cp README.md release/
+          cp LICENSE release/
+
+      - name: Create ZIP
+        run: |
+          cd release
+          zip -r ../ovms-mqtt-integration.zip .
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./ovms-mqtt-integration.zip
+          asset_name: ovms-mqtt-integration.zip
+          asset_content_type: application/zip
