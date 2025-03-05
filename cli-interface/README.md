@@ -2,6 +2,8 @@
 
 The OVMS module provides a command interface accessible through MQTT. To use commands, you need to have the OVMS Server V2 protocol active on your module.
 
+![image](https://github.com/user-attachments/assets/74e3c80e-995b-460e-a6db-c1564bfb358e)
+
 ### Command Requirements
 
 1. **V2 Server Connection**: Commands work through the V2 server protocol. Ensure this is enabled in your OVMS module configuration.
