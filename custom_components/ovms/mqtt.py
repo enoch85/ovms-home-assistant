@@ -570,13 +570,15 @@ class OVMSMQTTClient:
             metric_path = original_name
             metric_parts = original_name.split('_')
         
-        # Create entity ID with proper format: sensor.ovms_{vehicle_id}_{category}_{metric_path}
-        prefixed_name = f"ovms_{vehicle_id}_{entity_category}_{metric_path}".lower()
+        # Create entity ID with proper format: sensor.ovms_{category}_{metric_path}
+        # FIXED: Removed vehicle_id from the entity name to avoid duplication
+        prefixed_name = f"ovms_{entity_category}_{metric_path}".lower()
         
         # Check for existing entities with similar names
         similar_name_count = 0
         for eid in self.entity_registry.values():
-            if eid.startswith(f"ovms_{vehicle_id}_{entity_category}_{metric_path}"):
+            # FIXED: Removed vehicle_id from the check to match the new format
+            if eid.startswith(f"ovms_{entity_category}_{metric_path}"):
                 similar_name_count += 1
         
         # If this is a duplicate, append a number
