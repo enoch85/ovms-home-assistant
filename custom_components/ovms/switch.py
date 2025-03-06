@@ -9,17 +9,16 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, LOGGER_NAME
 from .mqtt import SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
+from .entity import OVMSBaseEntity
 from .metrics import (
-    METRIC_DEFINITIONS,
-    TOPIC_PATTERNS,
     get_metric_by_path,
     get_metric_by_pattern,
 )
+from .helpers.error_handler import OVMSError
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -87,7 +86,7 @@ async def async_setup_entry(
     )
 
 
-class OVMSSwitch(SwitchEntity, RestoreEntity):
+class OVMSSwitch(OVMSBaseEntity, SwitchEntity):
     """Representation of an OVMS switch."""
     
     def __init__(
@@ -102,71 +101,42 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         friendly_name: Optional[str] = None,
     ) -> None:
         """Initialize the switch."""
-        self._attr_unique_id = unique_id
-        # Use the entity_id compatible name for internal use
-        self._internal_name = name
-        # Set the entity name that will display in UI to friendly name or name
-        self._attr_name = friendly_name or name.replace("_", " ").title()
-        self._topic = topic
-        self._attr_device_info = device_info
-        self._attr_extra_state_attributes = {
-            **attributes,
-            "topic": topic,
-            "last_updated": dt_util.utcnow().isoformat(),
-        }
+        super().__init__(unique_id, name, topic, initial_state, device_info, attributes, friendly_name)
         self._command_function = command_function
         
         # Determine switch type and attributes
         self._determine_switch_type()
         
-        # Set initial state
-        self._attr_is_on = self._parse_state(initial_state)
-        
-        # Try to extract additional attributes if it's JSON
-        self._process_json_payload(initial_state)
-        
         # Derive the command to use for this switch
         self._command = self._derive_command()
     
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to updates."""
-        await super().async_added_to_hass()
+    def _process_initial_state(self, initial_state: Any) -> None:
+        """Process the initial state."""
+        self._attr_is_on = self._parse_state(initial_state)
+    
+    async def _handle_restore_state(self, state) -> None:
+        """Handle state restore."""
+        if state.state not in (None, "unavailable", "unknown"):
+            self._attr_is_on = state.state == "on"
+            
+        # Restore attributes if available
+        if state.attributes:
+            # Don't overwrite entity attributes like icon, etc.
+            saved_attributes = {
+                k: v for k, v in state.attributes.items()
+                if k not in ["icon", "entity_category"]
+            }
+            self._attr_extra_state_attributes.update(saved_attributes)
+    
+    def _handle_update(self, payload: str) -> None:
+        """Handle state updates."""
+        self._attr_is_on = self._parse_state(payload)
         
-        # Restore previous state if available
-        if (state := await self.async_get_last_state()) is not None:
-            if state.state not in (None, "unavailable", "unknown"):
-                self._attr_is_on = state.state == "on"
-                
-            # Restore attributes if available
-            if state.attributes:
-                # Don't overwrite entity attributes like icon, etc.
-                saved_attributes = {
-                    k: v for k, v in state.attributes.items()
-                    if k not in ["icon", "entity_category"]
-                }
-                self._attr_extra_state_attributes.update(saved_attributes)
+        # Call parent method to update timestamp and process JSON
+        super()._handle_update(payload)
         
-        @callback
-        def update_state(payload: str) -> None:
-            """Update the switch state."""
-            self._attr_is_on = self._parse_state(payload)
-            
-            # Update timestamp attribute
-            now = dt_util.utcnow()
-            self._attr_extra_state_attributes["last_updated"] = now.isoformat()
-            
-            # Try to extract additional attributes if it's JSON
-            self._process_json_payload(payload)
-            
-            self.async_write_ha_state()
-            
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
-                update_state,
-            )
-        )
+        # Call write_ha_state
+        self.async_write_ha_state()
     
     def _parse_state(self, state: str) -> bool:
         """Parse the state string to a boolean."""
@@ -273,52 +243,40 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         command = self._internal_name.lower().replace("command_", "")
         return command
     
-    def _process_json_payload(self, payload: str) -> None:
-        """Process JSON payload to extract additional attributes."""
-        try:
-            json_data = json.loads(payload)
-            if isinstance(json_data, dict):
-                # Add useful attributes from the data
-                for key, value in json_data.items():
-                    if key not in ["value", "state", "status"] and key not in self._attr_extra_state_attributes:
-                        self._attr_extra_state_attributes[key] = value
-                        
-                # If there's a timestamp in the JSON, use it
-                if "timestamp" in json_data:
-                    self._attr_extra_state_attributes["device_timestamp"] = json_data["timestamp"]
-                    
-        except (ValueError, json.JSONDecodeError):
-            # Not JSON, that's fine
-            pass
-    
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
         _LOGGER.debug("Turning on switch: %s using command: %s", self.name, self._command)
         
-        # Use the command function to send the command
-        result = await self._command_function(
-            command=self._command,
-            parameters="on",
-        )
-        
-        if result["success"]:
-            self._attr_is_on = True
-            self.async_write_ha_state()
-        else:
-            _LOGGER.error("Failed to turn on switch %s: %s", self.name, result.get("error"))
+        try:
+            # Use the command function to send the command
+            result = await self._command_function(
+                command=self._command,
+                parameters="on",
+            )
+            
+            if result["success"]:
+                self._attr_is_on = True
+                self.async_write_ha_state()
+            else:
+                _LOGGER.error("Failed to turn on switch %s: %s", self.name, result.get("error"))
+        except OVMSError as err:
+            _LOGGER.error("Error turning on switch %s: %s", self.name, err)
     
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
         _LOGGER.debug("Turning off switch: %s using command: %s", self.name, self._command)
         
-        # Use the command function to send the command
-        result = await self._command_function(
-            command=self._command,
-            parameters="off",
-        )
-        
-        if result["success"]:
-            self._attr_is_on = False
-            self.async_write_ha_state()
-        else:
-            _LOGGER.error("Failed to turn off switch %s: %s", self.name, result.get("error"))
+        try:
+            # Use the command function to send the command
+            result = await self._command_function(
+                command=self._command,
+                parameters="off",
+            )
+            
+            if result["success"]:
+                self._attr_is_on = False
+                self.async_write_ha_state()
+            else:
+                _LOGGER.error("Failed to turn off switch %s: %s", self.name, result.get("error"))
+        except OVMSError as err:
+            _LOGGER.error("Error turning off switch %s: %s", self.name, err)
