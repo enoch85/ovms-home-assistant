@@ -571,7 +571,7 @@ class OVMSMQTTClient:
             metric_parts = original_name.split('_')
         
         # Create entity ID with proper format: sensor.ovms_{vehicle_id}_{category}_{metric_path}
-        prefixed_name = f"ovms_{vehicle_id}_{entity_category}_{metric_path}".lower()
+        entity_name = f"ovms_{vehicle_id}_{entity_category}_{metric_path}".lower()
         
         # Check for existing entities with similar names
         similar_name_count = 0
@@ -581,7 +581,7 @@ class OVMSMQTTClient:
         
         # If this is a duplicate, append a number
         if similar_name_count > 0:
-            prefixed_name = f"{prefixed_name}_{similar_name_count}"
+            entity_name = f"{entity_name}_{similar_name_count}"
         
         # Create a user-friendly name based on metric path
         friendly_name = self._create_friendly_name(metric_parts, entity_category)
@@ -599,7 +599,7 @@ class OVMSMQTTClient:
             "payload": payload,
             "entity_type": entity_type,
             "unique_id": unique_id,
-            "name": prefixed_name,
+            "name": entity_name,
             "friendly_name": friendly_name,
             "device_info": self._get_device_info(),
             "attributes": entity_info["attributes"],
