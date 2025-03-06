@@ -26,11 +26,11 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
-from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, LOGGER_NAME
 from .mqtt import SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
+from .entity import OVMSBaseEntity
 from .metrics import (
     METRIC_DEFINITIONS,
     TOPIC_PATTERNS,
@@ -39,109 +39,6 @@ from .metrics import (
 )
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
-
-# A mapping of sensor name patterns to device classes and units
-SENSOR_TYPES = {
-    "soc": {
-        "device_class": SensorDeviceClass.BATTERY,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": PERCENTAGE,
-        "icon": "mdi:battery",
-    },
-    "range": {
-        "device_class": SensorDeviceClass.DISTANCE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfLength.KILOMETERS,
-        "icon": "mdi:map-marker-distance",
-    },
-    "temperature": {
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:thermometer",
-    },
-    "power": {
-        "device_class": SensorDeviceClass.POWER,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfPower.WATT,
-        "icon": "mdi:flash",
-    },
-    "current": {
-        "device_class": SensorDeviceClass.CURRENT,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfElectricCurrent.AMPERE,
-        "icon": "mdi:current-ac",
-    },
-    "voltage": {
-        "device_class": SensorDeviceClass.VOLTAGE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfElectricPotential.VOLT,
-        "icon": "mdi:flash",
-    },
-    "energy": {
-        "device_class": SensorDeviceClass.ENERGY,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
-        "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "icon": "mdi:battery-charging",
-    },
-    "speed": {
-        "device_class": SensorDeviceClass.SPEED,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfSpeed.KILOMETERS_PER_HOUR,
-        "icon": "mdi:speedometer",
-    },
-    # Additional icons for EV-specific metrics
-    "odometer": {
-        "icon": "mdi:counter",
-        "state_class": SensorStateClass.TOTAL_INCREASING,
-    },
-    "efficiency": {
-        "icon": "mdi:leaf",
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    "charging_time": {
-        "icon": "mdi:timer",
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    "climate": {
-        "icon": "mdi:fan",
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    "hvac": {
-        "icon": "mdi:air-conditioner", 
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    "motor": {
-        "icon": "mdi:engine",
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    "trip": {
-        "icon": "mdi:map-marker-path",
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    # Diagnostic sensors
-    "status": {
-        "entity_category": EntityCategory.DIAGNOSTIC,
-        "icon": "mdi:information-outline",
-    },
-    "signal": {
-        "entity_category": EntityCategory.DIAGNOSTIC,
-        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
-        "icon": "mdi:signal",
-    },
-    "firmware": {
-        "entity_category": EntityCategory.DIAGNOSTIC,
-        "icon": "mdi:package-up",
-    },
-    "version": {
-        "entity_category": EntityCategory.DIAGNOSTIC,
-        "icon": "mdi:tag-text",
-    },
-    "task": {
-        "entity_category": EntityCategory.DIAGNOSTIC,
-        "icon": "mdi:list-status",
-    }
-}
 
 # List of device classes that should have numeric values
 NUMERIC_DEVICE_CLASSES = [
@@ -155,9 +52,6 @@ NUMERIC_DEVICE_CLASSES = [
     SensorDeviceClass.DISTANCE,
     SensorDeviceClass.SPEED,
 ]
-
-# Special string values that should be converted to None for numeric sensors
-SPECIAL_STATE_VALUES = ["unavailable", "unknown", "none", "", "null", "nan"]
 
 
 async def async_setup_entry(
@@ -190,7 +84,7 @@ async def async_setup_entry(
     )
 
 
-class OVMSSensor(SensorEntity, RestoreEntity):
+class OVMSSensor(OVMSBaseEntity, SensorEntity):
     """Representation of an OVMS sensor."""
     
     def __init__(
@@ -204,73 +98,51 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         friendly_name: Optional[str] = None,
     ) -> None:
         """Initialize the sensor."""
-        self._attr_unique_id = unique_id
-        # Use the entity_id compatible name for internal use
-        self._internal_name = name
-        # Set the entity name that will display in UI to friendly name or name
-        self._attr_name = friendly_name or name.replace("_", " ").title()
-        self._topic = topic
-        self._attr_device_info = device_info
-        self._attr_extra_state_attributes = {
-            **attributes,
-            "topic": topic,
-            "last_updated": dt_util.utcnow().isoformat(),
-        }
+        super().__init__(unique_id, name, topic, initial_state, device_info, attributes, friendly_name)
         
         # Try to determine device class and unit
         self._determine_sensor_type()
-        
-        # Only set native value after attributes are initialized
-        self._attr_native_value = self._parse_value(initial_state)
-        
-        # Try to extract additional attributes from initial state if it's JSON
-        self._process_json_payload(initial_state)
         
         # Initialize cell sensors tracking
         self._cell_sensors_created = False
         self._cell_sensors = []
         self._cell_registry = {}
         self._cell_sensor_entities = {}
+        
+    def _process_initial_state(self, initial_state: Any) -> None:
+        """Process the initial state."""
+        # Only set native value after attributes are initialized
+        self._attr_native_value = self._parse_value(initial_state)
+        
+        # Try to extract additional attributes from initial state if it's JSON
+        self._process_json_payload(initial_state)
     
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to updates."""
-        await super().async_added_to_hass()
+    async def _handle_restore_state(self, state) -> None:
+        """Handle state restore."""
+        if state.state not in ["unavailable", "unknown", None]:
+            # Only restore the state if it's not a special state
+            self._attr_native_value = state.state
+        # Restore attributes if available
+        if state.attributes:
+            # Don't overwrite entity attributes like unit, etc.
+            saved_attributes = {
+                k: v for k, v in state.attributes.items()
+                if k not in ["device_class", "state_class", "unit_of_measurement"]
+            }
+            self._attr_extra_state_attributes.update(saved_attributes)
+    
+    def _handle_update(self, payload: str) -> None:
+        """Handle state updates."""
+        self._attr_native_value = self._parse_value(payload)
         
-        # Restore previous state if available
-        if (state := await self.async_get_last_state()) is not None:
-            if state.state not in ["unavailable", "unknown", None]:
-                # Only restore the state if it's not a special state
-                self._attr_native_value = state.state
-            # Restore attributes if available
-            if state.attributes:
-                # Don't overwrite entity attributes like unit, etc.
-                saved_attributes = {
-                    k: v for k, v in state.attributes.items()
-                    if k not in ["device_class", "state_class", "unit_of_measurement"]
-                }
-                self._attr_extra_state_attributes.update(saved_attributes)
+        # Update timestamp attribute
+        now = dt_util.utcnow()
+        self._attr_extra_state_attributes["last_updated"] = now.isoformat()
         
-        @callback
-        def update_state(payload: str) -> None:
-            """Update the sensor state."""
-            self._attr_native_value = self._parse_value(payload)
-            
-            # Update timestamp attribute
-            now = dt_util.utcnow()
-            self._attr_extra_state_attributes["last_updated"] = now.isoformat()
-            
-            # Try to extract additional attributes from payload if it's JSON
-            self._process_json_payload(payload)
-            
-            self.async_write_ha_state()
-            
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
-                update_state,
-            )
-        )
+        # Try to extract additional attributes from payload if it's JSON
+        self._process_json_payload(payload)
+        
+        self.async_write_ha_state()
     
     def _determine_sensor_type(self) -> None:
         """Determine the sensor type based on metrics definitions."""
@@ -314,17 +186,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 self._attr_entity_category = metric_info["entity_category"]
             if "icon" in metric_info:
                 self._attr_icon = metric_info["icon"]
-            return
-        
-        # If no metric info was found, use the original pattern matching as fallback
-        for key, sensor_type in SENSOR_TYPES.items():
-            if key in self._internal_name.lower() or key in self._topic.lower():
-                self._attr_device_class = sensor_type.get("device_class")
-                self._attr_state_class = sensor_type.get("state_class")
-                self._attr_native_unit_of_measurement = sensor_type.get("unit")
-                self._attr_entity_category = sensor_type.get("entity_category")
-                self._attr_icon = sensor_type.get("icon")
-                break
     
     def _requires_numeric_value(self) -> bool:
         """Check if this sensor requires a numeric value based on its device class."""
@@ -332,16 +193,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_device_class in NUMERIC_DEVICE_CLASSES or
             self._attr_state_class in [SensorStateClass.MEASUREMENT, SensorStateClass.TOTAL, SensorStateClass.TOTAL_INCREASING]
         )
-    
-    def _is_special_state_value(self, value) -> bool:
-        """Check if a value is a special state value that should be converted to None."""
-        if value is None:
-            return True
-        if isinstance(value, str) and value.lower() in SPECIAL_STATE_VALUES:
-            return True
-        return False
         
-    def _parse_value(self, value: str) -> Any:
+    def _parse_value(self, value: Any) -> Any:
         """Parse the value from the payload."""
         # Handle special state values for numeric sensors
         if self._requires_numeric_value() and self._is_special_state_value(value):
@@ -446,29 +299,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 # Otherwise return as string
                 return value
     
-    def _process_json_payload(self, payload: str) -> None:
-        """Process JSON payload to extract additional attributes."""
-        try:
-            json_data = json.loads(payload)
-            if isinstance(json_data, dict):
-                # Add useful attributes from the data
-                for key, value in json_data.items():
-                    if key not in ["value", "state", "data"] and key not in self._attr_extra_state_attributes:
-                        self._attr_extra_state_attributes[key] = value
-                        
-                # If there's a timestamp in the JSON, use it
-                if "timestamp" in json_data:
-                    self._attr_extra_state_attributes["device_timestamp"] = json_data["timestamp"]
-                    
-                # If there's a unit in the JSON, use it for native unit
-                if "unit" in json_data and not self._attr_native_unit_of_measurement:
-                    unit = json_data["unit"]
-                    self._attr_native_unit_of_measurement = unit
-                    
-        except (ValueError, json.JSONDecodeError):
-            # Not JSON, that's fine
-            pass
-    
     def _process_entity_name(self, vehicle_id, metric_path):
         """Process entity name to avoid duplications."""
         # Clean up any instances of vehicle_id in metric_path
@@ -568,34 +398,51 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         from homeassistant.helpers.entity import Entity
         
         # Create a custom sensor class for the cell sensors
-        class CellVoltageSensor(SensorEntity, RestoreEntity):
-            """Representation of a cell voltage sensor."""
+        class CellSensor(OVMSBaseEntity, SensorEntity):
+            """Representation of a cell sensor."""
             
             def __init__(self, config):
                 """Initialize the sensor."""
-                self._attr_unique_id = config["unique_id"]
-                self._internal_name = config["name"]
-                self._attr_name = config["friendly_name"]
-                self._attr_native_value = config["state"]
-                self._attr_device_info = config["device_info"]
+                # Extract base entity attributes from config
+                unique_id = config["unique_id"]
+                name = config["name"]
+                # There's no topic for cell sensors, but we need something unique
+                topic = f"cell_sensor/{unique_id}"  
+                initial_state = config["state"]
+                device_info = config["device_info"]
+                attributes = {
+                    "cell_index": config["cell_index"],
+                    "parent_entity": self.entity_id,
+                }
+                friendly_name = config["friendly_name"]
+                
+                # Initialize base entity
+                super().__init__(
+                    unique_id, name, topic, initial_state, 
+                    device_info, attributes, friendly_name
+                )
+                
+                # Set specific entity attributes
                 self._attr_device_class = config["device_class"]
                 self._attr_state_class = config["state_class"]
                 self._attr_native_unit_of_measurement = config["unit_of_measurement"]
                 self.entity_id = config["entity_id"]
-                self.cell_index = config["cell_index"]
+                
+                # Set native value explicitly since we're not using _process_initial_state
+                self._attr_native_value = initial_state
         
         # Create and add all cell sensors
         entities = []
         for sensor_id, config in self._cell_registry.items():
-            sensor = CellVoltageSensor(config)
+            sensor = CellSensor(config)
             entities.append(sensor)
         
         # Add entities to Home Assistant
         if entities:
             try:
-                # Add entities to Home Assistant - FIX: Added await here
+                # Add entities to Home Assistant
                 async_add_entities = self.platform.async_add_entities
-                await async_add_entities(entities)
+                await self.hass.async_add_executor_job(async_add_entities, entities)
             except (AttributeError, NameError):
                 _LOGGER.warning("Failed to register cell sensors through platform")
                 try:
@@ -626,7 +473,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     
                     # Ensure value is numeric for sensors with device class
                     if hasattr(entity, '_attr_device_class') and entity._attr_device_class in NUMERIC_DEVICE_CLASSES:
-                        if isinstance(value, str) and value.lower() in SPECIAL_STATE_VALUES:
+                        if isinstance(value, str) and value.lower() in ["unavailable", "unknown", "none", "", "null", "nan"]:
                             entity._attr_native_value = None
                         else:
                             try:
