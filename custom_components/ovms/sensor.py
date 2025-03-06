@@ -496,9 +496,26 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         
         # Create a sensor for each cell
         for i, value in enumerate(cell_values):
-            # Create unique ID for this cell sensor
-            cell_unique_id = f"{self.unique_id}_cell_{i+1}"
-            
+            # Create unique ID for this cell sensor - fix for duplicates
+            if vehicle_id.lower() in self.unique_id.lower():
+                # Check if vehicle_id appears in the unique_id more than once
+                parts = self.unique_id.split("_")
+                if parts.count(vehicle_id.lower()) > 1:
+                    # Create a cleaned unique_id without duplicate vehicle_id
+                    cleaned_parts = []
+                    vehicle_id_added = False
+                    for part in parts:
+                        if part.lower() == vehicle_id.lower() and not vehicle_id_added:
+                            cleaned_parts.append(part)
+                            vehicle_id_added = True
+                        elif part.lower() != vehicle_id.lower():
+                            cleaned_parts.append(part)
+                    cell_unique_id = f"{'_'.join(cleaned_parts)}_cell_{i+1}"
+                else:
+                    cell_unique_id = f"{self.unique_id}_cell_{i+1}"
+            else:
+                cell_unique_id = f"{self.unique_id}_cell_{i+1}"
+                
             # Check if vehicle_id is already in the base_name
             if vehicle_id.lower() in base_name.lower():
                 # Remove the vehicle_id from the base_name
