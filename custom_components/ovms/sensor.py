@@ -26,10 +26,16 @@ from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, LOGGER_NAME
-from .mqtt import SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
+from .const import (
+    DOMAIN,
+    LOGGER_NAME,
+    SIGNAL_ADD_ENTITIES,
+    SIGNAL_UPDATE_ENTITY
+)
+
 from .metrics import (
     METRIC_DEFINITIONS,
     TOPIC_PATTERNS,
@@ -179,6 +185,7 @@ async def async_setup_entry(
             data["device_info"],
             data["attributes"],
             data.get("friendly_name"),
+            hass,
         )
         
         async_add_entities([sensor])
@@ -201,6 +208,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         device_info: DeviceInfo,
         attributes: Dict[str, Any],
         friendly_name: Optional[str] = None,
+        hass: Optional[HomeAssistant] = None,
     ) -> None:
         """Initialize the sensor."""
         self._attr_unique_id = unique_id
@@ -215,6 +223,15 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             "topic": topic,
             "last_updated": dt_util.utcnow().isoformat(),
         }
+        self.hass = hass
+        
+        # Explicitly set entity_id - this ensures consistent naming
+        if hass:
+            self.entity_id = async_generate_entity_id(
+                "sensor.{}", 
+                name.lower(),
+                hass=hass
+            )
         
         # Try to determine device class and unit
         self._determine_sensor_type()
@@ -486,47 +503,49 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             
     def _create_cell_sensors(self, cell_values):
         """Create individual sensors for each cell value."""
-        # Only create cell sensors if we haven't done so already
         if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created:
-            # If we already created them, just update their values
             self._update_cell_sensor_values(cell_values)
             return
             
         from homeassistant.helpers.entity import async_generate_entity_id
         from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+            
+        # Extract vehicle_id from unique_id
+        vehicle_id = self.unique_id.split('_')[0]
+        category = self._attr_extra_state_attributes.get("category", "battery")
         
-        # Get base information to create child sensors
-        base_name = self._internal_name  # Use internal name for entity_id
-        # Get readable base name for friendly names from attribute name
-        friendly_base_name = self.name  # Use the friendly name for display
+        # Parse topic to extract just the metric path, similar to mqtt.py
+        topic_suffix = self._topic
+        if self._topic.count('/') >= 3:
+            parts = self._topic.split('/')
+            for i, part in enumerate(parts):
+                if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
+                    topic_suffix = '/'.join(parts[i:])
+                    break
         
-        # Clean "voltage" from the name to avoid duplication
-        base_name = base_name.replace("voltage", "").replace("Voltage", "").strip()
-        base_name = base_name.rstrip("_").strip()
-        
-        # Get vehicle ID from unique_id for prefixing
-        vehicle_id = self.unique_id.split("_")[0]
+        # Convert to metric path just like in mqtt.py
+        topic_parts = topic_suffix.split('/')
+        metric_path = "_".join(topic_parts)
         
         self._cell_sensors = []
         registry = {}
         
-        # Create a sensor for each cell
+        # Create sensors using same pattern as mqtt.py
         for i, value in enumerate(cell_values):
-            # Create unique ID for this cell sensor
-            cell_unique_id = f"{self.unique_id}_cell_{i+1}"
-            
-            # Create entity ID
-            entity_id_name = f"{base_name}_cell_{i+1}"
+            entity_name = f"ovms_{vehicle_id}_{category}_{metric_path}_cell_{i+1}".lower()
             
             # Generate entity ID
             entity_id = async_generate_entity_id(
                 SENSOR_DOMAIN + ".{}", 
-                entity_id_name,
+                entity_name,
                 hass=self.hass
             )
             
             # Create friendly name for cell
-            friendly_name = f"{friendly_base_name} Cell {i+1}"
+            friendly_name = f"{self.name} Cell {i+1}"
+            
+            # Create unique ID
+            cell_unique_id = f"{self.unique_id}_cell_{i+1}"
             
             # Ensure value is numeric for sensors with device class
             if self._requires_numeric_value() and self._is_special_state_value(value):
@@ -537,7 +556,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Create a sensor configuration to register later
             sensor_config = {
                 "unique_id": cell_unique_id,
-                "name": entity_id_name,
+                "name": entity_name,
                 "friendly_name": friendly_name,
                 "state": parsed_value,
                 "entity_id": entity_id,
@@ -546,6 +565,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 "state_class": SensorStateClass.MEASUREMENT,
                 "unit_of_measurement": self.native_unit_of_measurement,
                 "cell_index": i,
+                "topic": self._topic,
             }
             
             # Register this cell sensor
@@ -581,8 +601,14 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 self._attr_device_class = config["device_class"]
                 self._attr_state_class = config["state_class"]
                 self._attr_native_unit_of_measurement = config["unit_of_measurement"]
+                # Explicitly set entity_id for consistent naming
                 self.entity_id = config["entity_id"]
-                self.cell_index = config["cell_index"]
+                # Set attributes
+                self._attr_extra_state_attributes = {
+                    "cell_index": config["cell_index"],
+                    "topic": config.get("topic", ""),
+                    "last_updated": dt_util.utcnow().isoformat(),
+                }
         
         # Create and add all cell sensors
         entities = []
@@ -593,7 +619,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Add entities to Home Assistant
         if entities:
             try:
-                # Add entities to Home Assistant - FIX: Added await here
+                # Add entities to Home Assistant
                 async_add_entities = self.platform.async_add_entities
                 await async_add_entities(entities)
             except (AttributeError, NameError):
@@ -635,6 +661,10 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                                 entity._attr_native_value = None
                     else:
                         entity._attr_native_value = value
+                    
+                    # Update last_updated attribute
+                    if hasattr(entity, '_attr_extra_state_attributes'):
+                        entity._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
                     
                     # Schedule an update for this entity
                     if self.hass:

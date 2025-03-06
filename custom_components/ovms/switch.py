@@ -8,12 +8,18 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
+from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, LOGGER_NAME
-from .mqtt import SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
+from .const import (
+    DOMAIN,
+    LOGGER_NAME,
+    SIGNAL_ADD_ENTITIES,
+    SIGNAL_UPDATE_ENTITY
+)
+
 from .metrics import (
     METRIC_DEFINITIONS,
     TOPIC_PATTERNS,
@@ -76,6 +82,7 @@ async def async_setup_entry(
             data["device_info"],
             data["attributes"],
             mqtt_client.async_send_command,
+            hass,
             data.get("friendly_name"),
         )
         
@@ -99,6 +106,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         device_info: DeviceInfo,
         attributes: Dict[str, Any],
         command_function: Callable,
+        hass: Optional[HomeAssistant] = None,
         friendly_name: Optional[str] = None,
     ) -> None:
         """Initialize the switch."""
@@ -115,6 +123,14 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             "last_updated": dt_util.utcnow().isoformat(),
         }
         self._command_function = command_function
+        
+        # Explicitly set entity_id - this ensures consistent naming
+        if hass:
+            self.entity_id = async_generate_entity_id(
+                "switch.{}", 
+                name.lower(),
+                hass=hass
+            )
         
         # Determine switch type and attributes
         self._determine_switch_type()

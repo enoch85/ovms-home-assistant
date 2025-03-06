@@ -36,6 +36,9 @@ from .const import (
     DEFAULT_COMMAND_RATE_PERIOD,
     DOMAIN,
     LOGGER_NAME,
+    SIGNAL_ADD_ENTITIES,
+    SIGNAL_UPDATE_ENTITY,
+    SIGNAL_PLATFORMS_LOADED,
     TOPIC_TEMPLATE,
     COMMAND_TOPIC_TEMPLATE,
     RESPONSE_TOPIC_TEMPLATE,
@@ -55,12 +58,6 @@ from .metrics import (
 )
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
-
-# Signal constants
-SIGNAL_ADD_ENTITIES = f"{DOMAIN}_add_entities"
-SIGNAL_UPDATE_ENTITY = f"{DOMAIN}_update_entity"
-SIGNAL_PLATFORMS_LOADED = f"{DOMAIN}_platforms_loaded"
-
 
 def ensure_serializable(obj):
     """Ensure objects are JSON serializable.
@@ -571,7 +568,7 @@ class OVMSMQTTClient:
             metric_parts = original_name.split('_')
         
         # Create entity ID with proper format: sensor.ovms_{vehicle_id}_{category}_{metric_path}
-        prefixed_name = f"ovms_{vehicle_id}_{entity_category}_{metric_path}".lower()
+        entity_name = f"ovms_{vehicle_id}_{entity_category}_{metric_path}".lower()
         
         # Check for existing entities with similar names
         similar_name_count = 0
@@ -581,7 +578,7 @@ class OVMSMQTTClient:
         
         # If this is a duplicate, append a number
         if similar_name_count > 0:
-            prefixed_name = f"{prefixed_name}_{similar_name_count}"
+            entity_name = f"{entity_name}_{similar_name_count}"
         
         # Create a user-friendly name based on metric path
         friendly_name = self._create_friendly_name(metric_parts, entity_category)
@@ -599,7 +596,7 @@ class OVMSMQTTClient:
             "payload": payload,
             "entity_type": entity_type,
             "unique_id": unique_id,
-            "name": prefixed_name,
+            "name": entity_name,
             "friendly_name": friendly_name,
             "device_info": self._get_device_info(),
             "attributes": entity_info["attributes"],

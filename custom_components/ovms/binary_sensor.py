@@ -10,11 +10,18 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, LOGGER_NAME
-from .mqtt import SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
+from .const import (
+    DOMAIN,
+    LOGGER_NAME,
+    SIGNAL_ADD_ENTITIES,
+    SIGNAL_UPDATE_ENTITY
+)
+
 from .metrics import (
     METRIC_DEFINITIONS,
     TOPIC_PATTERNS,
@@ -70,6 +77,7 @@ async def async_setup_entry(
             data["payload"],
             data["device_info"],
             data["attributes"],
+            hass,
             data.get("friendly_name"),
         )
         
@@ -92,6 +100,7 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
         initial_state: str,
         device_info: DeviceInfo,
         attributes: Dict[str, Any],
+        hass: Optional[HomeAssistant] = None,
         friendly_name: Optional[str] = None,
     ) -> None:
         """Initialize the binary sensor."""
@@ -103,7 +112,19 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
         self._topic = topic
         self._attr_is_on = self._parse_state(initial_state)
         self._attr_device_info = device_info
-        self._attr_extra_state_attributes = attributes
+        self._attr_extra_state_attributes = {
+            **attributes,
+            "topic": topic,
+            "last_updated": dt_util.utcnow().isoformat(),
+        }
+        
+        # Explicitly set entity_id - this ensures consistent naming
+        if hass:
+            self.entity_id = async_generate_entity_id(
+                "binary_sensor.{}", 
+                name.lower(),
+                hass=hass
+            )
         
         # Try to determine device class
         self._determine_device_class()
@@ -119,7 +140,7 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                 
             # Restore attributes if available
             if state.attributes:
-                # Don't overwrite entity attributes like device_class
+                # Don't overwrite entity attributes like device_class, icon
                 saved_attributes = {
                     k: v for k, v in state.attributes.items()
                     if k not in ["device_class", "icon"]
@@ -130,6 +151,11 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
         def update_state(payload: str) -> None:
             """Update the sensor state."""
             self._attr_is_on = self._parse_state(payload)
+            
+            # Update timestamp attribute
+            now = dt_util.utcnow()
+            self._attr_extra_state_attributes["last_updated"] = now.isoformat()
+            
             self.async_write_ha_state()
             
         self.async_on_remove(

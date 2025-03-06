@@ -8,12 +8,17 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, LOGGER_NAME
-from .mqtt import SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
+from .const import (
+    DOMAIN,
+    LOGGER_NAME,
+    SIGNAL_ADD_ENTITIES,
+    SIGNAL_UPDATE_ENTITY
+)
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -36,6 +41,7 @@ async def async_setup_entry(
             data["payload"],
             data["device_info"],
             data["attributes"],
+            hass,
             data.get("friendly_name"),
         )
         
@@ -58,6 +64,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         initial_payload: str,
         device_info: DeviceInfo,
         attributes: Dict[str, Any],
+        hass: Optional[HomeAssistant] = None,
         friendly_name: Optional[str] = None,
     ) -> None:
         """Initialize the device tracker."""
@@ -76,6 +83,14 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
             "topic": topic,
             "last_updated": dt_util.utcnow().isoformat(),
         }
+        
+        # Explicitly set entity_id - this ensures consistent naming
+        if hass:
+            self.entity_id = async_generate_entity_id(
+                "device_tracker.{}", 
+                name.lower(),
+                hass=hass
+            )
         
         # Set default state attributes
         self._attr_source_type = SourceType.GPS
