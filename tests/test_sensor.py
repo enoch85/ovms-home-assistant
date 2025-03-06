@@ -7,16 +7,18 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import (
-    PERCENTAGE,
-    UnitOfElectricPotential,
-    UnitOfTemperature,
-)
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers.entity import DeviceInfo
 
 from custom_components.ovms.sensor import OVMSSensor, NUMERIC_DEVICE_CLASSES
+from tests.const import (
+    PERCENTAGE,
+    UnitOfElectricPotential,
+    UnitOfTemperature,
+)
 
+# Mark the test module as using fixtures from conftest
+pytestmark = pytest.mark.usefixtures("mock_mqtt")
 
 class TestOVMSSensor:
     """Test the OVMSSensor class."""
