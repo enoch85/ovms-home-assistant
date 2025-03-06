@@ -8,6 +8,7 @@ from homeassistant.const import (
 # For newer Home Assistant versions
 try:
     from homeassistant.const import (
+        PERCENTAGE,
         UnitOfTemperature,
         UnitOfLength,
         UnitOfSpeed,
@@ -16,8 +17,13 @@ try:
         UnitOfEnergy,
         UnitOfPower,
         UnitOfPressure,
+        UnitOfTime,
+        UnitOfVolume,
     )
 except ImportError:
+    # Legacy percentage constant
+    PERCENTAGE = "%"
+    
     # Create compatibility classes for testing
     class UnitOfTemperature:
         CELSIUS = TEMP_CELSIUS
@@ -26,6 +32,7 @@ except ImportError:
     class UnitOfLength:
         KILOMETERS = LENGTH_KILOMETERS
         MILES = LENGTH_MILES
+        METERS = "m"
     
     class UnitOfSpeed:
         KILOMETERS_PER_HOUR = "km/h"
@@ -47,3 +54,15 @@ except ImportError:
     
     class UnitOfPressure:
         KPA = "kPa"
+        
+    class UnitOfTime:
+        SECONDS = "s"
+        MINUTES = "min"
+        HOURS = "h"
+        
+    class UnitOfVolume:
+        LITERS = "L"
+        GALLONS = "gal"
+
+# Home Assistant domain constants
+DOMAIN = "ovms"
