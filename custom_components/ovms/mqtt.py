@@ -602,7 +602,20 @@ class OVMSMQTTClient:
         
         # Use the original vehicle ID for unique IDs for consistency
         original_vehicle_id = self.config.get(CONF_ORIGINAL_VEHICLE_ID, self.config.get(CONF_VEHICLE_ID))
-        unique_id = f"{original_vehicle_id}_{entity_category}_{metric_path}_{topic_hash}"
+        
+        # Before creating unique_id, check for and remove duplicate vehicle_id
+        if original_vehicle_id.lower() in metric_path.lower():
+            # Remove the vehicle_id from the metric_path
+            cleaned_metric_path = metric_path.lower().replace(original_vehicle_id.lower(), "")
+            # Remove any double underscores that might result
+            cleaned_metric_path = cleaned_metric_path.replace("__", "_").strip("_")
+            if cleaned_metric_path:
+                unique_id = f"{original_vehicle_id}_{entity_category}_{cleaned_metric_path}_{topic_hash}"
+            else:
+                unique_id = f"{original_vehicle_id}_{entity_category}_{topic_hash}"
+        else:
+            # Normal case
+            unique_id = f"{original_vehicle_id}_{entity_category}_{metric_path}_{topic_hash}"
         
         # Register this entity
         self.entity_registry[topic] = unique_id
