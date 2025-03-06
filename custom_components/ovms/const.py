@@ -70,6 +70,9 @@ CATEGORY_TRIP = "trip"
 # Signal constants
 SIGNAL_ENTITY_DISCOVERY = f"{DOMAIN}_entity_discovery"
 SIGNAL_TOPIC_UPDATE = f"{DOMAIN}_topic_update"
+SIGNAL_ADD_ENTITIES = f"{DOMAIN}_add_entities"
+SIGNAL_UPDATE_ENTITY = f"{DOMAIN}_update_entity"
+SIGNAL_PLATFORMS_LOADED = f"{DOMAIN}_platforms_loaded"
 
 # Error codes
 ERROR_CANNOT_CONNECT = "cannot_connect"
