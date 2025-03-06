@@ -37,6 +37,11 @@ DEFAULT_VERIFY_SSL = True
 PROTOCOLS = ["mqtt", "mqtts"]
 UNIT_SYSTEMS = ["metric", "imperial"]
 
+# Signal constants
+SIGNAL_ENTITY_DISCOVERY = f"{DOMAIN}_entity_discovery"
+SIGNAL_TOPIC_UPDATE = f"{DOMAIN}_topic_update"
+SIGNAL_UPDATE_ENTITY = f"{DOMAIN}_update_entity"
+
 # Topic structure templates
 TOPIC_STRUCTURES = [
     "{prefix}/{mqtt_username}/{vehicle_id}",  # ovms/username/vehicleid
