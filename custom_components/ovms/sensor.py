@@ -499,13 +499,24 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Create unique ID for this cell sensor
             cell_unique_id = f"{self.unique_id}_cell_{i+1}"
             
-            # Create entity ID with vehicle prefix
-            entity_id_name = f"{vehicle_id}_{base_name}_cell_{i+1}"
+            # Check if vehicle_id is already in the base_name
+            if vehicle_id.lower() in base_name.lower():
+                # Remove the vehicle_id from the base_name
+                cleaned_base_name = base_name.lower().replace(vehicle_id.lower(), "")
+                # Remove any double underscores that might result
+                cleaned_base_name = cleaned_base_name.replace("__", "_").strip("_")
+                if cleaned_base_name:
+                    entity_id_name = f"ovms_{vehicle_id}_{cleaned_base_name}_cell_{i+1}"
+                else:
+                    entity_id_name = f"ovms_{vehicle_id}_cell_{i+1}"
+            else:
+                # Normal case
+                entity_id_name = f"ovms_{vehicle_id}_{base_name}_cell_{i+1}"
             
             # Generate entity ID
             entity_id = async_generate_entity_id(
                 SENSOR_DOMAIN + ".{}", 
-                entity_id_name,
+                entity_id_name.lower(),
                 hass=self.hass
             )
             
