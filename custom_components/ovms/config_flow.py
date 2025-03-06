@@ -1,16 +1,13 @@
 """Config flow for OVMS integration."""
 import asyncio
 import logging
-import ssl
-import socket
-import uuid
-import time
 import re
+import time
+import uuid
 import hashlib
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 import voluptuous as vol
-import paho.mqtt.client as mqtt
 
 from homeassistant import config_entries
 from homeassistant.const import (
@@ -52,6 +49,11 @@ from .const import (
     ERROR_TLS_ERROR,
     ERROR_UNKNOWN,
 )
+from .helpers.mqtt_helper import (
+    test_mqtt_broker,
+    ensure_serializable,
+)
+from .helpers.error_handler import OVMSError
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -67,25 +69,6 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.mqtt_config = {}
         self.debug_info = {}
         self.discovered_topics = set()
-
-    def _ensure_serializable(self, obj):
-        """Convert MQTT objects to serializable types."""
-        if isinstance(obj, dict):
-            return {k: self._ensure_serializable(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [self._ensure_serializable(item) for item in obj]
-        elif isinstance(obj, tuple):
-            return [self._ensure_serializable(item) for item in obj]
-        elif hasattr(obj, '__dict__'):
-            return {k: self._ensure_serializable(v) for k, v in obj.__dict__.items() 
-                    if not k.startswith('_')}
-        elif obj.__class__.__name__ == 'ReasonCodes':
-            try:
-                return [int(code) for code in obj]
-            except:
-                return str(obj)
-        else:
-            return obj
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
@@ -113,7 +96,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 del user_input["Port"]
             
             # Test MQTT connection
-            result = await self._test_mqtt_connection(user_input)
+            result = await test_mqtt_broker(self.hass, user_input)
             
             self.debug_info["broker_setup_end"] = time.time()
             self.debug_info["broker_setup_duration"] = self.debug_info["broker_setup_end"] - self.debug_info["broker_setup_start"]
@@ -124,7 +107,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.debug("MQTT Connection test successful: %s", result.get("details", ""))
                 self.mqtt_config.update(user_input)
                 # Store debug info for later
-                self.mqtt_config["debug_info"] = self._ensure_serializable(self.debug_info)
+                self.mqtt_config["debug_info"] = ensure_serializable(self.debug_info)
                 return await self.async_step_topics()
             else:
                 _LOGGER.error("MQTT Connection test failed: %s", result["message"])
@@ -328,7 +311,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
 
                 # Ensure everything is serializable
-                self.mqtt_config["debug_info"] = self._ensure_serializable(self.debug_info)
+                self.mqtt_config["debug_info"] = ensure_serializable(self.debug_info)
                 
                 title = f"OVMS - {self.mqtt_config[CONF_VEHICLE_ID]}"
                 return self.async_create_entry(
@@ -357,7 +340,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
-    def _extract_vehicle_ids(self, topics, config):
+    def _extract_vehicle_ids(self, topics: Set[str], config: Dict[str, Any]) -> Set[str]:
         """Extract potential vehicle IDs from discovered topics."""
         _LOGGER.debug("Extracting potential vehicle IDs from %d topics", len(topics))
         potential_ids = set()
@@ -409,7 +392,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.debug("Extracted %d potential vehicle IDs: %s", len(potential_ids), potential_ids)
         return potential_ids
 
-    def _format_structure_prefix(self, config):
+    def _format_structure_prefix(self, config: Dict[str, Any]) -> str:
         """Format the topic structure prefix based on the configuration."""
         structure = config.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
         prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
@@ -429,878 +412,139 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.debug("Formatted structure prefix: %s", structure_prefix)
         return structure_prefix
 
-    async def _test_mqtt_connection(self, config):
-        """Test if we can connect to the MQTT broker."""
-        log_prefix = f"MQTT connection test to {config[CONF_HOST]}:{config[CONF_PORT]}"
-        _LOGGER.debug("%s - Starting", log_prefix)
+    async def _discover_topics(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Discover available OVMS topics on the broker."""
+        # Import MQTT client code here to avoid circular imports
+        from .mqtt import OVMSMQTTClient
         
-        # Initialize debug info for this test
-        debug_info = {
-            "host": config[CONF_HOST],
-            "port": config[CONF_PORT],
-            "protocol": config[CONF_PROTOCOL],
-            "has_username": bool(config.get(CONF_USERNAME)),
-            "test_start_time": time.time(),
-        }
+        # Create a temporary MQTT client to discover topics
+        topic_prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
+        discovery_prefix = DISCOVERY_TOPIC.format(prefix=topic_prefix)
         
-        # Generate a random client ID for this connection test
-        client_id = f"ha_ovms_{uuid.uuid4().hex[:8]}"
-        protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
+        # Create a temporary MQTT client
+        temp_client = OVMSMQTTClient(self.hass, config)
         
-        debug_info["mqtt_protocol_version"] = "MQTTv5" if hasattr(mqtt, 'MQTTv5') else "MQTTv311"
-        
-        _LOGGER.debug("%s - Creating client with ID: %s and protocol: %s", 
-                     log_prefix, client_id, debug_info["mqtt_protocol_version"])
-        
-        mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
-        
-        # Set up connection status for debugging
-        connection_status = {"connected": False, "rc": None, "flags": None}
-        
-        # Define callback for debugging
-        def on_connect(client, userdata, flags, rc, properties=None):
-            """Handle connection result."""
-            connection_status["connected"] = (rc == 0)
-            connection_status["rc"] = rc
-            connection_status["flags"] = flags
-            connection_status["timestamp"] = time.time()
-            
-            _LOGGER.debug("%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags)
-            
-        def on_disconnect(client, userdata, rc, properties=None):
-            """Handle disconnection."""
-            connection_status["connected"] = False
-            connection_status["disconnect_rc"] = rc
-            connection_status["disconnect_timestamp"] = time.time()
-            _LOGGER.debug("%s - Disconnected with result code: %s", log_prefix, rc)
-            
-        def on_log(client, userdata, level, buf):
-            """Log MQTT client internal messages."""
-            _LOGGER.debug("%s - MQTT Log: %s", log_prefix, buf)
-            
-        # Configure client callbacks
-        if hasattr(mqtt, 'MQTTv5'):
-            mqttc.on_connect = on_connect
-        else:
-            # For MQTT v3.1.1
-            def on_connect_v311(client, userdata, flags, rc):
-                on_connect(client, userdata, flags, rc, None)
-            mqttc.on_connect = on_connect_v311
-            
-        mqttc.on_disconnect = on_disconnect
-        mqttc.on_log = on_log
-        
-        if CONF_USERNAME in config and config[CONF_USERNAME]:
-            _LOGGER.debug("%s - Setting username and password", log_prefix)
-            mqttc.username_pw_set(
-                username=config[CONF_USERNAME],
-                password=config[CONF_PASSWORD] if CONF_PASSWORD in config else None,
-            )
-            
-        if config[CONF_PORT] == 8883:
-            _LOGGER.debug("%s - Enabling SSL/TLS for port 8883", log_prefix)
-            verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
-            try:
-                # Use executor to avoid blocking the event loop
-                context = await self.hass.async_add_executor_job(ssl.create_default_context)
-                # Allow self-signed certificates if insecure is allowed
-                if not verify_ssl:
-                    _LOGGER.debug("%s - SSL certificate verification disabled (insecure TLS/SSL allowed)", log_prefix)
-                    context.check_hostname = False
-                    context.verify_mode = ssl.CERT_NONE
-                mqttc.tls_set_context(context)
-                debug_info["tls_enabled"] = True
-                debug_info["tls_verify"] = verify_ssl
-            except ssl.SSLError as ssl_err:
-                _LOGGER.error("%s - SSL/TLS setup error: %s", log_prefix, ssl_err)
-                debug_info["ssl_error"] = str(ssl_err)
-                return {
-                    "success": False,
-                    "error_type": ERROR_TLS_ERROR,
-                    "message": f"SSL/TLS Error: {ssl_err}",
-                    "details": f"SSL configuration failed: {ssl_err}",
-                }
-            
-        # Set up connection timeout
-        mqttc.connect_timeout = 5.0
-        debug_info["connect_timeout"] = 5.0
-        
-        try:
-            # DNS resolution check
-            _LOGGER.debug("%s - Resolving hostname", log_prefix)
-            dns_start = time.time()
-            try:
-                socket.gethostbyname(config[CONF_HOST])
-                dns_success = True
-            except socket.gaierror as err:
-                dns_success = False
-                dns_error = str(err)
-            dns_time = time.time() - dns_start
-            
-            debug_info["dns_resolution"] = {
-                "success": dns_success,
-                "time_taken": dns_time,
-            }
-            
-            if not dns_success:
-                _LOGGER.error("%s - DNS resolution failed: %s", log_prefix, dns_error)
-                debug_info["dns_resolution"]["error"] = dns_error
-                return {
-                    "success": False,
-                    "error_type": ERROR_CANNOT_CONNECT,
-                    "message": f"DNS resolution failed: {dns_error}",
-                    "details": f"Could not resolve hostname '{config[CONF_HOST]}': {dns_error}",
-                }
-            
-            # Port check
-            _LOGGER.debug("%s - Checking if port is open", log_prefix)
-            port_check_start = time.time()
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(2)
-            try:
-                port_result = s.connect_ex((config[CONF_HOST], config[CONF_PORT]))
-                port_open = (port_result == 0)
-            except socket.error as err:
-                port_open = False
-                port_error = str(err)
-            finally:
-                s.close()
-            port_check_time = time.time() - port_check_start
-            
-            debug_info["port_check"] = {
-                "success": port_open,
-                "time_taken": port_check_time,
-            }
-            
-            if not port_open:
-                _LOGGER.error("%s - Port check failed, port %d is closed", log_prefix, config[CONF_PORT])
-                debug_info["port_check"]["error"] = f"Port {config[CONF_PORT]} is closed"
-                return {
-                    "success": False,
-                    "error_type": ERROR_CANNOT_CONNECT,
-                    "message": f"Port {config[CONF_PORT]} is closed",
-                    "details": f"Port {config[CONF_PORT]} on host '{config[CONF_HOST]}' is not open.",
-                }
-            
-            # Now try the actual MQTT connection
-            _LOGGER.debug("%s - Connecting to broker", log_prefix)
-            connect_start = time.time()
-            
-            # Connect using the executor to avoid blocking
-            await self.hass.async_add_executor_job(
-                mqttc.connect,
-                config[CONF_HOST],
-                config[CONF_PORT],
-                60,  # Keep alive timeout
-            )
-            
-            # Start the loop in a separate thread
-            mqttc.loop_start()
-            
-            # Wait for connection to establish
-            connected = False
-            for i in range(10):  # Try for up to 5 seconds
-                if connection_status.get("connected"):
-                    connected = True
-                    break
-                if connection_status.get("rc") is not None and connection_status.get("rc") != 0:
-                    # Connection failed with specific error code
-                    break
-                await asyncio.sleep(0.5)
-                _LOGGER.debug("%s - Waiting for connection (%d/10)", log_prefix, i+1)
-                
-            connect_time = time.time() - connect_start
-            debug_info["mqtt_connect"] = {
-                "success": connected,
-                "time_taken": connect_time,
-                "status": self._ensure_serializable(connection_status),
-            }
-            
-            mqttc.loop_stop()
-            
-            if connected:
-                _LOGGER.debug("%s - Connection successful", log_prefix)
-                # Test subscribing to a topic as a further check
-                _LOGGER.debug("%s - Testing topic subscription", log_prefix)
-                sub_result = await self._test_subscription(mqttc, config, client_id)
-                debug_info["subscription_test"] = self._ensure_serializable(sub_result)
-                
-                if not sub_result["success"]:
-                    try:
-                        mqttc.disconnect()
-                    except Exception:
-                        pass
-                    
-                    # Prepare detailed error message
-                    error_details = sub_result.get("details", "Could not subscribe to test topics")
-                    error_topic = sub_result.get("topic", "unknown")
-                    
-                    return {
-                        "success": False,
-                        "error_type": ERROR_TOPIC_ACCESS_DENIED,
-                        "message": f"Topic subscription test failed for {error_topic}",
-                        "details": f"Access denied to the test topic '{error_topic}'. This is likely due to MQTT ACL (Access Control List) restrictions. For EMQX broker, ensure the user has 'Subscribe' permission for '{error_topic}' or 'homeassistant/#' wildcard topic. {error_details}",
-                    }
-                
-                try:
-                    mqttc.disconnect()
-                except Exception:
-                    pass
-                self.debug_info.update(debug_info)
-                return {
-                    "success": True,
-                    "details": "Connection and subscription tests passed successfully",
-                }
-            else:
-                error_message = "Failed to connect"
-                error_type = ERROR_CANNOT_CONNECT
-                details = "Could not establish connection to the MQTT broker"
-                
-                # Check for specific connection issues
-                rc = connection_status.get("rc")
-                if rc is not None:
-                    if rc == 1:
-                        error_message = "Connection refused - incorrect protocol version"
-                    elif rc == 2:
-                        error_message = "Connection refused - invalid client identifier"
-                    elif rc == 3:
-                        error_message = "Connection refused - server unavailable"
-                    elif rc == 4:
-                        error_message = "Connection refused - bad username or password"
-                        error_type = ERROR_INVALID_AUTH
-                        details = "Authentication failed. Please check your username and password."
-                    elif rc == 5:
-                        error_message = "Connection refused - not authorized"
-                        error_type = ERROR_INVALID_AUTH
-                        details = "Not authorized to connect. Check your credentials and broker permissions."
-                        
-                _LOGGER.error("%s - %s (rc=%s)", log_prefix, error_message, rc)
-                debug_info["error"] = {
-                    "message": error_message,
-                    "rc": rc,
-                }
-                
-                self.debug_info.update(debug_info)
-                return {
-                    "success": False,
-                    "error_type": error_type,
-                    "message": error_message,
-                    "details": details,
-                }
-                
-        except socket.timeout:
-            _LOGGER.error("%s - Connection timeout", log_prefix)
-            debug_info["error"] = {
-                "type": "timeout",
-                "message": "Connection timeout",
-            }
-            self.debug_info.update(debug_info)
-            return {
-                "success": False,
-                "error_type": ERROR_TIMEOUT,
-                "message": "Connection timeout",
-                "details": f"Connection to {config[CONF_HOST]}:{config[CONF_PORT]} timed out after {mqttc.connect_timeout} seconds",
-            }
-        except socket.error as err:
-            _LOGGER.error("%s - Connection error: %s", log_prefix, err)
-            debug_info["error"] = {
-                "type": "socket",
-                "message": str(err),
-            }
-            self.debug_info.update(debug_info)
+        # Set up the client
+        if not await temp_client.async_setup():
             return {
                 "success": False,
                 "error_type": ERROR_CANNOT_CONNECT,
-                "message": f"Connection error: {err}",
-                "details": f"Socket error when connecting to {config[CONF_HOST]}:{config[CONF_PORT]}: {err}",
-            }
-        except Exception as ex:  # pylint: disable=broad-except
-            _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
-            error_type = ERROR_UNKNOWN
-            
-            if "failed to connect" in str(ex).lower():
-                error_type = ERROR_CANNOT_CONNECT
-            if "not authorised" in str(ex).lower() or "not authorized" in str(ex).lower():
-                error_type = ERROR_INVALID_AUTH
-                
-            debug_info["error"] = {
-                "type": "unexpected",
-                "message": str(ex),
-            }
-            self.debug_info.update(debug_info)
-            return {
-                "success": False,
-                "error_type": error_type,
-                "message": f"MQTT Error: {ex}",
-                "details": f"An unexpected error occurred: {ex}",
+                "message": "Failed to set up MQTT client for topic discovery"
             }
             
-    async def _test_subscription(self, mqtt_client, config, client_id):
-        """Test if we can subscribe to a topic."""
-        log_prefix = f"MQTT subscription test for {config[CONF_HOST]}:{config[CONF_PORT]}"
-        
-        # Use a test topic that should be accessible to all users
-        test_topic = f"homeassistant/{client_id}/test"
-        qos = config.get(CONF_QOS, DEFAULT_QOS)
-        
-        subscription_result = {"success": False, "topic": test_topic}
-        
-        # Define callback for subscription
-        def on_subscribe(client, userdata, mid, granted_qos, properties=None):
-            """Handle subscription result."""
-            _LOGGER.debug("%s - Subscription callback: mid=%s, qos=%s", log_prefix, mid, granted_qos)
-            subscription_result["success"] = True
-            subscription_result["granted_qos"] = granted_qos
-            
-        # Configure client callback
-        if hasattr(mqtt, 'MQTTv5'):
-            mqtt_client.on_subscribe = on_subscribe
-        else:
-            # For MQTT v3.1.1
-            def on_subscribe_v311(client, userdata, mid, granted_qos):
-                on_subscribe(client, userdata, mid, granted_qos, None)
-            mqtt_client.on_subscribe = on_subscribe_v311
-            
-        try:
-            _LOGGER.debug("%s - Subscribing to test topic: %s", log_prefix, test_topic)
-            result = mqtt_client.subscribe(test_topic, qos=qos)
-            subscription_result["subscribe_result"] = self._ensure_serializable(result)
-            
-            # Check if subscription was initiated successfully
-            if result and result[0] == 0:  # MQTT_ERR_SUCCESS
-                # Successful subscription initiation, assume it worked
-                _LOGGER.debug("%s - Subscription initiated successfully", log_prefix)
-                return {"success": True, "topic": test_topic}
-                
-            # Wait for subscription confirmation via callback
-            subscription_confirmed = False
-            for i in range(5):  # Try for up to 2.5 seconds
-                if subscription_result.get("success"):
-                    subscription_confirmed = True
-                    break
-                await asyncio.sleep(0.5)
-                _LOGGER.debug("%s - Waiting for subscription confirmation (%d/5)", log_prefix, i+1)
-                
-            if subscription_confirmed:
-                _LOGGER.debug("%s - Subscription successful", log_prefix)
-                return {"success": True, "topic": test_topic}
-            else:
-                _LOGGER.error("%s - Subscription not confirmed", log_prefix)
-                return {
-                    "success": False,
-                    "message": "Subscription request was not confirmed by the broker",
-                    "topic": test_topic,
-                    "details": "The MQTT broker did not confirm the subscription request. This may be due to ACL rules on the broker preventing subscription to the test topic, connectivity issues, or broker configuration. Check the broker's logs and access control settings."
-                }
-                
-        except Exception as ex:  # pylint: disable=broad-except
-            _LOGGER.exception("%s - Subscription error: %s", log_prefix, ex)
-            return {
-                "success": False,
-                "message": f"Subscription error: {ex}",
-                "topic": test_topic,
-                "details": f"Error while attempting to subscribe to the test topic '{test_topic}'. Check your broker connection and permissions. Full error: {ex}"
-            }
-
-    async def _discover_topics(self, config):
-        """Discover available OVMS topics on the broker."""
-        from .const import DISCOVERY_TOPIC
-        import socket
-        
-        topic_prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
-        log_prefix = f"Topic discovery for prefix {topic_prefix}"
-        _LOGGER.debug("%s - Starting", log_prefix)
-        
-        # Initialize debug info for this test
-        debug_info = {
-            "topic_prefix": topic_prefix,
-            "test_start_time": time.time(),
-        }
-        
-        # Format the discovery topic
-        discovery_topic = DISCOVERY_TOPIC.format(prefix=topic_prefix)
-        _LOGGER.debug("%s - Using discovery topic: %s", log_prefix, discovery_topic)
-        debug_info["discovery_topic"] = discovery_topic
-        
-        # Set up a test client
-        client_id = f"ha_ovms_discovery_{uuid.uuid4().hex[:8]}"
-        protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
-        
-        _LOGGER.debug("%s - Creating client with ID: %s", log_prefix, client_id)
-        mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
-        
+        # Wait for some time to collect topics
         discovered_topics = set()
-        connection_status = {"connected": False, "rc": None}
-        
-        # Define callbacks
-        def on_connect(client, userdata, flags, rc, properties=None):
-            """Handle connection result."""
-            connection_status["connected"] = (rc == 0)
-            connection_status["rc"] = rc
-            connection_status["timestamp"] = time.time()
-            
-            _LOGGER.debug("%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags)
-            
-            if rc == 0:
-                _LOGGER.debug("%s - Subscribing to discovery topic: %s", log_prefix, discovery_topic)
-                client.subscribe(discovery_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
-            
-        def on_message(client, userdata, msg):
-            """Handle incoming messages."""
-            _LOGGER.debug("%s - Message received on topic: %s (payload len: %d)", 
-                         log_prefix, msg.topic, len(msg.payload))
-            discovered_topics.add(msg.topic)
-            
-        def on_disconnect(client, userdata, rc, properties=None):
-            """Handle disconnection."""
-            connection_status["connected"] = False
-            connection_status["disconnect_rc"] = rc
-            connection_status["disconnect_timestamp"] = time.time()
-            _LOGGER.debug("%s - Disconnected with result code: %s", log_prefix, rc)
-            
-        def on_log(client, userdata, level, buf):
-            """Log MQTT client internal messages."""
-            _LOGGER.debug("%s - MQTT Log: %s", log_prefix, buf)
-            
-        # Configure the client
-        if hasattr(mqtt, 'MQTTv5'):
-            mqttc.on_connect = on_connect
-        else:
-            # For MQTT v3.1.1
-            def on_connect_v311(client, userdata, flags, rc):
-                on_connect(client, userdata, flags, rc, None)
-            mqttc.on_connect = on_connect_v311
-        
-        mqttc.on_message = on_message
-        mqttc.on_disconnect = on_disconnect
-        mqttc.on_log = on_log
-        
-        if CONF_USERNAME in config and config[CONF_USERNAME]:
-            mqttc.username_pw_set(
-                username=config[CONF_USERNAME],
-                password=config[CONF_PASSWORD] if CONF_PASSWORD in config else None,
-            )
-            
-        if config[CONF_PORT] == 8883:
-            verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
-            try:
-                # Use executor to avoid blocking the event loop
-                context = await self.hass.async_add_executor_job(ssl.create_default_context)
-                # Allow self-signed certificates if verification is disabled
-                if not verify_ssl:
-                    context.check_hostname = False
-                    context.verify_mode = ssl.CERT_NONE
-                mqttc.tls_set_context(context)
-                debug_info["tls_enabled"] = True
-                debug_info["tls_verify"] = verify_ssl
-            except ssl.SSLError as ssl_err:
-                _LOGGER.error("%s - SSL/TLS setup error: %s", log_prefix, ssl_err)
-                debug_info["ssl_error"] = str(ssl_err)
-                return {
-                    "success": False,
-                    "error_type": ERROR_TLS_ERROR,
-                    "message": f"SSL/TLS Error: {ssl_err}",
-                }
-            
-        # Set up connection timeout
-        mqttc.connect_timeout = 5.0
-        
         try:
-            # Connect to the broker
-            _LOGGER.debug("%s - Connecting to broker", log_prefix)
-            await self.hass.async_add_executor_job(
-                mqttc.connect,
-                config[CONF_HOST],
-                config[CONF_PORT],
-                60,  # Keep alive timeout
-            )
+            for _ in range(3):  # Try for 3 seconds
+                await asyncio.sleep(1)
+                # Get discovered topics
+                discovered_topics.update(temp_client.discovered_topics)
+                
+            # Shut down the client
+            await temp_client.async_shutdown()
             
-            # Start the loop in a separate thread
-            mqttc.loop_start()
-            
-            # Wait for connection to establish
-            connected = False
-            for i in range(10):  # Try for up to 5 seconds
-                if connection_status.get("connected"):
-                    connected = True
-                    break
-                await asyncio.sleep(0.5)
-                _LOGGER.debug("%s - Waiting for connection (%d/10)", log_prefix, i+1)
-            
-            if not connected:
-                mqttc.loop_stop()
-                rc = connection_status.get("rc", "unknown")
-                _LOGGER.error("%s - Connection failed, rc=%s", log_prefix, rc)
+            if not discovered_topics:
                 return {
                     "success": False,
-                    "error_type": ERROR_CANNOT_CONNECT,
-                    "message": f"Failed to connect to MQTT broker (rc={rc})",
+                    "error_type": ERROR_NO_TOPICS,
+                    "message": "No topics discovered"
                 }
                 
-            # Wait for messages to arrive
-            _LOGGER.debug("%s - Waiting for messages", log_prefix)
-            await asyncio.sleep(3)  # Wait for up to 3 seconds
-                
-            # Try to publish a message to stimulate response
-            try:
-                _LOGGER.debug("%s - Publishing test message to stimulate responses", log_prefix)
-                command_id = uuid.uuid4().hex[:8]
-                # Use a generic discovery command - this will be ignored if the structure is wrong
-                # but might trigger responses from OVMS modules
-                test_topic = f"{topic_prefix}/client/rr/command/{command_id}"
-                test_payload = "stat"
-                
-                mqttc.publish(test_topic, test_payload, qos=config.get(CONF_QOS, DEFAULT_QOS))
-                _LOGGER.debug("%s - Test message published to %s", log_prefix, test_topic)
-                
-                # Wait a bit longer for responses
-                await asyncio.sleep(2)
-            except Exception as ex:
-                _LOGGER.warning("%s - Error publishing test message: %s", log_prefix, ex)
-            
-            # Clean up
-            mqttc.loop_stop()
-            try:
-                mqttc.disconnect()
-            except Exception:
-                pass
-            
-            # Return the results
-            topics_count = len(discovered_topics)
-            
-            debug_info["topics_count"] = topics_count
-            debug_info["topics"] = list(discovered_topics)
-            
-            _LOGGER.debug("%s - Discovery complete. Found %d topics", log_prefix, topics_count)
-            
             return {
                 "success": True,
                 "topics": discovered_topics,
-                "count": topics_count,
+                "count": len(discovered_topics)
             }
             
-        except socket.timeout:
-            _LOGGER.error("%s - Connection timeout", log_prefix)
-            return {
-                "success": False,
-                "error_type": ERROR_TIMEOUT,
-                "message": "Connection timeout during topic discovery",
-            }
-        except socket.error as err:
-            _LOGGER.error("%s - Connection error: %s", log_prefix, err)
-            return {
-                "success": False,
-                "error_type": ERROR_CANNOT_CONNECT,
-                "message": f"Connection error during topic discovery: {err}",
-            }
-        except Exception as ex:  # Catch all exceptions
-            _LOGGER.error("%s - MQTT error: %s", log_prefix, ex)
+        except Exception as ex:
+            # Ensure client is shut down
+            try:
+                await temp_client.async_shutdown()
+            except Exception:
+                pass
+                
+            # Return error
             return {
                 "success": False,
                 "error_type": ERROR_UNKNOWN,
-                "message": f"Error during topic discovery: {ex}",
+                "message": f"Error during topic discovery: {ex}"
             }
 
-    async def _test_topic_availability(self, config):
+    async def _test_topic_availability(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Test if the OVMS topics are available for a specific vehicle."""
-        from .const import TOPIC_TEMPLATE, COMMAND_TOPIC_TEMPLATE, RESPONSE_TOPIC_TEMPLATE
-        import socket
+        # Import MQTT client code here to avoid circular imports
+        from .mqtt import OVMSMQTTClient
         
-        vehicle_id = config[CONF_VEHICLE_ID]
-        log_prefix = f"Topic availability test for vehicle {vehicle_id}"
-        _LOGGER.debug("%s - Starting", log_prefix)
-        
-        # Format the structure prefix for this vehicle
+        # Format the structure prefix with the vehicle ID
         structure_prefix = self._format_structure_prefix(config)
         
-        # Initialize debug info for this test
-        debug_info = {
-            "vehicle_id": vehicle_id,
-            "structure_prefix": structure_prefix,
-            "test_start_time": time.time(),
-        }
+        # Create a temporary MQTT client to test topics
+        temp_client = OVMSMQTTClient(self.hass, config)
+        temp_client.structure_prefix = structure_prefix
         
-        # Format the topic template
-        topic = TOPIC_TEMPLATE.format(structure_prefix=structure_prefix)
-        _LOGGER.debug("%s - Using subscription topic: %s", log_prefix, topic)
-        debug_info["subscription_topic"] = topic
-        
-        # Format command and response topics for request-response test
-        command_id = uuid.uuid4().hex[:8]
-        command_topic = COMMAND_TOPIC_TEMPLATE.format(structure_prefix=structure_prefix, command_id=command_id)
-        response_topic = RESPONSE_TOPIC_TEMPLATE.format(structure_prefix=structure_prefix, command_id=command_id)
-        
-        _LOGGER.debug("%s - Using command topic: %s", log_prefix, command_topic)
-        _LOGGER.debug("%s - Using response topic: %s", log_prefix, response_topic)
-        
-        debug_info["command_topic"] = command_topic
-        debug_info["response_topic"] = response_topic
-        
-        # Set up a test client
-        client_id = f"ha_ovms_topic_test_{uuid.uuid4().hex[:8]}"
-        protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
-        
-        _LOGGER.debug("%s - Creating client with ID: %s", log_prefix, client_id)
-        mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
-        
-        messages_received = []
-        topics_found = set()
-        connection_status = {"connected": False, "rc": None}
-        responses_received = []
-        
-        # Define callbacks
-        def on_connect(client, userdata, flags, rc, properties=None):
-            """Handle connection result."""
-            connection_status["connected"] = (rc == 0)
-            connection_status["rc"] = rc
-            connection_status["timestamp"] = time.time()
-            
-            _LOGGER.debug("%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags)
-            
-            if rc == 0:
-                # Subscribe to general topics and response topic
-                _LOGGER.debug("%s - Subscribing to general topic: %s", log_prefix, topic)
-                client.subscribe(topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
-                
-                _LOGGER.debug("%s - Subscribing to response topic: %s", log_prefix, response_topic)
-                client.subscribe(response_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
-            
-        def on_message(client, userdata, msg):
-            """Handle incoming messages."""
-            _LOGGER.debug("%s - Message received on topic: %s (payload len: %d)", 
-                         log_prefix, msg.topic, len(msg.payload))
-            
-            message_info = {
-                "topic": msg.topic,
-                "payload_length": len(msg.payload),
-                "timestamp": time.time(),
+        # Set up the client
+        if not await temp_client.async_setup():
+            return {
+                "success": False,
+                "error_type": ERROR_CANNOT_CONNECT,
+                "message": "Failed to set up MQTT client for topic testing"
             }
             
-            # Try to decode payload for logging
-            try:
-                payload_str = msg.payload.decode('utf-8')
-                message_info["payload"] = payload_str
-                _LOGGER.debug("%s - Payload: %s", log_prefix, payload_str)
-            except UnicodeDecodeError:
-                message_info["payload"] = "<binary data>"
-                _LOGGER.debug("%s - Payload: <binary data>", log_prefix)
-            
-            # Track all messages
-            messages_received.append(message_info)
-            topics_found.add(msg.topic)
-            
-            # Check if this is a response to our command
-            if msg.topic == response_topic:
-                _LOGGER.debug("%s - Response received for command!", log_prefix)
-                responses_received.append(message_info)
-            
-        def on_disconnect(client, userdata, rc, properties=None):
-            """Handle disconnection."""
-            connection_status["connected"] = False
-            connection_status["disconnect_rc"] = rc
-            connection_status["disconnect_timestamp"] = time.time()
-            _LOGGER.debug("%s - Disconnected with result code: %s", log_prefix, rc)
-            
-        def on_log(client, userdata, level, buf):
-            """Log MQTT client internal messages."""
-            _LOGGER.debug("%s - MQTT Log: %s", log_prefix, buf)
-            
-        # Configure the client
-        if hasattr(mqtt, 'MQTTv5'):
-            mqttc.on_connect = on_connect
-        else:
-            # For MQTT v3.1.1
-            def on_connect_v311(client, userdata, flags, rc):
-                on_connect(client, userdata, flags, rc, None)
-            mqttc.on_connect = on_connect_v311
-        
-        mqttc.on_message = on_message
-        mqttc.on_disconnect = on_disconnect
-        mqttc.on_log = on_log
-        
-        if CONF_USERNAME in config and config[CONF_USERNAME]:
-            mqttc.username_pw_set(
-                username=config[CONF_USERNAME],
-                password=config[CONF_PASSWORD] if CONF_PASSWORD in config else None,
-            )
-            
-        if config[CONF_PROTOCOL] == "mqtts":
-            verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
-            try:
-                # Use executor to avoid blocking the event loop
-                context = await self.hass.async_add_executor_job(ssl.create_default_context)
-                # Allow self-signed certificates if verification is disabled
-                if not verify_ssl:
-                    context.check_hostname = False
-                    context.verify_mode = ssl.CERT_NONE
-                mqttc.tls_set_context(context)
-                debug_info["tls_enabled"] = True
-                debug_info["tls_verify"] = verify_ssl
-            except ssl.SSLError as ssl_err:
-                _LOGGER.error("%s - SSL/TLS setup error: %s", log_prefix, ssl_err)
-                debug_info["ssl_error"] = str(ssl_err)
-                self.debug_info.update(debug_info)
-                return {
-                    "success": False,
-                    "error_type": ERROR_TLS_ERROR,
-                    "message": f"SSL/TLS Error: {ssl_err}",
-                    "details": f"SSL configuration failed: {ssl_err}",
-                }
-            
-        # Set up connection timeout
-        mqttc.connect_timeout = 5.0
-        
+        # Wait for some time to collect messages
+        messages_received = []
         try:
-            # Connect to the broker
-            _LOGGER.debug("%s - Connecting to broker", log_prefix)
-            await self.hass.async_add_executor_job(
-                mqttc.connect,
-                config[CONF_HOST],
-                config[CONF_PORT],
-                60,  # Keep alive timeout
-            )
-            
-            # Start the loop in a separate thread
-            mqttc.loop_start()
-            
-            # Wait for connection to establish
-            connected = False
-            for i in range(10):  # Try for up to 5 seconds
-                if connection_status.get("connected"):
-                    connected = True
-                    break
-                await asyncio.sleep(0.5)
-                _LOGGER.debug("%s - Waiting for connection (%d/10)", log_prefix, i+1)
-            
-            if not connected:
-                mqttc.loop_stop()
-                rc = connection_status.get("rc", "unknown")
-                _LOGGER.error("%s - Connection failed, rc=%s", log_prefix, rc)
-                self.debug_info.update(debug_info)
-                return {
-                    "success": False,
-                    "error_type": ERROR_CANNOT_CONNECT,
-                    "message": f"Failed to connect to MQTT broker (rc={rc})",
-                    "details": f"Could not connect to broker for topic testing. Result code: {rc}",
-                }
-                
-            # Wait for some initial messages
-            _LOGGER.debug("%s - Waiting for initial messages", log_prefix)
-            for i in range(5):  # Wait for up to 2.5 seconds
+            for _ in range(5):  # Try for 5 seconds
+                await asyncio.sleep(1)
+                # Get received messages
+                messages_received = list(temp_client.topic_cache.keys())
                 if messages_received:
                     break
-                _LOGGER.debug("%s - No messages yet (%d/5)", log_prefix, i+1)
-                await asyncio.sleep(0.5)
-                
-            # Send a command to test request-response
-            _LOGGER.debug("%s - Sending test command to: %s", log_prefix, command_topic)
-            
-            try:
-                # Use 'stat' command which should work with OVMS
-                mqttc.publish(command_topic, "stat", qos=config.get(CONF_QOS, DEFAULT_QOS))
-                
-                # Wait for a response
-                _LOGGER.debug("%s - Waiting for command response", log_prefix)
-                for i in range(10):  # Wait for up to 5 seconds
-                    if responses_received:
-                        break
-                    _LOGGER.debug("%s - No response yet (%d/10)", log_prefix, i+1)
-                    await asyncio.sleep(0.5)
                     
-                if responses_received:
-                    _LOGGER.debug("%s - Command response received!", log_prefix)
-                else:
-                    _LOGGER.debug("%s - No command response received", log_prefix)
-            except Exception as ex:
-                _LOGGER.warning("%s - Error sending command: %s", log_prefix, ex)
-                
-            # Wait a bit longer for more messages to arrive
+            # Try to send a command to stimulate responses
+            command_id = uuid.uuid4().hex[:8]
+            test_result = await temp_client.async_send_command("stat", "", command_id, timeout=3)
+            
+            # Wait a bit more for responses
+            await asyncio.sleep(2)
+            
+            # Update messages received
+            messages_received = list(temp_client.topic_cache.keys())
+            
+            # Shut down the client
+            await temp_client.async_shutdown()
+            
+            # Even if we didn't receive messages, consider it a success with a warning
             if not messages_received:
-                _LOGGER.debug("%s - No messages received, waiting longer", log_prefix)
-                await asyncio.sleep(3)
-            
-            # Clean up
-            mqttc.loop_stop()
-            try:
-                mqttc.disconnect()
-            except Exception:
-                pass
-            
-            # Check if we received any messages
-            messages_count = len(messages_received)
-            topics_count = len(topics_found)
-            
-            debug_info["messages_received"] = messages_count
-            debug_info["topics_found"] = topics_count
-            debug_info["topics_list"] = list(topics_found)
-            debug_info["messages"] = self._ensure_serializable(messages_received)
-            debug_info["responses_received"] = len(responses_received)
-            
-            _LOGGER.debug("%s - Test complete. Messages: %d, Topics: %d, Responses: %d", 
-                         log_prefix, messages_count, topics_count, len(responses_received))
-            
-            # Even if we didn't receive messages, we'll consider it a success with a warning
-            # since MQTT topics might not have data immediately
-            if messages_count == 0:
-                _LOGGER.warning("%s - No messages received during test", log_prefix)
+                _LOGGER.warning("No messages received during topic test for vehicle %s", config[CONF_VEHICLE_ID])
                 
-                details = (
-                    "No OVMS messages were detected during the test. This could be normal if "
-                    "your vehicle is not actively publishing data. The integration will "
-                    "continue to monitor for messages."
-                )
-                
-                self.debug_info.update(debug_info)
                 return {
                     "success": True,
                     "message": "No messages received, but connection was successful",
-                    "details": details,
+                    "details": (
+                        "No OVMS messages were detected during the test. This could be normal if "
+                        "your vehicle is not actively publishing data. The integration will "
+                        "continue to monitor for messages."
+                    ),
                 }
-            
-            self.debug_info.update(debug_info)
+                
             return {
                 "success": True,
-                "details": f"Found {messages_count} messages on {topics_count} topics",
+                "details": f"Found {len(messages_received)} messages",
+                "message_count": len(messages_received)
             }
             
-        except socket.timeout:
-            _LOGGER.error("%s - Connection timeout", log_prefix)
-            debug_info["error"] = {
-                "type": "timeout",
-                "message": "Connection timeout",
-            }
-            self.debug_info.update(debug_info)
-            return {
-                "success": False,
-                "error_type": ERROR_TIMEOUT,
-                "message": "Connection timeout",
-                "details": f"Connection to MQTT broker timed out during topic testing",
-            }
-        except socket.error as err:
-            _LOGGER.error("%s - Connection error: %s", log_prefix, err)
-            debug_info["error"] = {
-                "type": "socket",
-                "message": str(err),
-            }
-            self.debug_info.update(debug_info)
-            return {
-                "success": False,
-                "error_type": ERROR_CANNOT_CONNECT,
-                "message": f"Connection error: {err}",
-                "details": f"Socket error during topic testing: {err}",
-            }
-        except Exception as ex:  # Catch all exceptions
-            _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
-            debug_info["error"] = {
-                "type": "unexpected",
-                "message": str(ex),
-            }
-            self.debug_info.update(debug_info)
+        except Exception as ex:
+            # Ensure client is shut down
+            try:
+                await temp_client.async_shutdown()
+            except Exception:
+                pass
+                
+            # Return error
             return {
                 "success": False,
                 "error_type": ERROR_UNKNOWN,
-                "message": f"Unexpected error: {ex}",
-                "details": f"An unexpected error occurred during topic testing: {ex}",
+                "message": f"Error during topic testing: {ex}"
             }
 
     @staticmethod
@@ -1315,7 +559,6 @@ class OVMSOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self, config_entry):
         """Initialize options flow."""
-        # Fix: Use a different attribute name to avoid deprecation warning
         self._config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
