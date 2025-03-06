@@ -518,20 +518,7 @@ class OVMSMQTTClient:
                 del self.pending_commands[command_id]
         else:
             _LOGGER.debug("No pending command found for ID: %s", command_id)
-    
-    def _process_entity_name(self, vehicle_id, metric_path):
-        """Process entity name to avoid duplications."""
-        # Clean up any instances of vehicle_id in metric_path
-        if vehicle_id.lower() in metric_path.lower():
-            cleaned_path = re.sub(
-                f"(?i){re.escape(vehicle_id)}_*", 
-                "", 
-                metric_path
-            ).strip("_")
-            return f"ovms_{vehicle_id}_{cleaned_path}" if cleaned_path else f"ovms_{vehicle_id}"
-        else:
-            return f"ovms_{vehicle_id}_{metric_path}"
-
+                
     async def _async_add_entity_for_topic(self, topic, payload) -> None:
         """Add a new entity for a discovered topic."""
         # Extract the entity type and name from the topic
@@ -583,13 +570,13 @@ class OVMSMQTTClient:
             metric_path = original_name
             metric_parts = original_name.split('_')
         
-        # Use helper method to create entity name without duplications
-        prefixed_name = self._process_entity_name(vehicle_id, metric_path).lower()
+        # Create entity ID with proper format: sensor.ovms_{vehicle_id}_{category}_{metric_path}
+        prefixed_name = f"ovms_{vehicle_id}_{entity_category}_{metric_path}".lower()
         
         # Check for existing entities with similar names
         similar_name_count = 0
         for eid in self.entity_registry.values():
-            if eid.startswith(prefixed_name):
+            if eid.startswith(f"ovms_{vehicle_id}_{entity_category}_{metric_path}"):
                 similar_name_count += 1
         
         # If this is a duplicate, append a number
@@ -601,9 +588,7 @@ class OVMSMQTTClient:
         
         # Use the original vehicle ID for unique IDs for consistency
         original_vehicle_id = self.config.get(CONF_ORIGINAL_VEHICLE_ID, self.config.get(CONF_VEHICLE_ID))
-        
-        # Also use helper method to create unique ID without duplications
-        unique_id = self._process_entity_name(original_vehicle_id, f"{entity_category}_{metric_path}_{topic_hash}")
+        unique_id = f"{original_vehicle_id}_{entity_category}_{metric_path}_{topic_hash}"
         
         # Register this entity
         self.entity_registry[topic] = unique_id
