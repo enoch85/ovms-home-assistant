@@ -7,8 +7,14 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .const import DOMAIN, LOGGER_NAME, CONFIG_VERSION
-from .mqtt import OVMSMQTTClient, SIGNAL_PLATFORMS_LOADED
+from .const import (
+    DOMAIN,
+    LOGGER_NAME,
+    CONFIG_VERSION,
+    SIGNAL_PLATFORMS_LOADED
+)
+
+from .mqtt import OVMSMQTTClient
 from .services import async_setup_services, async_unload_services
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
