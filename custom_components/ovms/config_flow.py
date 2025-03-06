@@ -176,8 +176,8 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if user_input[CONF_TOPIC_STRUCTURE] == "custom":
                 return await self.async_step_custom_topic()
 
-            # Otherwise continue to topic discovery
-            return await self.async_step_topic_discovery()
+            # Otherwise continue to vehicle_id setup
+            return await self.async_step_vehicle()
 
         # Build the schema with default MQTT username set to broker username
         data_schema = vol.Schema({
@@ -214,7 +214,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         mqtt_username="test"
                     )
                     self.mqtt_config[CONF_TOPIC_STRUCTURE] = custom_structure
-                    return await self.async_step_topic_discovery()
+                    return await self.async_step_vehicle()
                 except KeyError as ex:
                     errors["custom_structure"] = "invalid_placeholder"
                     _LOGGER.error("Invalid placeholder in custom structure: %s", ex)
