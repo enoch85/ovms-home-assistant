@@ -11,13 +11,11 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import DOMAIN, LOGGER_NAME
 from .mqtt import SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
+from .entity import OVMSBaseEntity
 from .metrics import (
-    METRIC_DEFINITIONS,
-    TOPIC_PATTERNS,
     BINARY_METRICS,
     get_metric_by_path,
     get_metric_by_pattern,
@@ -51,6 +49,7 @@ BINARY_SENSOR_TYPES = {
     }
 }
 
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -81,7 +80,7 @@ async def async_setup_entry(
     )
 
 
-class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
+class OVMSBinarySensor(OVMSBaseEntity, BinarySensorEntity):
     """Representation of an OVMS binary sensor."""
     
     def __init__(
@@ -95,50 +94,38 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
         friendly_name: Optional[str] = None,
     ) -> None:
         """Initialize the binary sensor."""
-        self._attr_unique_id = unique_id
-        # Use the entity_id compatible name for internal use
-        self._internal_name = name
-        # Set the entity name that will display in UI to friendly name or name
-        self._attr_name = friendly_name or name.replace("_", " ").title()
-        self._topic = topic
-        self._attr_is_on = self._parse_state(initial_state)
-        self._attr_device_info = device_info
-        self._attr_extra_state_attributes = attributes
+        super().__init__(unique_id, name, topic, initial_state, device_info, attributes, friendly_name)
         
         # Try to determine device class
         self._determine_device_class()
     
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to updates."""
-        await super().async_added_to_hass()
-        
-        # Restore previous state if available
-        if (state := await self.async_get_last_state()) is not None:
-            if state.state not in (None, "unavailable", "unknown"):
-                self._attr_is_on = state.state == "on"
-                
-            # Restore attributes if available
-            if state.attributes:
-                # Don't overwrite entity attributes like device_class
-                saved_attributes = {
-                    k: v for k, v in state.attributes.items()
-                    if k not in ["device_class", "icon"]
-                }
-                self._attr_extra_state_attributes.update(saved_attributes)
-                
-        @callback
-        def update_state(payload: str) -> None:
-            """Update the sensor state."""
-            self._attr_is_on = self._parse_state(payload)
-            self.async_write_ha_state()
+    def _process_initial_state(self, initial_state: Any) -> None:
+        """Process the initial state."""
+        self._attr_is_on = self._parse_state(initial_state)
+    
+    async def _handle_restore_state(self, state) -> None:
+        """Handle state restore."""
+        if state.state not in (None, "unavailable", "unknown"):
+            self._attr_is_on = state.state == "on"
             
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
-                update_state,
-            )
-        )
+        # Restore attributes if available
+        if state.attributes:
+            # Don't overwrite entity attributes like device_class, icon
+            saved_attributes = {
+                k: v for k, v in state.attributes.items()
+                if k not in ["device_class", "icon"]
+            }
+            self._attr_extra_state_attributes.update(saved_attributes)
+    
+    def _handle_update(self, payload: str) -> None:
+        """Handle state updates."""
+        self._attr_is_on = self._parse_state(payload)
+        
+        # Call parent method to update timestamp and process JSON
+        super()._handle_update(payload)
+        
+        # Call write_ha_state
+        self.async_write_ha_state()
     
     def _parse_state(self, state: str) -> bool:
         """Parse the state string to a boolean."""
