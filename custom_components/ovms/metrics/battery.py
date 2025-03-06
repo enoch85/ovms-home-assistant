@@ -13,7 +13,9 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfLength,
     UnitOfPower,
+    UnitOfSpeed,
     UnitOfTemperature,
+    UnitOfTime,
 )
 
 # Category
