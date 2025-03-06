@@ -503,28 +503,35 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             
     def _create_cell_sensors(self, cell_values):
         """Create individual sensors for each cell value."""
-        # Only create cell sensors if we haven't done so already
         if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created:
-            # If we already created them, just update their values
             self._update_cell_sensor_values(cell_values)
             return
             
         from homeassistant.helpers.entity import async_generate_entity_id
         from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
-        
-        # Extract useful data from parent sensor
+            
+        # Extract vehicle_id from unique_id
         vehicle_id = self.unique_id.split('_')[0]
         category = self._attr_extra_state_attributes.get("category", "battery")
         
-        # Get base information for metric path
-        metric_path = self._internal_name.lower().replace("voltage", "").replace("temperature", "").strip("_")
+        # Parse topic to extract just the metric path, similar to mqtt.py
+        topic_suffix = self._topic
+        if self._topic.count('/') >= 3:
+            parts = self._topic.split('/')
+            for i, part in enumerate(parts):
+                if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
+                    topic_suffix = '/'.join(parts[i:])
+                    break
+        
+        # Convert to metric path just like in mqtt.py
+        topic_parts = topic_suffix.split('/')
+        metric_path = "_".join(topic_parts)
         
         self._cell_sensors = []
         registry = {}
         
-        # Create a sensor for each cell
+        # Create sensors using same pattern as mqtt.py
         for i, value in enumerate(cell_values):
-            # Create standardized entity name
             entity_name = f"ovms_{vehicle_id}_{category}_{metric_path}_cell_{i+1}".lower()
             
             # Generate entity ID
