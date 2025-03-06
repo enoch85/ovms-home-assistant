@@ -56,12 +56,6 @@ from .metrics import (
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
-# Signal constants
-SIGNAL_ADD_ENTITIES = f"{DOMAIN}_add_entities"
-SIGNAL_UPDATE_ENTITY = f"{DOMAIN}_update_entity"
-SIGNAL_PLATFORMS_LOADED = f"{DOMAIN}_platforms_loaded"
-
-
 def ensure_serializable(obj):
     """Ensure objects are JSON serializable.
     
