@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
       - name: Checkout repository
@@ -32,15 +32,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest pytest-cov
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install -e .
-
+          
       - name: Install Home Assistant test dependencies
         run: |
           pip install homeassistant pytest-homeassistant-custom-component
 
       - name: Run tests
         run: |
-          pytest tests/ --cov=custom_components/ovms
+          python -m pytest tests/ --cov=custom_components/ovms
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v3
