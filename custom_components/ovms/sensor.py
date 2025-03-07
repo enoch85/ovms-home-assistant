@@ -374,8 +374,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         
         # Explicitly set entity_id - this ensures consistent naming
         if hass:
-            entity_id = f"sensor.{name.lower()}"
-            
             self.entity_id = async_generate_entity_id(  
                 "sensor.{}", name.lower(),
                 hass=hass,
@@ -668,18 +666,19 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     topic_suffix = '/'.join(parts[i:])
                     break
         
+        # Convert to metric path just like in mqtt.py
+        topic_parts = topic_suffix.split('/')
+        metric_path = "_".join(topic_parts)
+        
         self._cell_sensors = []
         sensor_configs = []
         
-        # Create a metric path identifier for the cell sensor names
-        metric_path = topic_suffix.replace("/", "_")
-        
         # Create sensors using same pattern as mqtt.py
         for i, value in enumerate(cell_values):
-            # Make unique entity name that includes the parent metric path
+            # Generate unique entity name that includes the parent metric path to prevent collisions
             entity_name = f"ovms_{vehicle_id}_{category}_{metric_path}_cell_{i+1}".lower()
             
-            # Generate unique ID that includes the topic hash to prevent collisions
+            # Generate unique ID using hash
             cell_unique_id = f"{vehicle_id}_{category}_{topic_hash}_cell_{i+1}"
             
             # Create friendly name for cell
