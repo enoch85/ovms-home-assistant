@@ -226,6 +226,13 @@ METRIC_DEFINITIONS = {
         "category": CATEGORY_SYSTEM,
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
+    "m.version": {
+        "name": "Firmware Version",
+        "description": "Firmware version",
+        "icon": "mdi:package-up",
+        "category": CATEGORY_SYSTEM,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
     # 12V Battery metrics
     "v.b.12v.current": {
         "name": "12V Battery Current",
