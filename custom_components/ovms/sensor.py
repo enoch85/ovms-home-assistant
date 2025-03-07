@@ -1,6 +1,7 @@
 """Support for OVMS sensors."""
 import logging
 import json
+import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional, List
 
@@ -172,23 +173,32 @@ async def async_setup_entry(
     @callback
     def async_add_sensor(data: Dict[str, Any]) -> None:
         """Add sensor based on discovery data."""
-        if data["entity_type"] != "sensor":
+        if not data or not isinstance(data, dict):
+            _LOGGER.warning("Invalid entity data received: %s", data)
             return
             
-        _LOGGER.info("Adding sensor: %s", data["name"])
+        entity_type = data.get("entity_type")
+        if not entity_type or entity_type != "sensor":
+            _LOGGER.debug("Skipping non-sensor entity: %s", entity_type)
+            return
+            
+        _LOGGER.info("Adding sensor: %s", data.get("name", "unknown"))
         
-        sensor = OVMSSensor(
-            data["unique_id"],
-            data["name"],
-            data["topic"],
-            data["payload"],
-            data["device_info"],
-            data["attributes"],
-            data.get("friendly_name"),
-            hass,
-        )
-        
-        async_add_entities([sensor])
+        try:
+            sensor = OVMSSensor(
+                data.get("unique_id", str(uuid.uuid4())),
+                data.get("name", "unknown"),
+                data.get("topic", ""),
+                data.get("payload", ""),
+                data.get("device_info", {}),
+                data.get("attributes", {}),
+                data.get("friendly_name"),
+                hass,
+            )
+            
+            async_add_entities([sensor])
+        except Exception as e:
+            _LOGGER.error("Error creating sensor: %s", e)
     
     # Subscribe to discovery events
     entry.async_on_unload(
@@ -217,7 +227,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Set the entity name that will display in UI to friendly name or name
         self._attr_name = friendly_name or name.replace("_", " ").title()
         self._topic = topic
-        self._attr_device_info = device_info
+        self._attr_device_info = device_info or {}
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
@@ -227,10 +237,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         
         # Explicitly set entity_id - this ensures consistent naming
         if hass:
-            self.entity_id = async_generate_entity_id(
-                "sensor.{}", 
-                name.lower(),
-                hass=hass
+            entity_id = f"sensor.{name.lower()}"
+            _LOGGER.debug("Generated entity_id: %s", entity_id)
+            
+            self.entity_id = async_generate_entity_id(  
+                "sensor.{}", name.lower(),
+                hass=hass,
             )
         
         # Try to determine device class and unit
@@ -439,7 +451,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             if isinstance(json_val, (int, float)):
                 return json_val
             
-            if isinstance(json_val, str):
+            if isinstance(json_val, str
+                          
                 # Handle special string values
                 if self._is_special_state_value(json_val):
                     return None
