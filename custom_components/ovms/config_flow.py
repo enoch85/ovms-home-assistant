@@ -7,8 +7,7 @@ import uuid
 import time
 import re
 import hashlib
-from typing import Any, Dict, Optional, Callable, Tuple
-from contextlib import contextmanager
+from typing import Any, Dict, Optional
 
 import voluptuous as vol
 import paho.mqtt.client as mqtt
@@ -169,6 +168,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             self.mqtt_config.update(user_input)
+
             _LOGGER.debug("Topic structure configured: %s", user_input)
             self.debug_info["topic_structure"] = user_input[CONF_TOPIC_STRUCTURE]
 
@@ -176,7 +176,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if user_input[CONF_TOPIC_STRUCTURE] == "custom":
                 return await self.async_step_custom_topic()
 
-            # Automatically go to topic discovery
+            # Otherwise continue to topic discovery
             return await self.async_step_topic_discovery()
 
         # Build the schema with default MQTT username set to broker username
@@ -214,11 +214,11 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         mqtt_username="test"
                     )
                     self.mqtt_config[CONF_TOPIC_STRUCTURE] = custom_structure
-                    # Go to topic discovery instead of directly to vehicle
                     return await self.async_step_topic_discovery()
                 except KeyError as ex:
                     errors["custom_structure"] = "invalid_placeholder"
                     _LOGGER.error("Invalid placeholder in custom structure: %s", ex)
+
                 except ValueError as ex:
                     errors["custom_structure"] = "invalid_format"
                     _LOGGER.error("Invalid format in custom structure: %s", ex)
@@ -239,8 +239,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_topic_discovery(self, user_input=None):
         """Discover available topics on the broker."""
-        # Skip user input handling - we'll automatically discover and proceed
-        
+        errors = {}
+
+        if user_input is not None:
+            self.mqtt_config.update(user_input)
+            return await self.async_step_vehicle()
+
         # Discover topics using the broad wildcard
         _LOGGER.debug("Starting topic discovery")
         discovery_result = await self._discover_topics(self.mqtt_config)
@@ -252,9 +256,37 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Extract potential vehicle IDs from discovered topics
             potential_vehicle_ids = self._extract_vehicle_ids(self.discovered_topics, self.mqtt_config)
             self.debug_info["potential_vehicle_ids"] = list(potential_vehicle_ids)
-        
-        # Proceed to vehicle step regardless of discovery result
-        return await self.async_step_vehicle()
+
+            # Create a schema with the discovered info
+            data_schema = vol.Schema({
+                vol.Required("confirm_discovery", default=True): bool,
+            })
+
+            return self.async_show_form(
+                step_id="topic_discovery",
+                data_schema=data_schema,
+                errors=errors,
+                description_placeholders={
+                    "topic_count": str(len(self.discovered_topics)),
+                    "sample_topics": ", ".join(list(self.discovered_topics)[:5]),
+                    "potential_vehicle_ids": ", ".join(potential_vehicle_ids) if potential_vehicle_ids else "None found",
+                },
+            )
+        else:
+            errors["base"] = discovery_result["error_type"]
+            # Create an empty schema to show error
+            data_schema = vol.Schema({
+                vol.Required("retry_discovery", default=True): bool,
+            })
+
+            return self.async_show_form(
+                step_id="topic_discovery",
+                data_schema=data_schema,
+                errors=errors,
+                description_placeholders={
+                    "error_message": discovery_result["message"],
+                },
+            )
 
     async def async_step_vehicle(self, user_input=None):
         """Configure vehicle settings."""
@@ -263,11 +295,6 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Suggest vehicle IDs from discovery if available
         suggested_vehicle_ids = self._extract_vehicle_ids(self.discovered_topics, self.mqtt_config)
         default_vehicle_id = next(iter(suggested_vehicle_ids), "")
-        
-        # If exactly one vehicle ID was found, automatically use it without prompting
-        if len(suggested_vehicle_ids) == 1 and default_vehicle_id and not user_input:
-            _LOGGER.debug("Only one vehicle ID found: %s. Auto-selecting.", default_vehicle_id)
-            user_input = {CONF_VEHICLE_ID: default_vehicle_id}
 
         if user_input is not None:
             self.mqtt_config.update(user_input)
@@ -402,41 +429,6 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.debug("Formatted structure prefix: %s", structure_prefix)
         return structure_prefix
 
-    def _setup_mqtt_client(self, config, client_id=None, log_prefix="MQTT Client"):
-        """Set up and configure MQTT client."""
-        if not client_id:
-            client_id = f"ha_ovms_{uuid.uuid4().hex[:8]}"
-            
-        protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
-        
-        _LOGGER.debug("%s - Creating client with ID: %s", log_prefix, client_id)
-        mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
-        
-        # Configure credentials if provided
-        if CONF_USERNAME in config and config[CONF_USERNAME]:
-            _LOGGER.debug("%s - Setting username and password", log_prefix)
-            mqttc.username_pw_set(
-                username=config[CONF_USERNAME],
-                password=config[CONF_PASSWORD] if CONF_PASSWORD in config else None,
-            )
-            
-        # Set connection timeout
-        mqttc.connect_timeout = 5.0
-        
-        return mqttc, client_id
-
-    def _create_mqtt_result(self, success, error_type=None, message=None, details=None):
-        """Create standardized MQTT result response."""
-        result = {"success": success}
-        if not success:
-            result["error_type"] = error_type or ERROR_UNKNOWN
-            result["message"] = message or "Unknown error"
-            if details:
-                result["details"] = details
-        elif details:
-            result["details"] = details
-        return result
-
     async def _test_mqtt_connection(self, config):
         """Test if we can connect to the MQTT broker."""
         log_prefix = f"MQTT connection test to {config[CONF_HOST]}:{config[CONF_PORT]}"
@@ -451,9 +443,16 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             "test_start_time": time.time(),
         }
         
-        # Set up the client
-        mqttc, client_id = self._setup_mqtt_client(config, log_prefix=log_prefix)
+        # Generate a random client ID for this connection test
+        client_id = f"ha_ovms_{uuid.uuid4().hex[:8]}"
+        protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
+        
         debug_info["mqtt_protocol_version"] = "MQTTv5" if hasattr(mqtt, 'MQTTv5') else "MQTTv311"
+        
+        _LOGGER.debug("%s - Creating client with ID: %s and protocol: %s", 
+                     log_prefix, client_id, debug_info["mqtt_protocol_version"])
+        
+        mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
         
         # Set up connection status for debugging
         connection_status = {"connected": False, "rc": None, "flags": None}
@@ -490,8 +489,14 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
         mqttc.on_disconnect = on_disconnect
         mqttc.on_log = on_log
+        
+        if CONF_USERNAME in config and config[CONF_USERNAME]:
+            _LOGGER.debug("%s - Setting username and password", log_prefix)
+            mqttc.username_pw_set(
+                username=config[CONF_USERNAME],
+                password=config[CONF_PASSWORD] if CONF_PASSWORD in config else None,
+            )
             
-        # Configure TLS if needed
         if config[CONF_PORT] == 8883:
             _LOGGER.debug("%s - Enabling SSL/TLS for port 8883", log_prefix)
             verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
@@ -509,14 +514,16 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except ssl.SSLError as ssl_err:
                 _LOGGER.error("%s - SSL/TLS setup error: %s", log_prefix, ssl_err)
                 debug_info["ssl_error"] = str(ssl_err)
-                return self._create_mqtt_result(
-                    False, 
-                    ERROR_TLS_ERROR, 
-                    f"SSL/TLS Error: {ssl_err}", 
-                    f"SSL configuration failed: {ssl_err}"
-                )
-        
-        debug_info["connect_timeout"] = mqttc.connect_timeout
+                return {
+                    "success": False,
+                    "error_type": ERROR_TLS_ERROR,
+                    "message": f"SSL/TLS Error: {ssl_err}",
+                    "details": f"SSL configuration failed: {ssl_err}",
+                }
+            
+        # Set up connection timeout
+        mqttc.connect_timeout = 5.0
+        debug_info["connect_timeout"] = 5.0
         
         try:
             # DNS resolution check
@@ -538,12 +545,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not dns_success:
                 _LOGGER.error("%s - DNS resolution failed: %s", log_prefix, dns_error)
                 debug_info["dns_resolution"]["error"] = dns_error
-                return self._create_mqtt_result(
-                    False,
-                    ERROR_CANNOT_CONNECT,
-                    f"DNS resolution failed: {dns_error}",
-                    f"Could not resolve hostname '{config[CONF_HOST]}': {dns_error}"
-                )
+                return {
+                    "success": False,
+                    "error_type": ERROR_CANNOT_CONNECT,
+                    "message": f"DNS resolution failed: {dns_error}",
+                    "details": f"Could not resolve hostname '{config[CONF_HOST]}': {dns_error}",
+                }
             
             # Port check
             _LOGGER.debug("%s - Checking if port is open", log_prefix)
@@ -568,12 +575,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not port_open:
                 _LOGGER.error("%s - Port check failed, port %d is closed", log_prefix, config[CONF_PORT])
                 debug_info["port_check"]["error"] = f"Port {config[CONF_PORT]} is closed"
-                return self._create_mqtt_result(
-                    False,
-                    ERROR_CANNOT_CONNECT,
-                    f"Port {config[CONF_PORT]} is closed",
-                    f"Port {config[CONF_PORT]} on host '{config[CONF_HOST]}' is not open."
-                )
+                return {
+                    "success": False,
+                    "error_type": ERROR_CANNOT_CONNECT,
+                    "message": f"Port {config[CONF_PORT]} is closed",
+                    "details": f"Port {config[CONF_PORT]} on host '{config[CONF_HOST]}' is not open.",
+                }
             
             # Now try the actual MQTT connection
             _LOGGER.debug("%s - Connecting to broker", log_prefix)
@@ -628,22 +635,22 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     error_details = sub_result.get("details", "Could not subscribe to test topics")
                     error_topic = sub_result.get("topic", "unknown")
                     
-                    return self._create_mqtt_result(
-                        False,
-                        ERROR_TOPIC_ACCESS_DENIED,
-                        f"Topic subscription test failed for {error_topic}",
-                        f"Access denied to the test topic '{error_topic}'. This is likely due to MQTT ACL (Access Control List) restrictions. For EMQX broker, ensure the user has 'Subscribe' permission for '{error_topic}' or 'homeassistant/#' wildcard topic. {error_details}"
-                    )
+                    return {
+                        "success": False,
+                        "error_type": ERROR_TOPIC_ACCESS_DENIED,
+                        "message": f"Topic subscription test failed for {error_topic}",
+                        "details": f"Access denied to the test topic '{error_topic}'. This is likely due to MQTT ACL (Access Control List) restrictions. For EMQX broker, ensure the user has 'Subscribe' permission for '{error_topic}' or 'homeassistant/#' wildcard topic. {error_details}",
+                    }
                 
                 try:
                     mqttc.disconnect()
                 except Exception:
                     pass
                 self.debug_info.update(debug_info)
-                return self._create_mqtt_result(
-                    True,
-                    details="Connection and subscription tests passed successfully"
-                )
+                return {
+                    "success": True,
+                    "details": "Connection and subscription tests passed successfully",
+                }
             else:
                 error_message = "Failed to connect"
                 error_type = ERROR_CANNOT_CONNECT
@@ -674,7 +681,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
                 
                 self.debug_info.update(debug_info)
-                return self._create_mqtt_result(False, error_type, error_message, details)
+                return {
+                    "success": False,
+                    "error_type": error_type,
+                    "message": error_message,
+                    "details": details,
+                }
                 
         except socket.timeout:
             _LOGGER.error("%s - Connection timeout", log_prefix)
@@ -683,12 +695,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "message": "Connection timeout",
             }
             self.debug_info.update(debug_info)
-            return self._create_mqtt_result(
-                False,
-                ERROR_TIMEOUT,
-                "Connection timeout",
-                f"Connection to {config[CONF_HOST]}:{config[CONF_PORT]} timed out after {mqttc.connect_timeout} seconds"
-            )
+            return {
+                "success": False,
+                "error_type": ERROR_TIMEOUT,
+                "message": "Connection timeout",
+                "details": f"Connection to {config[CONF_HOST]}:{config[CONF_PORT]} timed out after {mqttc.connect_timeout} seconds",
+            }
         except socket.error as err:
             _LOGGER.error("%s - Connection error: %s", log_prefix, err)
             debug_info["error"] = {
@@ -696,12 +708,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "message": str(err),
             }
             self.debug_info.update(debug_info)
-            return self._create_mqtt_result(
-                False,
-                ERROR_CANNOT_CONNECT,
-                f"Connection error: {err}",
-                f"Socket error when connecting to {config[CONF_HOST]}:{config[CONF_PORT]}: {err}"
-            )
+            return {
+                "success": False,
+                "error_type": ERROR_CANNOT_CONNECT,
+                "message": f"Connection error: {err}",
+                "details": f"Socket error when connecting to {config[CONF_HOST]}:{config[CONF_PORT]}: {err}",
+            }
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
             error_type = ERROR_UNKNOWN
@@ -716,12 +728,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "message": str(ex),
             }
             self.debug_info.update(debug_info)
-            return self._create_mqtt_result(
-                False,
-                error_type,
-                f"MQTT Error: {ex}",
-                f"An unexpected error occurred: {ex}"
-            )
+            return {
+                "success": False,
+                "error_type": error_type,
+                "message": f"MQTT Error: {ex}",
+                "details": f"An unexpected error occurred: {ex}",
+            }
             
     async def _test_subscription(self, mqtt_client, config, client_id):
         """Test if we can subscribe to a topic."""
@@ -810,8 +822,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.debug("%s - Using discovery topic: %s", log_prefix, discovery_topic)
         debug_info["discovery_topic"] = discovery_topic
         
-        # Set up the client
-        mqttc, client_id = self._setup_mqtt_client(config, log_prefix=log_prefix)
+        # Set up a test client
+        client_id = f"ha_ovms_discovery_{uuid.uuid4().hex[:8]}"
+        protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
+        
+        _LOGGER.debug("%s - Creating client with ID: %s", log_prefix, client_id)
+        mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
         
         discovered_topics = set()
         connection_status = {"connected": False, "rc": None}
@@ -858,8 +874,13 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         mqttc.on_message = on_message
         mqttc.on_disconnect = on_disconnect
         mqttc.on_log = on_log
+        
+        if CONF_USERNAME in config and config[CONF_USERNAME]:
+            mqttc.username_pw_set(
+                username=config[CONF_USERNAME],
+                password=config[CONF_PASSWORD] if CONF_PASSWORD in config else None,
+            )
             
-        # Configure TLS if needed
         if config[CONF_PORT] == 8883:
             verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
             try:
@@ -875,11 +896,14 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except ssl.SSLError as ssl_err:
                 _LOGGER.error("%s - SSL/TLS setup error: %s", log_prefix, ssl_err)
                 debug_info["ssl_error"] = str(ssl_err)
-                return self._create_mqtt_result(
-                    False, 
-                    ERROR_TLS_ERROR, 
-                    f"SSL/TLS Error: {ssl_err}"
-                )
+                return {
+                    "success": False,
+                    "error_type": ERROR_TLS_ERROR,
+                    "message": f"SSL/TLS Error: {ssl_err}",
+                }
+            
+        # Set up connection timeout
+        mqttc.connect_timeout = 5.0
         
         try:
             # Connect to the broker
@@ -907,11 +931,11 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 mqttc.loop_stop()
                 rc = connection_status.get("rc", "unknown")
                 _LOGGER.error("%s - Connection failed, rc=%s", log_prefix, rc)
-                return self._create_mqtt_result(
-                    False, 
-                    ERROR_CANNOT_CONNECT, 
-                    f"Failed to connect to MQTT broker (rc={rc})"
-                )
+                return {
+                    "success": False,
+                    "error_type": ERROR_CANNOT_CONNECT,
+                    "message": f"Failed to connect to MQTT broker (rc={rc})",
+                }
                 
             # Wait for messages to arrive
             _LOGGER.debug("%s - Waiting for messages", log_prefix)
@@ -949,34 +973,33 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
             _LOGGER.debug("%s - Discovery complete. Found %d topics", log_prefix, topics_count)
             
-            return self._create_mqtt_result(
-                True,
-                details=f"Discovered {topics_count} topics",
-                topics=discovered_topics,
-                count=topics_count
-            )
+            return {
+                "success": True,
+                "topics": discovered_topics,
+                "count": topics_count,
+            }
             
         except socket.timeout:
             _LOGGER.error("%s - Connection timeout", log_prefix)
-            return self._create_mqtt_result(
-                False, 
-                ERROR_TIMEOUT, 
-                "Connection timeout during topic discovery"
-            )
+            return {
+                "success": False,
+                "error_type": ERROR_TIMEOUT,
+                "message": "Connection timeout during topic discovery",
+            }
         except socket.error as err:
             _LOGGER.error("%s - Connection error: %s", log_prefix, err)
-            return self._create_mqtt_result(
-                False, 
-                ERROR_CANNOT_CONNECT, 
-                f"Connection error during topic discovery: {err}"
-            )
+            return {
+                "success": False,
+                "error_type": ERROR_CANNOT_CONNECT,
+                "message": f"Connection error during topic discovery: {err}",
+            }
         except Exception as ex:  # Catch all exceptions
             _LOGGER.error("%s - MQTT error: %s", log_prefix, ex)
-            return self._create_mqtt_result(
-                False, 
-                ERROR_UNKNOWN, 
-                f"Error during topic discovery: {ex}"
-            )
+            return {
+                "success": False,
+                "error_type": ERROR_UNKNOWN,
+                "message": f"Error during topic discovery: {ex}",
+            }
 
     async def _test_topic_availability(self, config):
         """Test if the OVMS topics are available for a specific vehicle."""
@@ -1013,8 +1036,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         debug_info["command_topic"] = command_topic
         debug_info["response_topic"] = response_topic
         
-        # Set up the client 
-        mqttc, client_id = self._setup_mqtt_client(config, log_prefix=log_prefix)
+        # Set up a test client
+        client_id = f"ha_ovms_topic_test_{uuid.uuid4().hex[:8]}"
+        protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
+        
+        _LOGGER.debug("%s - Creating client with ID: %s", log_prefix, client_id)
+        mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
         
         messages_received = []
         topics_found = set()
@@ -1090,8 +1117,13 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         mqttc.on_message = on_message
         mqttc.on_disconnect = on_disconnect
         mqttc.on_log = on_log
+        
+        if CONF_USERNAME in config and config[CONF_USERNAME]:
+            mqttc.username_pw_set(
+                username=config[CONF_USERNAME],
+                password=config[CONF_PASSWORD] if CONF_PASSWORD in config else None,
+            )
             
-        # Configure TLS if needed
         if config[CONF_PROTOCOL] == "mqtts":
             verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
             try:
@@ -1108,12 +1140,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("%s - SSL/TLS setup error: %s", log_prefix, ssl_err)
                 debug_info["ssl_error"] = str(ssl_err)
                 self.debug_info.update(debug_info)
-                return self._create_mqtt_result(
-                    False,
-                    ERROR_TLS_ERROR,
-                    f"SSL/TLS Error: {ssl_err}",
-                    f"SSL configuration failed: {ssl_err}"
-                )
+                return {
+                    "success": False,
+                    "error_type": ERROR_TLS_ERROR,
+                    "message": f"SSL/TLS Error: {ssl_err}",
+                    "details": f"SSL configuration failed: {ssl_err}",
+                }
             
         # Set up connection timeout
         mqttc.connect_timeout = 5.0
@@ -1145,12 +1177,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 rc = connection_status.get("rc", "unknown")
                 _LOGGER.error("%s - Connection failed, rc=%s", log_prefix, rc)
                 self.debug_info.update(debug_info)
-                return self._create_mqtt_result(
-                    False,
-                    ERROR_CANNOT_CONNECT,
-                    f"Failed to connect to MQTT broker (rc={rc})",
-                    f"Could not connect to broker for topic testing. Result code: {rc}"
-                )
+                return {
+                    "success": False,
+                    "error_type": ERROR_CANNOT_CONNECT,
+                    "message": f"Failed to connect to MQTT broker (rc={rc})",
+                    "details": f"Could not connect to broker for topic testing. Result code: {rc}",
+                }
                 
             # Wait for some initial messages
             _LOGGER.debug("%s - Waiting for initial messages", log_prefix)
@@ -1219,17 +1251,17 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
                 
                 self.debug_info.update(debug_info)
-                return self._create_mqtt_result(
-                    True,
-                    details=details,
-                    message="No messages received, but connection was successful"
-                )
+                return {
+                    "success": True,
+                    "message": "No messages received, but connection was successful",
+                    "details": details,
+                }
             
             self.debug_info.update(debug_info)
-            return self._create_mqtt_result(
-                True,
-                details=f"Found {messages_count} messages on {topics_count} topics"
-            )
+            return {
+                "success": True,
+                "details": f"Found {messages_count} messages on {topics_count} topics",
+            }
             
         except socket.timeout:
             _LOGGER.error("%s - Connection timeout", log_prefix)
@@ -1238,12 +1270,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "message": "Connection timeout",
             }
             self.debug_info.update(debug_info)
-            return self._create_mqtt_result(
-                False,
-                ERROR_TIMEOUT,
-                "Connection timeout",
-                f"Connection to MQTT broker timed out during topic testing"
-            )
+            return {
+                "success": False,
+                "error_type": ERROR_TIMEOUT,
+                "message": "Connection timeout",
+                "details": f"Connection to MQTT broker timed out during topic testing",
+            }
         except socket.error as err:
             _LOGGER.error("%s - Connection error: %s", log_prefix, err)
             debug_info["error"] = {
@@ -1251,12 +1283,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "message": str(err),
             }
             self.debug_info.update(debug_info)
-            return self._create_mqtt_result(
-                False,
-                ERROR_CANNOT_CONNECT,
-                f"Connection error: {err}",
-                f"Socket error during topic testing: {err}"
-            )
+            return {
+                "success": False,
+                "error_type": ERROR_CANNOT_CONNECT,
+                "message": f"Connection error: {err}",
+                "details": f"Socket error during topic testing: {err}",
+            }
         except Exception as ex:  # Catch all exceptions
             _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
             debug_info["error"] = {
@@ -1264,12 +1296,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "message": str(ex),
             }
             self.debug_info.update(debug_info)
-            return self._create_mqtt_result(
-                False,
-                ERROR_UNKNOWN,
-                f"Unexpected error: {ex}",
-                f"An unexpected error occurred during topic testing: {ex}"
-            )
+            return {
+                "success": False,
+                "error_type": ERROR_UNKNOWN,
+                "message": f"Unexpected error: {ex}",
+                "details": f"An unexpected error occurred during topic testing: {ex}",
+            }
 
     @staticmethod
     @callback
