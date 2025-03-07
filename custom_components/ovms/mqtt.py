@@ -504,6 +504,9 @@ class OVMSMQTTClient:
                     f"{SIGNAL_UPDATE_ENTITY}_{entity_id}",
                     payload,
                 )
+            elif not topic.endswith("/event"):
+                # Skip logging warning for event topics
+                _LOGGER.warning("Topic %s in discovered_topics but no entity_id found in registry", topic)
                 
     def _is_response_topic(self, topic: str) -> bool:
         """Check if the topic is a response topic."""
