@@ -431,6 +431,17 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 update_state,
             )
         )
+
+    def _calculate_median(self, values):
+        """Calculate the median of a list of values."""
+        if not values:
+            return None
+        sorted_values = sorted(values)
+        n = len(sorted_values)
+        if n % 2 == 0:
+            return (sorted_values[n//2 - 1] + sorted_values[n//2]) / 2
+        else:
+            return sorted_values[n//2]
     
     def _determine_sensor_type(self) -> None:
         """Determine the sensor type based on metrics definitions."""
@@ -533,11 +544,31 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     self._attr_extra_state_attributes["cell_values"] = parts
                     self._attr_extra_state_attributes["cell_count"] = len(parts)
                     
-                    # Create individual cell sensors if they don't exist yet
-                    self._create_cell_sensors(parts)
-                    
-                    # Calculate and return average value
+                    # Calculate and store statistics
+                    median_value = self._calculate_median(parts)
                     avg_value = sum(parts) / len(parts)
+                    min_value = min(parts)
+                    max_value = max(parts)
+                    
+                    # Store statistics as attributes
+                    self._attr_extra_state_attributes["median"] = median_value
+                    self._attr_extra_state_attributes["min"] = min_value
+                    self._attr_extra_state_attributes["max"] = max_value
+                    
+                    # Store individual cell values with descriptive names
+                    stat_type = "cell"
+                    if "temp" in self._internal_name.lower():
+                        stat_type = "temp"
+                    elif "voltage" in self._internal_name.lower():
+                        stat_type = "voltage"
+                        
+                    for i, val in enumerate(parts):
+                        self._attr_extra_state_attributes[f"{stat_type}_{i+1}"] = val
+                    
+                    # Set flag to skip creating individual cell sensors
+                    self._cell_sensors_created = True
+                    
+                    # Return average as the main value
                     return avg_value
             except (ValueError, TypeError):
                 # If any part can't be converted to float, fall through to other methods
@@ -646,8 +677,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             
     def _create_cell_sensors(self, cell_values):
         """Create individual sensors for each cell value."""
+        # Skip creating individual sensors if the flag is set
         if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created:
-            self._update_cell_sensor_values(cell_values)
             return
             
         # Add topic hash to make unique IDs truly unique
