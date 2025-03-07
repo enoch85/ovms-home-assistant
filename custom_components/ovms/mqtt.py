@@ -872,27 +872,38 @@ class OVMSMQTTClient:
             is_binary = True
             entity_type = "binary_sensor"
             
-        # Check for binary patterns in name - but use word boundaries to avoid substring matches
-        binary_patterns = [r'\bon\b', r'\bactive\b', r'\benabled\b', r'\brunning\b', 
-                           r'\bconnected\b', r'\blocked\b', r'\bdoor\b', r'\bcharging\b']
-        if any(re.search(pattern, name.lower()) for pattern in binary_patterns):
+        # Check for binary patterns in name - use word boundary only for "on" to avoid false matches
+        name_lower = name.lower()
+        if (re.search(r'\bon\b', name_lower) or                  # "on" with word boundaries
+            "active" in name_lower or 
+            "enabled" in name_lower or 
+            "running" in name_lower or 
+            "connected" in name_lower or 
+            "locked" in name_lower or 
+            "door" in name_lower or 
+            "charging" in name_lower):
             is_binary = True
             entity_type = "binary_sensor"
-            
-        # Specific checks for GPS and numeric data that should never be binary
+        
+        # Ensure GPS-related metrics are never binary sensors
         if ("latitude" in name.lower() or "longitude" in name.lower() or 
-            "gps" in name.lower() or "location" in name.lower() or
-            "power" in name.lower() or "energy" in name.lower() or
+            "gps" in name.lower() or "location" in name.lower()):
+            is_binary = False
+            
+            # Make both latitude and longitude topics device_trackers
+            if "latitude" in name.lower() or "longitude" in name.lower():
+                entity_type = "device_tracker"
+            else:
+                entity_type = "sensor"
+                
+        # Ensure other numeric data is never binary
+        if ("power" in name.lower() or "energy" in name.lower() or
             "duration" in name.lower() or "consumption" in name.lower() or
             "acceleration" in name.lower() or "direction" in name.lower() or
             "monotonic" in name.lower()):
             is_binary = False
             entity_type = "sensor"
-        
-        # Check for location/GPS data
-        if "latitude" in name.lower() and "longitude" in name.lower():
-            entity_type = "device_tracker"
-        
+            
         # Check for commands/switches
         if "command" in parts or any(switch_pattern in name.lower() for switch_pattern in 
                                 ["switch", "toggle", "set", "enable", "disable"]):
