@@ -2029,6 +2029,13 @@ TOPIC_PATTERNS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPower.WATT,
         "category": CATEGORY_POWER,
+        "power": {
+        "icon": "mdi:flash",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.WATT,
+        "category": CATEGORY_POWER,
+        },
     },
     "energy": {
         "name": "Energy",
@@ -2197,21 +2204,22 @@ METRIC_CATEGORIES = {
         k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_VW_EUP
     ],
 }
-# Binary metrics that should be boolean
+
+# Binary metrics that should be boolean - fixed to only include actual binary metrics
 BINARY_METRICS = [
-    k
-    for k, v in METRIC_DEFINITIONS.items()
-    if v.get("device_class")
-    in [
+    k for k, v in METRIC_DEFINITIONS.items()
+    if v.get("device_class") in [
         BinarySensorDeviceClass.DOOR,
         BinarySensorDeviceClass.LOCK,
         BinarySensorDeviceClass.BATTERY_CHARGING,
         BinarySensorDeviceClass.CONNECTIVITY,
-        BinarySensorDeviceClass.POWER,
+        BinarySensorDeviceClass.LIGHT,
+        BinarySensorDeviceClass.COLD,
+        BinarySensorDeviceClass.HEAT,
         BinarySensorDeviceClass.PROBLEM,
         BinarySensorDeviceClass.RUNNING,
-    ]
-    or k.endswith((".on", ".charging", ".alarm", ".alert", ".locked", ".hvac"))
+        BinarySensorDeviceClass.UPDATE,
+    ] or k.endswith((".on", ".charging", ".alarm", ".alert", ".locked", ".hvac"))
 ]
 
 # Prefix patterns to detect entity categories
