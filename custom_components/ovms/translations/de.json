@@ -171,8 +171,12 @@
       "battery_soc": {
         "name": "Akkuladezustand",
         "state_attributes": {
-          "category": "Kategorie",
-          "last_updated": "Zuletzt aktualisiert"
+          "category": {
+            "name": "Kategorie"
+          },
+          "last_updated": {
+            "name": "Zuletzt aktualisiert"
+          }
         }
       },
       "battery_range_est": {
