@@ -1,6 +1,3 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
-
 """Metrics definitions for OVMS integration."""
 
 from homeassistant.components.sensor import SensorDeviceClass, \
