@@ -156,6 +156,26 @@ data:
   parameters: range
 ```
 
+Could be done as a button in HA:
+
+```yaml
+show_name: true
+show_icon: true
+type: button
+tap_action:
+  action: perform-action
+  perform_action: ovms.send_command
+  target: {}
+  data:
+    timeout: 10
+    vehicle_id: REG123
+    command: server v3 update all
+entity: input_button.ovms_update_all
+hold_action:
+  action: none
+name: "REG123: update all"
+```
+
 #### `ovms.set_feature`
 Set an OVMS configuration feature.
 
