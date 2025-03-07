@@ -20,6 +20,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send, async_dispatcher_connect
+from homeassistant.helpers import device_registry as dr
 
 from .const import (
     CONF_CLIENT_ID,
@@ -483,6 +484,12 @@ class OVMSMQTTClient:
             await self._handle_command_response(topic, payload)
             return
         
+        # Check if this is the firmware version topic and update device info
+        if "metric/m/version" in topic:
+            _LOGGER.debug("Firmware version received: %s", payload)
+            device_id = self.config.get(CONF_VEHICLE_ID)
+            self._update_firmware_version(device_id, payload)
+        
         # Store in cache
         self.topic_cache[topic] = {
             "payload": payload,
@@ -507,6 +514,19 @@ class OVMSMQTTClient:
             elif not topic.endswith("/event") and "client/rr/command" not in topic and "client/rr/response" not in topic:
                 # Skip logging warning for event, command, and response topics
                 _LOGGER.warning("Topic %s in discovered_topics but no entity_id found in registry", topic)
+    
+    def _update_firmware_version(self, device_id: str, version: str) -> None:
+        """Update the firmware version in the device registry."""
+        try:
+            device_registry = dr.async_get(self.hass)
+            device_entry = device_registry.async_get_device({(DOMAIN, device_id)})
+            if device_entry:
+                device_registry.async_update_device(
+                    device_entry.id, sw_version=version
+                )
+                _LOGGER.info("Updated firmware version to %s", version)
+        except Exception as ex:
+            _LOGGER.error("Error updating firmware version: %s", ex)
                 
     def _is_response_topic(self, topic: str) -> bool:
         """Check if the topic is a response topic."""
