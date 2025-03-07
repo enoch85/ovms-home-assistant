@@ -1,4 +1,5 @@
 """Metrics definitions for OVMS integration."""
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorStateClass,
@@ -197,7 +198,7 @@ METRIC_DEFINITIONS = {
         "category": CATEGORY_NETWORK,
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
-"s.v2.connected": {
+    "s.v2.connected": {
         "name": "V2 Server Connected",
         "description": "V2 (MP) server connected",
         "icon": "mdi:server-network",
@@ -225,7 +226,6 @@ METRIC_DEFINITIONS = {
         "category": CATEGORY_SYSTEM,
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
-
     # 12V Battery metrics
     "v.b.12v.current": {
         "name": "12V Battery Current",
@@ -261,7 +261,6 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfElectricPotential.VOLT,
         "category": CATEGORY_BATTERY,
     },
-
     # Main battery cell metrics
     "v.b.c.temp": {
         "name": "Cell Temperatures",
@@ -303,7 +302,7 @@ METRIC_DEFINITIONS = {
     "v.b.c.temp.min": {
         "name": "Minimum Cell Temperatures",
         "description": "Cell minimum temperatures",
-        "icon": "mdi:thermometer-low", 
+        "icon": "mdi:thermometer-low",
         "device_class": SensorDeviceClass.TEMPERATURE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfTemperature.CELSIUS,
@@ -357,7 +356,6 @@ METRIC_DEFINITIONS = {
         "category": CATEGORY_BATTERY,
         "has_cell_data": True,
     },
-
     # Main battery metrics
     "v.b.cac": {
         "name": "Battery Capacity",
@@ -368,7 +366,7 @@ METRIC_DEFINITIONS = {
         "unit": UNIT_AMPERE_HOUR,
         "category": CATEGORY_BATTERY,
     },
-"v.b.capacity": {
+    "v.b.capacity": {
         "name": "Battery Usable Capacity",
         "description": "Main battery usable capacity",
         "icon": "mdi:battery",
@@ -473,7 +471,6 @@ METRIC_DEFINITIONS = {
         "icon": "mdi:battery-heart",
         "category": CATEGORY_BATTERY,
     },
-
     # Battery pack level metrics
     "v.b.p.level.avg": {
         "name": "Cell Level Average",
@@ -528,7 +525,7 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfTemperature.CELSIUS,
         "category": CATEGORY_BATTERY,
     },
-"v.b.p.temp.min": {
+    "v.b.p.temp.min": {
         "name": "Cell Temperature Minimum",
         "description": "Cell temperature - coldest cell in pack",
         "icon": "mdi:thermometer-low",
@@ -672,7 +669,7 @@ METRIC_DEFINITIONS = {
         "unit": PERCENTAGE,
         "category": CATEGORY_BATTERY,
     },
-"v.b.temp": {
+    "v.b.temp": {
         "name": "Battery Temperature",
         "description": "Main battery momentary temperature",
         "icon": "mdi:thermometer",
@@ -690,7 +687,6 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfElectricPotential.VOLT,
         "category": CATEGORY_BATTERY,
     },
-
     # DC/DC converter metrics
     "v.c.12v.current": {
         "name": "DC-DC Converter Current",
@@ -728,7 +724,6 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfElectricPotential.VOLT,
         "category": CATEGORY_POWER,
     },
-
     # Charging metrics
     "v.c.charging": {
         "name": "Charging Status",
@@ -791,7 +786,7 @@ METRIC_DEFINITIONS = {
         "unit": PERCENTAGE,
         "category": CATEGORY_CHARGING,
     },
-"v.c.kwh": {
+    "v.c.kwh": {
         "name": "Charge Energy",
         "description": "Energy sum for running charge",
         "icon": "mdi:battery-charging",
@@ -909,7 +904,7 @@ METRIC_DEFINITIONS = {
         "device_class": SensorDeviceClass.TIMESTAMP,
         "category": CATEGORY_CHARGING,
     },
-"v.c.type": {
+    "v.c.type": {
         "name": "Charge Type",
         "description": "Type of charger connection",
         "icon": "mdi:ev-plug-type2",
@@ -924,7 +919,6 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfElectricPotential.VOLT,
         "category": CATEGORY_CHARGING,
     },
-
     # Door states
     "v.d.cp": {
         "name": "Charge Port",
@@ -975,7 +969,6 @@ METRIC_DEFINITIONS = {
         "device_class": BinarySensorDeviceClass.DOOR,
         "category": CATEGORY_DOOR,
     },
-
     # Environment and status metrics
     "v.e.alarm": {
         "name": "Alarm",
@@ -1021,7 +1014,7 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfTemperature.CELSIUS,
         "category": CATEGORY_CLIMATE,
     },
-"v.e.cabinfan": {
+    "v.e.cabinfan": {
         "name": "Cabin Fan",
         "description": "Cabin fan speed",
         "icon": "mdi:fan",
@@ -1135,7 +1128,7 @@ METRIC_DEFINITIONS = {
         "device_class": BinarySensorDeviceClass.POWER,
         "category": CATEGORY_DIAGNOSTIC,
     },
-"v.e.parktime": {
+    "v.e.parktime": {
         "name": "Park Time",
         "description": "Seconds parking (turned off)",
         "icon": "mdi:timer",
@@ -1191,7 +1184,6 @@ METRIC_DEFINITIONS = {
         "device_class": BinarySensorDeviceClass.RUNNING,
         "category": CATEGORY_DIAGNOSTIC,
     },
-
     # Generator metrics
     "v.g.generating": {
         "name": "Generating",
@@ -1236,7 +1228,7 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfTime.MINUTES,
         "category": CATEGORY_POWER,
     },
-"v.g.duration.soc": {
+    "v.g.duration.soc": {
         "name": "Time to SOC Limit",
         "description": "Estimated time for SOC limit",
         "icon": "mdi:timer",
@@ -1342,7 +1334,7 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfTemperature.CELSIUS,
         "category": CATEGORY_POWER,
     },
-"v.g.time": {
+    "v.g.time": {
         "name": "Generator Run Time",
         "description": "Duration of generator running",
         "icon": "mdi:timer",
@@ -1387,7 +1379,6 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfElectricPotential.VOLT,
         "category": CATEGORY_POWER,
     },
-
     # Inverter and motor metrics
     "v.i.temp": {
         "name": "Inverter Temperature",
@@ -1431,7 +1422,6 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfTemperature.CELSIUS,
         "category": CATEGORY_MOTOR,
     },
-
     # Position and trip metrics
     "v.p.acceleration": {
         "name": "Acceleration",
@@ -1441,7 +1431,7 @@ METRIC_DEFINITIONS = {
         "unit": "m/s²",
         "category": CATEGORY_TRIP,
     },
-"v.p.altitude": {
+    "v.p.altitude": {
         "name": "Altitude",
         "description": "GPS altitude",
         "icon": "mdi:elevation-rise",
@@ -1556,7 +1546,7 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfLength.KILOMETERS,
         "category": CATEGORY_TRIP,
     },
-"v.p.valet.distance": {
+    "v.p.valet.distance": {
         "name": "Valet Mode Distance",
         "description": "Distance traveled in valet mode",
         "icon": "mdi:map-marker-distance",
@@ -1579,7 +1569,6 @@ METRIC_DEFINITIONS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "category": CATEGORY_LOCATION,
     },
-
     # Tire metrics
     "v.t.alert": {
         "name": "Tire Alerts",
@@ -1613,7 +1602,6 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfTemperature.CELSIUS,
         "category": CATEGORY_TIRE,
     },
-
     # Vehicle identification metrics
     "v.type": {
         "name": "Vehicle Type",
@@ -1629,7 +1617,6 @@ METRIC_DEFINITIONS = {
         "category": CATEGORY_DEVICE,
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
-
     # VW e-UP specific metrics
     "xvu.b.cap.ah.abs": {
         "name": "VW eUP! Absolute Battery Capacity",
@@ -1658,7 +1645,7 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "category": CATEGORY_VW_EUP,
     },
-"xvu.b.cap.kwh.norm": {
+    "xvu.b.cap.kwh.norm": {
         "name": "VW eUP! Normalized Battery Energy",
         "description": "Normalized battery capacity in kWh",
         "icon": "mdi:battery",
@@ -1757,7 +1744,7 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfPower.KILO_WATT,
         "category": CATEGORY_VW_EUP,
     },
-"xvu.c.ac.u1": {
+    "xvu.c.ac.u1": {
         "name": "VW eUP! AC Charging Voltage L1",
         "description": "AC charging voltage phase 1",
         "icon": "mdi:flash",
@@ -1954,7 +1941,7 @@ METRIC_DEFINITIONS = {
         "unit": PERCENTAGE,
         "category": CATEGORY_VW_EUP,
     },
-"xvu.m.soc.norm": {
+    "xvu.m.soc.norm": {
         "name": "VW eUP! Motor Controller Normalized SOC",
         "description": "Motor controller normalized state of charge",
         "icon": "mdi:battery",
@@ -1983,7 +1970,7 @@ METRIC_DEFINITIONS = {
         "icon": "mdi:car-tire-alert",
         "state_class": SensorStateClass.MEASUREMENT,
         "category": CATEGORY_VW_EUP,
-    }
+    },
 }
 
 # Simplified mapping for lookup by keyword/pattern
@@ -2052,7 +2039,7 @@ TOPIC_PATTERNS = {
         "unit": UnitOfSpeed.KILOMETERS_PER_HOUR,
         "category": CATEGORY_TRIP,
     },
-"odometer": {
+    "odometer": {
         "name": "Odometer",
         "icon": "mdi:counter",
         "device_class": SensorDeviceClass.DISTANCE,
@@ -2143,30 +2130,88 @@ TOPIC_PATTERNS = {
         "name": "VW eUP!",
         "icon": "mdi:car-electric",
         "category": CATEGORY_VW_EUP,
-    }
+    },
 }
 
 # Group metrics by categories
 METRIC_CATEGORIES = {
-    CATEGORY_BATTERY: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_BATTERY],
-    CATEGORY_CHARGING: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_CHARGING],
-    CATEGORY_CLIMATE: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_CLIMATE],
-    CATEGORY_DOOR: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_DOOR],
-    CATEGORY_LOCATION: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_LOCATION],
-    CATEGORY_MOTOR: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_MOTOR],
-    CATEGORY_TRIP: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_TRIP],
-    CATEGORY_DEVICE: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_DEVICE],
-    CATEGORY_DIAGNOSTIC: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_DIAGNOSTIC],
-    CATEGORY_POWER: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_POWER],
-    CATEGORY_NETWORK: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_NETWORK],
-    CATEGORY_SYSTEM: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_SYSTEM],
-    CATEGORY_TIRE: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_TIRE],
-    CATEGORY_VW_EUP: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_VW_EUP],
+    CATEGORY_BATTERY: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_BATTERY
+    ],
+    CATEGORY_CHARGING: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_CHARGING
+    ],
+    CATEGORY_CLIMATE: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_CLIMATE
+    ],
+    CATEGORY_DOOR: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_DOOR
+    ],
+    CATEGORY_LOCATION: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_LOCATION
+    ],
+    CATEGORY_MOTOR: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_MOTOR
+    ],
+    CATEGORY_TRIP: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_TRIP
+    ],
+    CATEGORY_DEVICE: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_DEVICE
+    ],
+    CATEGORY_DIAGNOSTIC: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_DIAGNOSTIC
+    ],
+    CATEGORY_POWER: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_POWER
+    ],
+    CATEGORY_NETWORK: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_NETWORK
+    ],
+    CATEGORY_SYSTEM: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_SYSTEM
+    ],
+    CATEGORY_TIRE: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_TIRE
+    ],
+    CATEGORY_VW_EUP: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_VW_EUP
+    ],
 }
 # Binary metrics that should be boolean
 BINARY_METRICS = [
-    k for k, v in METRIC_DEFINITIONS.items() 
-    if v.get("device_class") in [
+    k
+    for k, v in METRIC_DEFINITIONS.items()
+    if v.get("device_class")
+    in [
         BinarySensorDeviceClass.DOOR,
         BinarySensorDeviceClass.LOCK,
         BinarySensorDeviceClass.BATTERY_CHARGING,
@@ -2174,7 +2219,8 @@ BINARY_METRICS = [
         BinarySensorDeviceClass.POWER,
         BinarySensorDeviceClass.PROBLEM,
         BinarySensorDeviceClass.RUNNING,
-    ] or k.endswith(('.on', '.charging', '.alarm', '.alert', '.locked', '.hvac'))
+    ]
+    or k.endswith((".on", ".charging", ".alarm", ".alert", ".locked", ".hvac"))
 ]
 
 # Prefix patterns to detect entity categories
@@ -2199,9 +2245,11 @@ PREFIX_CATEGORIES = {
     "xvu.v": CATEGORY_VW_EUP,
 }
 
+
 def get_metric_by_path(metric_path):
     """Get metric definition by exact path match."""
     return METRIC_DEFINITIONS.get(metric_path)
+
 
 def get_metric_by_pattern(topic_parts):
     """Try to match a metric by pattern in topic parts."""
@@ -2211,50 +2259,62 @@ def get_metric_by_pattern(topic_parts):
         for pattern, info in TOPIC_PATTERNS.items():
             if pattern == last_part:
                 return info
-    
+
     # Then try partial matches in topic parts
     for pattern, info in TOPIC_PATTERNS.items():
         if any(pattern in part.lower() for part in topic_parts):
             return info
-    
+
     return None
+
 
 def determine_category_from_topic(topic_parts):
     """Determine the most likely category from topic parts."""
     # Check for known categories in topic
     for part in topic_parts:
         part_lower = part.lower()
-        if part_lower in [CATEGORY_BATTERY, CATEGORY_CHARGING, CATEGORY_CLIMATE, 
-                          CATEGORY_DOOR, CATEGORY_LOCATION, CATEGORY_MOTOR, 
-                          CATEGORY_TRIP, CATEGORY_DIAGNOSTIC, CATEGORY_POWER,
-                          CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE,
-                          CATEGORY_VW_EUP]:
+        if part_lower in [
+            CATEGORY_BATTERY,
+            CATEGORY_CHARGING,
+            CATEGORY_CLIMATE,
+            CATEGORY_DOOR,
+            CATEGORY_LOCATION,
+            CATEGORY_MOTOR,
+            CATEGORY_TRIP,
+            CATEGORY_DIAGNOSTIC,
+            CATEGORY_POWER,
+            CATEGORY_NETWORK,
+            CATEGORY_SYSTEM,
+            CATEGORY_TIRE,
+            CATEGORY_VW_EUP,
+        ]:
             return part_lower
-    
+
     # Try matching by prefix
     full_path = ".".join(topic_parts)
     for prefix, category in PREFIX_CATEGORIES.items():
         if full_path.startswith(prefix):
             return category
-    
+
     # Default category
     return CATEGORY_SYSTEM
+
 
 def create_friendly_name(topic_parts, metric_info=None):
     """Create a friendly name from topic parts using metric definitions when available."""
     if not topic_parts:
         return "Unknown"
-    
+
     # If we have metric info, use its name
     if metric_info and "name" in metric_info:
         return metric_info["name"]
-    
+
     # Otherwise, build a name from the last part of the topic
     last_part = topic_parts[-1].replace("_", " ").title()
-    
+
     # If the topic has hierarchical information, include it
     if len(topic_parts) > 1:
         category = determine_category_from_topic(topic_parts)
         return f"{last_part} ({category.title()})"
-    
+
     return last_part
