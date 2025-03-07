@@ -122,6 +122,12 @@ class OVMSMQTTClient:
     async def async_setup(self) -> bool:
         """Set up the MQTT client."""
         _LOGGER.debug("Setting up MQTT client")
+
+        # Initialize empty tracking sets/dictionaries
+        self.discovered_topics = set()
+        self.entity_registry = {}
+        self.entity_types = {}
+        self.topic_cache = {}
         
         # Format the topic structure prefix
         self.structure_prefix = self._format_structure_prefix()
@@ -129,7 +135,10 @@ class OVMSMQTTClient:
         
         # Create the MQTT client
         self.client = await self._create_mqtt_client()
-        
+        if not self.client:
+            _LOGGER.error("Failed to create MQTT client")
+            return False
+            
         # Set up the callbacks
         self._setup_callbacks()
         
@@ -160,16 +169,19 @@ class OVMSMQTTClient:
         protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
         
         _LOGGER.debug("Creating MQTT client with ID: %s", client_id)
-        client = mqtt.Client(client_id=client_id, protocol=protocol)
+        try:
+            client = mqtt.Client(client_id=client_id, protocol=protocol)
+        except Exception as e:
+            _LOGGER.error("Failed to create MQTT client: %s", e)
+            return None
         
         # Configure authentication if provided
         username = self.config.get(CONF_USERNAME)
-        if username:
+        if username and client:
             password = self.config.get(CONF_PASSWORD)
             _LOGGER.debug("Setting username and password for MQTT client")
             client.username_pw_set(
-                username=username,
-                password=password,
+                username=username, password=password,
             )
             
         # Configure TLS if needed
@@ -420,12 +432,30 @@ class OVMSMQTTClient:
         _LOGGER.info("Subscribing to response topic: %s", response_topic)
         self.client.subscribe(response_topic, qos=qos)
         
+        # Add a subscription with vehicle ID but without username
+        # Handle the case where topics might use different username patterns
+        vehicle_id = self.config.get(CONF_VEHICLE_ID, "")
+        prefix = self.config.get(CONF_TOPIC_PREFIX, "")
+        if vehicle_id and prefix:
+            alternative_topic = f"{prefix}/+/{vehicle_id}/#"
+            _LOGGER.info("Also subscribing to alternative topic pattern: %s", alternative_topic)
+            self.client.subscribe(alternative_topic, qos=qos)
+        
     def _format_structure_prefix(self) -> str:
         """Format the topic structure prefix based on configuration."""
         structure = self.config.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
         prefix = self.config.get(CONF_TOPIC_PREFIX)
         vehicle_id = self.config.get(CONF_VEHICLE_ID)
         mqtt_username = self.config.get(CONF_MQTT_USERNAME, "")
+        
+        # If username format appears inconsistent, try to adapt
+        if mqtt_username and vehicle_id and mqtt_username.lower() != f"ovms-mqtt-{vehicle_id.lower()}":
+            # If username doesn't already contain vehicle ID, consider adding it for better pattern matching
+            if vehicle_id.lower() not in mqtt_username.lower():
+                alternative_username = f"ovms-mqtt-{vehicle_id.lower()}"
+                _LOGGER.debug("Username %s may not match pattern. Also trying %s", 
+                             mqtt_username, alternative_username)
+                # Don't replace the username yet, just log the possibility
         
         # Replace the variables in the structure
         structure_prefix = structure.format(
@@ -434,9 +464,9 @@ class OVMSMQTTClient:
             mqtt_username=mqtt_username
         )
         
+        _LOGGER.debug("Formatted structure prefix: %s", structure_prefix)
         return structure_prefix
-        
-    async def _async_process_message(self, msg) -> None:
+        async def _async_process_message(self, msg) -> None:
         """Process an incoming MQTT message."""
         topic = msg.topic
         try:
@@ -460,7 +490,7 @@ class OVMSMQTTClient:
         
         # Check if this is a new topic
         if topic not in self.discovered_topics:
-            self.discovered_topics.add(topic)
+            self.discovered_topics.add(topic or "")
             _LOGGER.debug("Discovered new topic: %s", topic)
             # Create a new entity for this topic
             await self._async_add_entity_for_topic(topic, payload)
@@ -520,17 +550,23 @@ class OVMSMQTTClient:
         """Add a new entity for a discovered topic."""
         # Extract the entity type and name from the topic
         entity_type, entity_info = self._parse_topic(topic)
+        _LOGGER.debug("Parse topic result: entity_type=%s, entity_info=%s", entity_type, entity_info)
         
         if not entity_type:
             _LOGGER.debug("Could not determine entity type for topic: %s", topic)
             return
             
+        if not entity_info or not isinstance(entity_info, dict):
+            _LOGGER.debug("Invalid entity info for topic: %s", topic)
+            return
+
         _LOGGER.info("Adding new entity for topic: %s (type: %s, name: %s)", 
                     topic, entity_type, entity_info['name'])
         
         # Track entity types for diagnostics
         if entity_type not in self.entity_types:
             self.entity_types[entity_type] = 0
+            
         self.entity_types[entity_type] += 1
         
         # Create a unique name to prevent collisions
@@ -560,7 +596,7 @@ class OVMSMQTTClient:
         try:
             category_index = topic_parts.index(entity_category)
             if category_index < len(topic_parts) - 1:
-                metric_parts = topic_parts[category_index + 1:]
+                metric_parts = [p for p in topic_parts[category_index + 1:] if p]
                 metric_path = "_".join(metric_parts)
         except ValueError:
             # If category not found in topic, use original name
@@ -602,6 +638,20 @@ class OVMSMQTTClient:
             "attributes": entity_info["attributes"],
         }
         
+        # Validate entity info before returning
+        if not entity_info or not isinstance(entity_info, dict):
+            _LOGGER.warning("Created invalid entity info: %s", entity_info)
+            # Create a minimal valid entity info as fallback
+            entity_info = {
+                "name": entity_name or "unknown",
+                "friendly_name": friendly_name or "Unknown Sensor",
+                "attributes": entity_info["attributes"] or {},
+            }
+            
+        _LOGGER.debug("Final entity info: %s", entity_info)
+        _LOGGER.debug("Parsed topic as: type=%s, name=%s, category=%s, friendly_name=%s", 
+                    entity_type, entity_info['name'], entity_category, entity_info['friendly_name'])
+        
         # If platforms are loaded, send the entity to be created
         # Otherwise, queue it for later
         if self.platforms_loaded:
@@ -618,7 +668,18 @@ class OVMSMQTTClient:
         """Create a user-friendly name based on metric path and category."""
         if not metric_parts:
             return "Unknown"
-        
+            
+        # Basic input validation
+        try:
+            # Make sure all parts are strings
+            metric_parts = [str(part) for part in metric_parts if part]
+        except (TypeError, ValueError):
+            _LOGGER.warning("Invalid metric parts: %s", metric_parts)
+            return "Unknown"
+            
+        if not metric_parts:
+            return "Unknown"
+            
         # Convert topic parts to metric path format (dot notation)
         metric_path = ".".join(metric_parts)
         
@@ -649,7 +710,8 @@ class OVMSMQTTClient:
         self.platforms_loaded = True
         
         # Process any queued entities
-        while self.entity_queue:
+        queued_entities = list(self.entity_queue)
+        for entity_data in queued_entities:
             entity_data = self.entity_queue.popleft()
             _LOGGER.debug("Processing queued entity: %s", entity_data["name"])
             async_dispatcher_send(
@@ -658,6 +720,29 @@ class OVMSMQTTClient:
                 entity_data,
             )
             
+        # Try to subscribe again just in case initial subscription failed
+        self._subscribe_topics()
+        
+        # If we have no discovered topics, try to discover by sending a test command
+        if not self.discovered_topics and self.connected:
+            _LOGGER.info("No topics discovered yet, trying to discover by sending a test command")
+            try:
+                # Use a generic discovery command
+                command_id = uuid.uuid4().hex[:8]
+                command_topic = COMMAND_TOPIC_TEMPLATE.format(
+                    structure_prefix=self
+                .structure_prefix,
+                    command_id=command_id
+                )
+                response_topic = RESPONSE_TOPIC_TEMPLATE.format(
+                    structure_prefix=self.structure_prefix,
+                    command_id=command_id
+                )
+                _LOGGER.debug("Sending test command to %s", command_topic)
+                self.client.publish(command_topic, "stat", qos=self.config.get(CONF_QOS, 1))
+            except Exception as ex:
+                _LOGGER.warning("Error sending discovery command: %s", ex)
+                
         # Start entity discovery
         await self._async_discover_entities()
         
@@ -667,16 +752,36 @@ class OVMSMQTTClient:
         
         # Check if topic matches our structure prefix
         if not topic.startswith(self.structure_prefix):
-            _LOGGER.debug("Topic does not match structure prefix: %s", self.structure_prefix)
+            # Alternative check for different username pattern but same vehicle ID
+            vehicle_id = self.config.get(CONF_VEHICLE_ID, "")
+            prefix = self.config.get(CONF_TOPIC_PREFIX, "")
+            if vehicle_id and prefix and f"/{vehicle_id}/" in topic and topic.startswith(prefix):
+                _LOGGER.debug("Topic doesn't match structure prefix but contains vehicle ID")
+                # Extract parts after vehicle ID
+                parts = topic.split(f"/{vehicle_id}/", 1)
+                if len(parts) > 1:
+                    topic_suffix = parts[1]
+                else:
+                    _LOGGER.debug("Couldn't extract topic suffix after vehicle ID")
+                    return None, None
+            else:
+                _LOGGER.debug("Topic does not match structure prefix: %s", self.structure_prefix)
+                return None, None
+        else:
+            # Extract the normal way
+            topic_suffix = topic[len(self.structure_prefix):].lstrip('/')
+            
+        if not topic_suffix:
+            _LOGGER.debug("Empty topic suffix after removing prefix")
             return None, None
             
-        # Remove the structure prefix
-        topic_suffix = topic[len(self.structure_prefix):].lstrip('/')
         _LOGGER.debug("Topic suffix after removing prefix: %s", topic_suffix)
         
         # Split the remaining path into parts
         parts = topic_suffix.split("/")
         _LOGGER.debug("Topic parts: %s", parts)
+        parts = [p for p in parts if p]
+        _LOGGER.debug("Filtered topic parts: %s", parts)
         
         if len(parts) < 2:
             _LOGGER.debug("Topic has too few parts: %s", parts)
@@ -687,21 +792,39 @@ class OVMSMQTTClient:
             _LOGGER.debug("Skipping command/response topic: %s", topic)
             return None, None
         
+        # Handle vendor-specific prefixes (like xvu)
+        if len(parts) >= 2 and parts[0] == "metric":
+            # Check for known vendor prefixes
+            if parts[1] == "xvu":
+                # This is a vendor-specific metric, adjust parts to match standard pattern
+                if len(parts) > 3:
+                    # Create a modified path that might match standard metrics
+                    standard_parts = ["metric", parts[2]] + parts[3:]
+                    _LOGGER.debug("Converting vendor-specific path to standard: %s", standard_parts)
+                    metric_path = ".".join(standard_parts[1:])
+                else:
+                    metric_path = ".".join(parts[1:])
+            else:
+                metric_path = ".".join(parts[1:])
+        else:
+            metric_path = ".".join(parts)
+        
+        _LOGGER.debug("Metric path for lookup: %s", metric_path)
+        
         # Try to match with known metric patterns
         # First, check if this is a standard OVMS metric
-        metric_path = topic_suffix.replace("/", ".")
         metric_info = get_metric_by_path(metric_path)
         
         # If no exact match, try to match by patterns
-        if not metric_info:
+        if not metric_info and parts:
             metric_info = get_metric_by_pattern(parts)
         
         # Determine entity type and category
         entity_type = "sensor"  # Default type
         category = determine_category_from_topic(parts)
-        name = "_".join(parts)
         
-        # Check if this is a binary sensor
+        # Create a default name if parts exist
+        name = "_".join(parts) if parts else "unknown"
         is_binary = False
         if metric_info and "device_class" in metric_info:
             from homeassistant.components.binary_sensor import BinarySensorDeviceClass
@@ -751,6 +874,17 @@ class OVMSMQTTClient:
             "attributes": attributes,
         }
             
+        # Validate entity info before returning
+        if not entity_info or not isinstance(entity_info, dict):
+            _LOGGER.warning("Created invalid entity info: %s", entity_info)
+            # Create a minimal valid entity info as fallback
+            entity_info = {
+                "name": name or "unknown",
+                "friendly_name": friendly_name or "Unknown Sensor",
+                "attributes": attributes or {},
+            }
+        
+        _LOGGER.debug("Final entity info: %s", entity_info)
         _LOGGER.debug("Parsed topic as: type=%s, name=%s, category=%s, friendly_name=%s", 
                     entity_type, entity_info['name'], category, entity_info['friendly_name'])
         return entity_type, entity_info
@@ -775,7 +909,7 @@ class OVMSMQTTClient:
         await asyncio.sleep(5)
         
         # Check the topic cache for discovered topics
-        if not self.topic_cache:
+        if not self.topic_cache and not self.discovered_topics:
             _LOGGER.info("No topics discovered yet, waiting for data")
             
         # Process is ongoing as we receive messages
