@@ -2,10 +2,10 @@
   "config": {
     "step": {
       "user": {
-        "title": "MQTT-mäklarinställningar",
-        "description": "Konfigurera anslutning till MQTT-mäklaren där OVMS publicerar data",
+        "title": "MQTT-brokerinställningar",
+        "description": "Konfigurera anslutning till MQTT-brokern där OVMS publicerar data",
         "data": {
-          "host": "Mäklarvärd",
+          "host": "Broker Host",
           "Port": "Anslutningsport",
           "username": "Användarnamn",
           "password": "Lösenord",
@@ -46,10 +46,10 @@
       }
     },
     "error": {
-      "cannot_connect": "Kunde inte ansluta till mäklaren",
+      "cannot_connect": "Kunde inte ansluta till brokern",
       "invalid_auth": "Ogiltig autentisering",
       "timeout": "Anslutningen tog för lång tid",
-      "invalid_response": "Ogiltigt svar från mäklaren",
+      "invalid_response": "Ogiltigt svar från brokern",
       "no_topics": "Inga OVMS-ämnen hittades",
       "topic_access_denied": "Åtkomst nekad till OVMS-ämnen",
       "tls_error": "TLS/SSL-konfigurationsfel",
