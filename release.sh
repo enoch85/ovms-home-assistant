@@ -2,8 +2,13 @@
 
 if [ -z "${1}" ]
 then
-    echo "You forgot to add a release tag."
-    echo "Example: bash release.sh [v0.3.1]"
+    echo "You forgot to add a release tag!"
+    echo "Example: 'bash release.sh v0.3.1'"
+    exit 1
+elif ! echo "${1}" | grep "v"
+then
+    echo "You forgot to add 'v' in the release tag!"
+    echo "Example: 'bash release.sh v0.3.1'"
     exit 1
 fi
 
@@ -13,6 +18,9 @@ then
     echo "Please fix the error, then try again."
     exit 1
 fi
+
+# Add missing files
+git add -A
 
 # Change version in manifest.json
 ovms_manifest_file="$(find "$PWD" -name manifest.json)"
@@ -24,13 +32,13 @@ else
     exit 1
 fi
 
-# Add missing files
-git add -A
-
 # Commit change
 git commit -a -m "${1}"
 
-# Create new release tag
+# Push change to main
+git push origin main
+
+# Create new release tag for the release workflow to work
 git tag "${1}"
 
 # Push to origin
