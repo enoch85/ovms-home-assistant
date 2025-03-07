@@ -111,6 +111,13 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     
     def _determine_entity_category(self) -> None:
         """Determine if this entity should be a diagnostic entity."""
+        # Check if attributes already specify a category
+        if "category" in self._attr_extra_state_attributes:
+            category = self._attr_extra_state_attributes["category"]
+            if category == "diagnostic":
+                from homeassistant.helpers.entity import EntityCategory
+                self._attr_entity_category = EntityCategory.DIAGNOSTIC
+                return
         # Try to find matching metric by converting topic to dot notation
         topic_suffix = self._topic
         if self._topic.count('/') >= 3:  # Skip the prefix part
