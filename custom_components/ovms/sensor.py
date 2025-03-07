@@ -452,6 +452,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_entity_category = None
         self._attr_icon = None
         
+        # Check if attributes specify a category
+        if "category" in self._attr_extra_state_attributes:
+            category = self._attr_extra_state_attributes["category"]
+            if category == "diagnostic":
+                self._attr_entity_category = EntityCategory.DIAGNOSTIC
+                return
+        
         # Special check for timer mode sensors to avoid numeric conversion issues
         if "timermode" in self._internal_name.lower() or "timer_mode" in self._internal_name.lower():
             # For timer mode sensors, explicitly override device class and state class

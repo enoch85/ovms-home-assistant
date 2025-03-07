@@ -184,6 +184,14 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
         # Default value
         self._attr_device_class = None
         self._attr_icon = None
+        self._attr_entity_category = None
+        
+        # Check if attributes specify a category
+        if "category" in self._attr_extra_state_attributes:
+            category = self._attr_extra_state_attributes["category"]
+            if category == "diagnostic":
+                from homeassistant.helpers.entity import EntityCategory
+                self._attr_entity_category = EntityCategory.DIAGNOSTIC
         
         # Try to find matching metric by converting topic to dot notation
         topic_suffix = self._topic
@@ -212,6 +220,8 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                 self._attr_device_class = metric_info["device_class"]
             if "icon" in metric_info:
                 self._attr_icon = metric_info["icon"]
+            if "entity_category" in metric_info:
+                self._attr_entity_category = metric_info["entity_category"]
             return
         
         # If no metric info was found, use the original pattern matching as fallback

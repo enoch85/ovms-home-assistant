@@ -20,6 +20,13 @@ from .const import (
     SIGNAL_UPDATE_ENTITY
 )
 
+from .metrics import (
+    METRIC_DEFINITIONS,
+    TOPIC_PATTERNS,
+    get_metric_by_path,
+    get_metric_by_pattern,
+)
+
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 async def async_setup_entry(
@@ -78,6 +85,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         self._attr_device_info = device_info
         self._attr_source_type = SourceType.GPS
         self._attr_icon = "mdi:car-electric"
+        self._attr_entity_category = None
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
@@ -95,9 +103,46 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         # Set default state attributes
         self._attr_source_type = SourceType.GPS
         
+        # Try to determine if this should be a diagnostic entity
+        self._determine_entity_category()
+        
         # Try to parse initial location
         self._parse_payload(initial_payload)
     
+    def _determine_entity_category(self) -> None:
+        """Determine if this entity should be a diagnostic entity."""
+        # Check if attributes already specify a category
+        if "category" in self._attr_extra_state_attributes:
+            category = self._attr_extra_state_attributes["category"]
+            if category == "diagnostic":
+                from homeassistant.helpers.entity import EntityCategory
+                self._attr_entity_category = EntityCategory.DIAGNOSTIC
+                return
+        # Try to find matching metric by converting topic to dot notation
+        topic_suffix = self._topic
+        if self._topic.count('/') >= 3:  # Skip the prefix part
+            parts = self._topic.split('/')
+            # Find where the actual metric path starts
+            for i, part in enumerate(parts):
+                if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
+                    topic_suffix = '/'.join(parts[i:])
+                    break
+        
+        metric_path = topic_suffix.replace("/", ".")
+        
+        # Try exact match first
+        metric_info = get_metric_by_path(metric_path)
+        
+        # If no exact match, try by pattern in name and topic
+        if not metric_info:
+            topic_parts = topic_suffix.split('/')
+            name_parts = self._internal_name.split('_')
+            metric_info = get_metric_by_pattern(topic_parts) or get_metric_by_pattern(name_parts)
+        
+        # Apply entity category if found in metric info
+        if metric_info and "entity_category" in metric_info:
+            self._attr_entity_category = metric_info["entity_category"]
+
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
         await super().async_added_to_hass()
