@@ -455,9 +455,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Check if attributes specify a category
         if "category" in self._attr_extra_state_attributes:
             category = self._attr_extra_state_attributes["category"]
-            if category == "diagnostic":
+            # Also apply diagnostic entity category to network and system sensors
+            if category in ["diagnostic", "network", "system"]:
+                from homeassistant.helpers.entity import EntityCategory
                 self._attr_entity_category = EntityCategory.DIAGNOSTIC
-                return
+                if category != "diagnostic":  # Don't return for network/system to allow further processing
+                    _LOGGER.debug("Setting EntityCategory.DIAGNOSTIC for %s category: %s", 
+                                 category, self._internal_name)
         
         # Special check for timer mode sensors to avoid numeric conversion issues
         if "timermode" in self._internal_name.lower() or "timer_mode" in self._internal_name.lower():
