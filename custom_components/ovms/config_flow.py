@@ -242,16 +242,16 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            self.mqtt_config.update(user_input)
+            # Make sure any discovered topics are properly accessed
             return await self.async_step_vehicle()
 
         # Discover topics using the broad wildcard
         _LOGGER.debug("Starting topic discovery")
         discovery_result = await self._discover_topics(self.mqtt_config)
 
-        if discovery_result["success"]:
-            self.discovered_topics = discovery_result.get("topics", set())
-            _LOGGER.debug("Discovered %d topics", len(self.discovered_topics))
+        if discovery_result and discovery_result.get("success", False):
+            self.discovered_topics = discovery_result.get("discovered_topics", set())
+            _LOGGER.debug("Discovered %d topics", len(self.discovered_topics or []))
 
             # Extract potential vehicle IDs from discovered topics
             potential_vehicle_ids = self._extract_vehicle_ids(self.discovered_topics, self.mqtt_config)
@@ -364,44 +364,31 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         discovered_username = None
 
         # Get the topic prefix
-        prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
+        prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX) or DEFAULT_TOPIC_PREFIX
         mqtt_username = config.get(CONF_MQTT_USERNAME, "")
 
-        # Try with the configured username first if available
-        if mqtt_username:
-            pattern = fr"^{re.escape(prefix)}/{re.escape(mqtt_username)}/([^/]+)/"
-            _LOGGER.debug("Using pattern to extract vehicle IDs: %s", pattern)
+        # More generic pattern to match various username formats for OVMS
+        general_pattern = fr"^{re.escape(prefix)}/([^/]+)/([^/]+)/"
+        _LOGGER.debug("Using general pattern to extract vehicle IDs: %s", general_pattern)
 
-            for topic in topics:
-                match = re.match(pattern, topic)
-                if match:
-                    vehicle_id = match.group(1)
-                    # Skip client and rr paths
-                    if vehicle_id not in ["client", "rr"]:
-                        _LOGGER.debug("Found potential vehicle ID '%s' from topic '%s'", vehicle_id, topic)
-                        potential_ids.add(vehicle_id)
-
-        # If no matches found with the username pattern, try a more general pattern
-        if not potential_ids:
-            general_pattern = fr"^{re.escape(prefix)}/([^/]+)/([^/]+)/"
-            _LOGGER.debug("No matches found. Using more general pattern: %s", general_pattern)
-
-            for topic in topics:
-                match = re.match(general_pattern, topic)
-                if match:
-                    username = match.group(1)
-                    vehicle_id = match.group(2)
-                    if vehicle_id not in ["client", "rr"]:
-                        _LOGGER.debug("Found potential vehicle ID '%s' with username '%s' from topic '%s'", 
-                                    vehicle_id, username, topic)
-                        # Save the discovered username for future use
-                        discovered_username = username
-                        potential_ids.add(vehicle_id)
-            
-            # Update the MQTT username in config if discovered
-            if discovered_username and discovered_username != mqtt_username:
+        for topic in topics:
+            match = re.match(general_pattern, topic)
+            if match and len(match.groups()) > 1:
+                username = match.group(1)
+                vehicle_id = match.group(2)
+                if vehicle_id not in ["client", "rr"]:
+                    _LOGGER.debug("Found potential vehicle ID '%s' with username '%s' from topic '%s'", 
+                               vehicle_id, username, topic)
+                    # Save the discovered username for future use
+                    discovered_username = username
+                    potential_ids.add(vehicle_id)
+        
+        # Update the MQTT username in config if discovered
+        if discovered_username:
+            current_username = config.get(CONF_MQTT_USERNAME, "")
+            if current_username != discovered_username:
                 _LOGGER.debug("Updating MQTT username from '%s' to discovered '%s'", 
-                            mqtt_username, discovered_username)
+                           current_username, discovered_username)
                 config[CONF_MQTT_USERNAME] = discovered_username
                 # Also update the mqtt_config in the class
                 self.mqtt_config[CONF_MQTT_USERNAME] = discovered_username
@@ -416,6 +403,15 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         vehicle_id = config.get(CONF_VEHICLE_ID, "")
         mqtt_username = config.get(CONF_MQTT_USERNAME, "")
 
+        # If username format appears inconsistent, try to adapt
+        if mqtt_username and vehicle_id and mqtt_username.lower() != f"ovms-mqtt-{vehicle_id.lower()}":
+            # If username doesn't already contain vehicle ID, consider adding it for better pattern matching
+            if vehicle_id.lower() not in mqtt_username.lower():
+                alternative_username = f"ovms-mqtt-{vehicle_id.lower()}"
+                _LOGGER.debug("Username %s may not match pattern. Also trying %s", 
+                             mqtt_username, alternative_username)
+                # Don't replace the username yet, just log the possibility
+        
         _LOGGER.debug("Formatting structure prefix with: structure=%s, prefix=%s, vehicle_id=%s, mqtt_username=%s", 
                      structure, prefix, vehicle_id, mqtt_username)
 
@@ -953,6 +949,13 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 mqttc.publish(test_topic, test_payload, qos=config.get(CONF_QOS, DEFAULT_QOS))
                 _LOGGER.debug("%s - Test message published to %s", log_prefix, test_topic)
                 
+                # Also try a more generic topic to catch any responding devices
+                vehicle_id = config.get(CONF_VEHICLE_ID, "")
+                if vehicle_id:
+                    alt_test_topic = f"{topic_prefix}/+/{vehicle_id}/client/rr/command/{command_id}"
+                    mqttc.publish(alt_test_topic, test_payload, qos=config.get(CONF_QOS, DEFAULT_QOS))
+                    _LOGGER.debug("%s - Also testing alternative topic: %s", log_prefix, alt_test_topic)
+                
                 # Wait a bit longer for responses
                 await asyncio.sleep(2)
             except Exception as ex:
@@ -975,11 +978,11 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
             return {
                 "success": True,
-                "topics": discovered_topics,
-                "count": topics_count,
+                "discovered_topics": discovered_topics,
+                "topic_count": topics_count,
             }
             
-        except socket.timeout:
+        except socket.timeout as err:
             _LOGGER.error("%s - Connection timeout", log_prefix)
             return {
                 "success": False,
@@ -1064,6 +1067,21 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 
                 _LOGGER.debug("%s - Subscribing to response topic: %s", log_prefix, response_topic)
                 client.subscribe(response_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
+                
+                # Also try a direct subscription to known topic patterns
+                prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
+                if prefix:
+                    # Try with the actual username instead of placeholder
+                    mqtt_username = config.get(CONF_MQTT_USERNAME, "")
+                    if mqtt_username:
+                        direct_topic = f"{prefix}/{mqtt_username}/{vehicle_id}/#"
+                        _LOGGER.debug("%s - Also subscribing to direct topic: %s", log_prefix, direct_topic)
+                        client.subscribe(direct_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
+                    
+                    # Also try with the pattern matching any username
+                    alt_topic = f"{prefix}/+/{vehicle_id}/#"
+                    _LOGGER.debug("%s - Also subscribing to alternative topic: %s", log_prefix, alt_topic)
+                    client.subscribe(alt_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
             
         def on_message(client, userdata, msg):
             """Handle incoming messages."""
@@ -1241,22 +1259,6 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
             # Even if we didn't receive messages, we'll consider it a success with a warning
             # since MQTT topics might not have data immediately
-            if messages_count == 0:
-                _LOGGER.warning("%s - No messages received during test", log_prefix)
-                
-                details = (
-                    "No OVMS messages were detected during the test. This could be normal if "
-                    "your vehicle is not actively publishing data. The integration will "
-                    "continue to monitor for messages."
-                )
-                
-                self.debug_info.update(debug_info)
-                return {
-                    "success": True,
-                    "message": "No messages received, but connection was successful",
-                    "details": details,
-                }
-            
             self.debug_info.update(debug_info)
             return {
                 "success": True,
