@@ -18,7 +18,7 @@ fi
 ovms_manifest_file="$(find "$PWD" -name manifest.json)"
 if [ -f "$ovms_manifest_file" ]
 then
-    sed "s|\"version\":.*|\"version\": \"${1}\"|g" "$ovms_manifest_file"
+    sed -i "s|\"version\":.*|\"version\": \"${1}\"|g" "$ovms_manifest_file"
 else
     echo "manifest.json not found!"
     exit 1
