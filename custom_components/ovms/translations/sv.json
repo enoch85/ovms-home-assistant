@@ -1,0 +1,319 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MQTT-brokerinställningar",
+        "description": "Konfigurera anslutning till MQTT-brokern där OVMS publicerar data",
+        "data": {
+          "host": "Broker Host",
+          "Port": "Anslutningsport",
+          "username": "Användarnamn",
+          "password": "Lösenord",
+          "qos": "QoS-nivå",
+          "allow_insecure_ssl": "Tillåt osäkra SSL-anslutningar"
+        }
+      },
+      "topics": {
+        "title": "MQTT-ämnesstruktur",
+        "description": "Konfigurera hur OVMS-ämnen är strukturerade",
+        "data": {
+          "topic_prefix": "Ämnesprefix (standard: ovms)",
+          "topic_structure": "Ämnesstruktur",
+          "mqtt_username": "MQTT-användarnamn i ämne"
+        }
+      },
+      "custom_topic": {
+        "title": "Anpassad ämnesstruktur",
+        "description": "Ange din anpassade ämnesstruktur med platshållarna {prefix}, {vehicle_id}, och eventuellt {mqtt_username}",
+        "data": {
+          "custom_structure": "Anpassad ämnesstruktur"
+        }
+      },
+      "topic_discovery": {
+        "title": "Ämnesupptäckt",
+        "description": "Upptäcker tillgängliga OVMS-ämnen...",
+        "data": {
+          "confirm_discovery": "Fortsätt med upptäckta ämnen",
+          "retry_discovery": "Försök igen"
+        }
+      },
+      "vehicle": {
+        "title": "Fordonskonfiguration",
+        "description": "Konfigurera ditt OVMS-fordon",
+        "data": {
+          "vehicle_id": "Fordons-ID"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kunde inte ansluta till brokern",
+      "invalid_auth": "Ogiltig autentisering",
+      "timeout": "Anslutningen tog för lång tid",
+      "invalid_response": "Ogiltigt svar från brokern",
+      "no_topics": "Inga OVMS-ämnen hittades",
+      "topic_access_denied": "Åtkomst nekad till OVMS-ämnen",
+      "tls_error": "TLS/SSL-konfigurationsfel",
+      "unknown": "Oväntat fel",
+      "missing_prefix": "Saknar obligatorisk {prefix} platshållare",
+      "missing_vehicle_id": "Saknar obligatorisk {vehicle_id} platshållare",
+      "invalid_placeholder": "Ogiltig platshållare i anpassad struktur",
+      "invalid_format": "Ogiltigt format i anpassad struktur"
+    },
+    "abort": {
+      "already_configured": "Detta OVMS-fordon är redan konfigurerat"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OVMS-alternativ",
+        "data": {
+          "qos": "QoS-nivå",
+          "topic_prefix": "Ämnesprefix",
+          "topic_structure": "Ämnesstruktur",
+          "verify_ssl": "Verifiera SSL-certifikat"
+        }
+      }
+    }
+  },
+  "services": {
+    "send_command": {
+      "name": "Skicka kommando",
+      "description": "Skicka ett kommando till OVMS-modulen.",
+      "fields": {
+        "vehicle_id": {
+          "name": "Fordons-ID",
+          "description": "ID för fordonet som kommandot ska skickas till"
+        },
+        "command": {
+          "name": "Kommando",
+          "description": "Kommando att skicka"
+        },
+        "parameters": {
+          "name": "Parametrar",
+          "description": "Kommandoparametrar"
+        },
+        "command_id": {
+          "name": "Kommando-ID",
+          "description": "Unikt ID för detta kommando (genereras automatiskt om det inte anges)"
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "Timeout i sekunder för att vänta på svar"
+        }
+      }
+    },
+    "set_feature": {
+      "name": "Ställ in funktion",
+      "description": "Ställ in en OVMS-modulfunktion.",
+      "fields": {
+        "vehicle_id": {
+          "name": "Fordons-ID",
+          "description": "ID för fordonet"
+        },
+        "feature": {
+          "name": "Funktion",
+          "description": "Funktionsnamn att ställa in"
+        },
+        "value": {
+          "name": "Värde",
+          "description": "Värde att ställa in"
+        }
+      }
+    },
+    "control_climate": {
+      "name": "Styr klimat",
+      "description": "Styr fordonets klimatsystem.",
+      "fields": {
+        "vehicle_id": {
+          "name": "Fordons-ID",
+          "description": "ID för fordonet"
+        },
+        "temperature": {
+          "name": "Temperatur",
+          "description": "Måltemperatur"
+        },
+        "hvac_mode": {
+          "name": "HVAC-läge",
+          "description": "Läge att ställa in"
+        },
+        "duration": {
+          "name": "Varaktighet",
+          "description": "Varaktighet i minuter"
+        }
+      }
+    },
+    "control_charging": {
+      "name": "Styr laddning",
+      "description": "Styr fordonets laddningssystem.",
+      "fields": {
+        "vehicle_id": {
+          "name": "Fordons-ID",
+          "description": "ID för fordonet"
+        },
+        "action": {
+          "name": "Åtgärd",
+          "description": "Laddningsåtgärd"
+        },
+        "mode": {
+          "name": "Läge",
+          "description": "Laddningsläge"
+        },
+        "limit": {
+          "name": "Gräns",
+          "description": "Laddningsgräns (procent)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_soc": {
+        "name": "Batteriladdningsnivå",
+        "state_attributes": {
+          "category": "Kategori",
+          "last_updated": "Senast uppdaterad"
+        }
+      },
+      "battery_range_est": {
+        "name": "Uppskattad räckvidd"
+      },
+      "battery_power": {
+        "name": "Batterieffekt"
+      },
+      "battery_current": {
+        "name": "Batteriström"
+      },
+      "battery_voltage": {
+        "name": "Batterispänning"
+      },
+      "battery_temperature": {
+        "name": "Batteritemperatur"
+      },
+      "charging_time": {
+        "name": "Laddningstid"
+      },
+      "charging_power": {
+        "name": "Laddningseffekt"
+      },
+      "odometer": {
+        "name": "Vägmätare"
+      },
+      "temperature_cabin": {
+        "name": "Kupétemperatur"
+      },
+      "temperature_ambient": {
+        "name": "Omgivningstemperatur"
+      },
+      "trip": {
+        "name": "Trippmätare"
+      },
+      "speed": {
+        "name": "Fordonshastighet"
+      },
+      "status": {
+        "name": "Fordonsstatus"
+      }
+    },
+    "binary_sensor": {
+      "charging": {
+        "name": "Laddningsstatus",
+        "state": {
+          "on": "Laddar",
+          "off": "Laddar inte"
+        }
+      },
+      "door_lock": {
+        "name": "Dörrlåsstatus",
+        "state": {
+          "on": "Låst",
+          "off": "Olåst"
+        }
+      },
+      "connected": {
+        "name": "Anslutningsstatus",
+        "state": {
+          "on": "Ansluten",
+          "off": "Frånkopplad"
+        }
+      },
+      "door_fl": {
+        "name": "Vänster framdörr",
+        "state": {
+          "on": "Öppen",
+          "off": "Stängd"
+        }
+      },
+      "door_fr": {
+        "name": "Höger framdörr",
+        "state": {
+          "on": "Öppen",
+          "off": "Stängd"
+        }
+      },
+      "door_rl": {
+        "name": "Vänster bakdörr",
+        "state": {
+          "on": "Öppen",
+          "off": "Stängd"
+        }
+      },
+      "door_rr": {
+        "name": "Höger bakdörr",
+        "state": {
+          "on": "Öppen",
+          "off": "Stängd"
+        }
+      },
+      "trunk": {
+        "name": "Bagagelucka",
+        "state": {
+          "on": "Öppen",
+          "off": "Stängd"
+        }
+      },
+      "hood": {
+        "name": "Motorhuv",
+        "state": {
+          "on": "Öppen",
+          "off": "Stängd"
+        }
+      },
+      "status": {
+        "name": "Modulstatus",
+        "state": {
+          "on": "Online",
+          "off": "Offline"
+        }
+      }
+    },
+    "switch": {
+      "climate_control": {
+        "name": "Klimatkontroll",
+        "state": {
+          "on": "På",
+          "off": "Av"
+        }
+      },
+      "charge_control": {
+        "name": "Laddningskontroll",
+        "state": {
+          "on": "Aktiverad",
+          "off": "Inaktiverad"
+        }
+      },
+      "valet_mode": {
+        "name": "Vaktmästarläge",
+        "state": {
+          "on": "Aktiverad",
+          "off": "Inaktiverad"
+        }
+      }
+    },
+    "device_tracker": {
+      "location": {
+        "name": "Fordonsplats"
+      }
+    }
+  }
+}
