@@ -466,7 +466,8 @@ class OVMSMQTTClient:
         
         _LOGGER.debug("Formatted structure prefix: %s", structure_prefix)
         return structure_prefix
-        async def _async_process_message(self, msg) -> None:
+        
+    async def _async_process_message(self, msg) -> None:
         """Process an incoming MQTT message."""
         topic = msg.topic
         try:
@@ -685,11 +686,11 @@ class OVMSMQTTClient:
         
         # Check if this is a known metric
         metric_info = get_metric_by_path(metric_path)
-        if metric_info and "name" in metric_info:
-            return metric_info["name"]
         
         # Try pattern matching if no exact match
-        metric_info = get_metric_by_pattern(metric_parts)
+        if not metric_info and metric_parts:
+            metric_info = get_metric_by_pattern(metric_parts)
+        
         if metric_info and "name" in metric_info:
             return f"{metric_info['name']} ({entity_category.title()})"
         
@@ -730,8 +731,7 @@ class OVMSMQTTClient:
                 # Use a generic discovery command
                 command_id = uuid.uuid4().hex[:8]
                 command_topic = COMMAND_TOPIC_TEMPLATE.format(
-                    structure_prefix=self
-                .structure_prefix,
+                    structure_prefix=self.structure_prefix,
                     command_id=command_id
                 )
                 response_topic = RESPONSE_TOPIC_TEMPLATE.format(
@@ -749,6 +749,20 @@ class OVMSMQTTClient:
     def _parse_topic(self, topic) -> Tuple[Optional[str], Optional[Dict]]:
         """Parse a topic to determine the entity type and info."""
         _LOGGER.debug("Parsing topic: %s", topic)
+        
+        # Special handling for status topic (module online status)
+        if topic.endswith("/status"):
+            vehicle_id = self.config.get(CONF_VEHICLE_ID, "")
+            attributes = {"topic": topic, "category": "diagnostic"}
+            return "binary_sensor", {
+                "name": f"ovms_{vehicle_id}_status",
+                "friendly_name": f"OVMS {vehicle_id} Connection",
+                "attributes": attributes,
+            }
+            
+        # Skip event topics - we don't need entities for these
+        if topic.endswith("/event"):
+            return None, None
         
         # Check if topic matches our structure prefix
         if not topic.startswith(self.structure_prefix):
