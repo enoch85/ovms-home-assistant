@@ -2158,9 +2158,7 @@ METRIC_CATEGORIES = {
         if v.get("category") == CATEGORY_CLIMATE
     ],
     CATEGORY_DOOR: [
-        k
-        for k, v in METRIC_DEFINITIONS.items()
-        if v.get("category") == CATEGORY_DOOR
+        k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_DOOR
     ],
     CATEGORY_LOCATION: [
         k
@@ -2168,19 +2166,13 @@ METRIC_CATEGORIES = {
         if v.get("category") == CATEGORY_LOCATION
     ],
     CATEGORY_MOTOR: [
-        k
-        for k, v in METRIC_DEFINITIONS.items()
-        if v.get("category") == CATEGORY_MOTOR
+        k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_MOTOR
     ],
     CATEGORY_TRIP: [
-        k
-        for k, v in METRIC_DEFINITIONS.items()
-        if v.get("category") == CATEGORY_TRIP
+        k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_TRIP
     ],
     CATEGORY_DEVICE: [
-        k
-        for k, v in METRIC_DEFINITIONS.items()
-        if v.get("category") == CATEGORY_DEVICE
+        k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_DEVICE
     ],
     CATEGORY_DIAGNOSTIC: [
         k
@@ -2188,9 +2180,7 @@ METRIC_CATEGORIES = {
         if v.get("category") == CATEGORY_DIAGNOSTIC
     ],
     CATEGORY_POWER: [
-        k
-        for k, v in METRIC_DEFINITIONS.items()
-        if v.get("category") == CATEGORY_POWER
+        k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_POWER
     ],
     CATEGORY_NETWORK: [
         k
@@ -2198,19 +2188,13 @@ METRIC_CATEGORIES = {
         if v.get("category") == CATEGORY_NETWORK
     ],
     CATEGORY_SYSTEM: [
-        k
-        for k, v in METRIC_DEFINITIONS.items()
-        if v.get("category") == CATEGORY_SYSTEM
+        k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_SYSTEM
     ],
     CATEGORY_TIRE: [
-        k
-        for k, v in METRIC_DEFINITIONS.items()
-        if v.get("category") == CATEGORY_TIRE
+        k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_TIRE
     ],
     CATEGORY_VW_EUP: [
-        k
-        for k, v in METRIC_DEFINITIONS.items()
-        if v.get("category") == CATEGORY_VW_EUP
+        k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_VW_EUP
     ],
 }
 # Binary metrics that should be boolean
@@ -2319,9 +2303,5 @@ def create_friendly_name(topic_parts, metric_info=None):
     # Otherwise, build a name from the last part of the topic
     last_part = topic_parts[-1].replace("_", " ").title()
 
-    # If the topic has hierarchical information, include it
-    if len(topic_parts) > 1:
-        category = determine_category_from_topic(topic_parts)
-        return f"{last_part} ({category.title()})"
-
+    # Return just the last part without category
     return last_part
