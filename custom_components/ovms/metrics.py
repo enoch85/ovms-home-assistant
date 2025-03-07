@@ -34,6 +34,7 @@ CATEGORY_POWER = "power"
 CATEGORY_NETWORK = "network"
 CATEGORY_SYSTEM = "system"
 CATEGORY_TIRE = "tire"
+CATEGORY_VW_EUP = "vw_eup"
 
 # Custom unit constants
 UNIT_AMPERE_HOUR = "Ah"
@@ -182,7 +183,21 @@ METRIC_DEFINITIONS = {
         "category": CATEGORY_SYSTEM,
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
-    "s.v2.connected": {
+    "m.net.mdm.mode": {
+        "name": "Modem Mode",
+        "description": "Current modem mode (e.g., WCDMA, Online)",
+        "icon": "mdi:cellphone-wireless",
+        "category": CATEGORY_NETWORK,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    "m.net.mdm.netreg": {
+        "name": "Modem Network Registration",
+        "description": "Modem network registration status",
+        "icon": "mdi:cellphone-check",
+        "category": CATEGORY_NETWORK,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+"s.v2.connected": {
         "name": "V2 Server Connected",
         "description": "V2 (MP) server connected",
         "icon": "mdi:server-network",
@@ -353,7 +368,7 @@ METRIC_DEFINITIONS = {
         "unit": UNIT_AMPERE_HOUR,
         "category": CATEGORY_BATTERY,
     },
-    "v.b.capacity": {
+"v.b.capacity": {
         "name": "Battery Usable Capacity",
         "description": "Main battery usable capacity",
         "icon": "mdi:battery",
@@ -513,7 +528,7 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfTemperature.CELSIUS,
         "category": CATEGORY_BATTERY,
     },
-    "v.b.p.temp.min": {
+"v.b.p.temp.min": {
         "name": "Cell Temperature Minimum",
         "description": "Cell temperature - coldest cell in pack",
         "icon": "mdi:thermometer-low",
@@ -657,7 +672,7 @@ METRIC_DEFINITIONS = {
         "unit": PERCENTAGE,
         "category": CATEGORY_BATTERY,
     },
-    "v.b.temp": {
+"v.b.temp": {
         "name": "Battery Temperature",
         "description": "Main battery momentary temperature",
         "icon": "mdi:thermometer",
@@ -776,7 +791,7 @@ METRIC_DEFINITIONS = {
         "unit": PERCENTAGE,
         "category": CATEGORY_CHARGING,
     },
-    "v.c.kwh": {
+"v.c.kwh": {
         "name": "Charge Energy",
         "description": "Energy sum for running charge",
         "icon": "mdi:battery-charging",
@@ -894,7 +909,7 @@ METRIC_DEFINITIONS = {
         "device_class": SensorDeviceClass.TIMESTAMP,
         "category": CATEGORY_CHARGING,
     },
-    "v.c.type": {
+"v.c.type": {
         "name": "Charge Type",
         "description": "Type of charger connection",
         "icon": "mdi:ev-plug-type2",
@@ -1006,7 +1021,7 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfTemperature.CELSIUS,
         "category": CATEGORY_CLIMATE,
     },
-    "v.e.cabinfan": {
+"v.e.cabinfan": {
         "name": "Cabin Fan",
         "description": "Cabin fan speed",
         "icon": "mdi:fan",
@@ -1120,7 +1135,7 @@ METRIC_DEFINITIONS = {
         "device_class": BinarySensorDeviceClass.POWER,
         "category": CATEGORY_DIAGNOSTIC,
     },
-    "v.e.parktime": {
+"v.e.parktime": {
         "name": "Park Time",
         "description": "Seconds parking (turned off)",
         "icon": "mdi:timer",
@@ -1221,7 +1236,7 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfTime.MINUTES,
         "category": CATEGORY_POWER,
     },
-    "v.g.duration.soc": {
+"v.g.duration.soc": {
         "name": "Time to SOC Limit",
         "description": "Estimated time for SOC limit",
         "icon": "mdi:timer",
@@ -1327,7 +1342,7 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfTemperature.CELSIUS,
         "category": CATEGORY_POWER,
     },
-    "v.g.time": {
+"v.g.time": {
         "name": "Generator Run Time",
         "description": "Duration of generator running",
         "icon": "mdi:timer",
@@ -1426,7 +1441,7 @@ METRIC_DEFINITIONS = {
         "unit": "m/s²",
         "category": CATEGORY_TRIP,
     },
-    "v.p.altitude": {
+"v.p.altitude": {
         "name": "Altitude",
         "description": "GPS altitude",
         "icon": "mdi:elevation-rise",
@@ -1541,6 +1556,29 @@ METRIC_DEFINITIONS = {
         "unit": UnitOfLength.KILOMETERS,
         "category": CATEGORY_TRIP,
     },
+"v.p.valet.distance": {
+        "name": "Valet Mode Distance",
+        "description": "Distance traveled in valet mode",
+        "icon": "mdi:map-marker-distance",
+        "device_class": SensorDeviceClass.DISTANCE,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "unit": UnitOfLength.KILOMETERS,
+        "category": CATEGORY_TRIP,
+    },
+    "v.p.valet.latitude": {
+        "name": "Valet Mode Last Latitude",
+        "description": "Last known latitude position in valet mode",
+        "icon": "mdi:map-marker",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": CATEGORY_LOCATION,
+    },
+    "v.p.valet.longitude": {
+        "name": "Valet Mode Last Longitude",
+        "description": "Last known longitude position in valet mode",
+        "icon": "mdi:map-marker",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": CATEGORY_LOCATION,
+    },
 
     # Tire metrics
     "v.t.alert": {
@@ -1590,6 +1628,361 @@ METRIC_DEFINITIONS = {
         "icon": "mdi:identifier",
         "category": CATEGORY_DEVICE,
         "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+
+    # VW e-UP specific metrics
+    "xvu.b.cap.ah.abs": {
+        "name": "VW eUP! Absolute Battery Capacity",
+        "description": "Absolute battery capacity in Ampere hours",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.ENERGY_STORAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UNIT_AMPERE_HOUR,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.b.cap.ah.norm": {
+        "name": "VW eUP! Normalized Battery Capacity",
+        "description": "Normalized battery capacity in Ampere hours",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.ENERGY_STORAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UNIT_AMPERE_HOUR,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.b.cap.kwh.abs": {
+        "name": "VW eUP! Absolute Battery Energy",
+        "description": "Absolute battery capacity in kWh",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.ENERGY_STORAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,
+        "category": CATEGORY_VW_EUP,
+    },
+"xvu.b.cap.kwh.norm": {
+        "name": "VW eUP! Normalized Battery Energy",
+        "description": "Normalized battery capacity in kWh",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.ENERGY_STORAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.b.cap.kwh.range": {
+        "name": "VW eUP! Range Battery Energy",
+        "description": "Battery capacity available for range in kWh",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.ENERGY_STORAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.b.cell.delta": {
+        "name": "VW eUP! Cell Voltage Delta",
+        "description": "Maximum voltage difference between cells",
+        "icon": "mdi:flash",
+        "device_class": SensorDeviceClass.VOLTAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricPotential.VOLT,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.b.energy.range": {
+        "name": "VW eUP! Energy Available for Range",
+        "description": "Energy available for driving range",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.ENERGY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.b.soc.abs": {
+        "name": "VW eUP! Absolute SOC",
+        "description": "Absolute state of charge",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.b.soh.charge": {
+        "name": "VW eUP! SOH Charge",
+        "description": "State of health based on charge capacity",
+        "icon": "mdi:battery-heart",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.b.soh.range": {
+        "name": "VW eUP! SOH Range",
+        "description": "State of health based on range capacity",
+        "icon": "mdi:battery-heart",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.b.soh.vw": {
+        "name": "VW eUP! SOH VW",
+        "description": "State of health reported by VW",
+        "icon": "mdi:battery-heart",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.ac.i1": {
+        "name": "VW eUP! AC Charging Current L1",
+        "description": "AC charging current phase 1",
+        "icon": "mdi:current-ac",
+        "device_class": SensorDeviceClass.CURRENT,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricCurrent.AMPERE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.ac.i2": {
+        "name": "VW eUP! AC Charging Current L2",
+        "description": "AC charging current phase 2",
+        "icon": "mdi:current-ac",
+        "device_class": SensorDeviceClass.CURRENT,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricCurrent.AMPERE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.ac.p": {
+        "name": "VW eUP! AC Charging Power",
+        "description": "AC charging power",
+        "icon": "mdi:flash",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.KILO_WATT,
+        "category": CATEGORY_VW_EUP,
+    },
+"xvu.c.ac.u1": {
+        "name": "VW eUP! AC Charging Voltage L1",
+        "description": "AC charging voltage phase 1",
+        "icon": "mdi:flash",
+        "device_class": SensorDeviceClass.VOLTAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricPotential.VOLT,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.ac.u2": {
+        "name": "VW eUP! AC Charging Voltage L2",
+        "description": "AC charging voltage phase 2",
+        "icon": "mdi:flash",
+        "device_class": SensorDeviceClass.VOLTAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricPotential.VOLT,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.ccs.i": {
+        "name": "VW eUP! DC Charging Current",
+        "description": "CCS DC charging current",
+        "icon": "mdi:current-dc",
+        "device_class": SensorDeviceClass.CURRENT,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricCurrent.AMPERE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.ccs.p": {
+        "name": "VW eUP! DC Charging Power",
+        "description": "CCS DC charging power",
+        "icon": "mdi:flash",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.KILO_WATT,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.ccs.u": {
+        "name": "VW eUP! DC Charging Voltage",
+        "description": "CCS DC charging voltage",
+        "icon": "mdi:flash",
+        "device_class": SensorDeviceClass.VOLTAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricPotential.VOLT,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.dc.i1": {
+        "name": "VW eUP! DC-DC Input Current",
+        "description": "DC-DC converter input current",
+        "icon": "mdi:current-dc",
+        "device_class": SensorDeviceClass.CURRENT,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricCurrent.AMPERE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.dc.i2": {
+        "name": "VW eUP! DC-DC Output Current",
+        "description": "DC-DC converter output current",
+        "icon": "mdi:current-dc",
+        "device_class": SensorDeviceClass.CURRENT,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricCurrent.AMPERE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.dc.p": {
+        "name": "VW eUP! DC-DC Power",
+        "description": "DC-DC converter power",
+        "icon": "mdi:flash",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.KILO_WATT,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.dc.u1": {
+        "name": "VW eUP! DC-DC Input Voltage",
+        "description": "DC-DC converter input voltage",
+        "icon": "mdi:flash",
+        "device_class": SensorDeviceClass.VOLTAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricPotential.VOLT,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.dc.u2": {
+        "name": "VW eUP! DC-DC Output Voltage",
+        "description": "DC-DC converter output voltage",
+        "icon": "mdi:flash",
+        "device_class": SensorDeviceClass.VOLTAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricPotential.VOLT,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.eff.calc": {
+        "name": "VW eUP! Charging Efficiency Calculated",
+        "description": "Calculated charging efficiency",
+        "icon": "mdi:battery-charging",
+        "device_class": SensorDeviceClass.POWER_FACTOR,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.eff.ecu": {
+        "name": "VW eUP! Charging Efficiency ECU",
+        "description": "ECU reported charging efficiency",
+        "icon": "mdi:battery-charging",
+        "device_class": SensorDeviceClass.POWER_FACTOR,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.limit.soc.max": {
+        "name": "VW eUP! Max SOC Limit",
+        "description": "Maximum SOC limit for charging",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.limit.soc.min": {
+        "name": "VW eUP! Min SOC Limit",
+        "description": "Minimum SOC limit for charging",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.loss.calc": {
+        "name": "VW eUP! Calculated Charging Loss",
+        "description": "Calculated power loss during charging",
+        "icon": "mdi:flash-off",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.KILO_WATT,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.loss.ecu": {
+        "name": "VW eUP! ECU Charging Loss",
+        "description": "ECU reported power loss during charging",
+        "icon": "mdi:flash-off",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.KILO_WATT,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.soc.norm": {
+        "name": "VW eUP! Normalized SOC",
+        "description": "Normalized state of charge",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.c.timermode.def": {
+        "name": "VW eUP! Default Timer Mode",
+        "description": "Default timer mode enabled state",
+        "icon": "mdi:timer",
+        "device_class": BinarySensorDeviceClass.RUNNING,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.e.hv.chgmode": {
+        "name": "VW eUP! HV Charging Mode",
+        "description": "High voltage charging mode",
+        "icon": "mdi:battery-charging",
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.e.lv.autochg": {
+        "name": "VW eUP! 12V Auto Charging",
+        "description": "12V automatic charging enabled",
+        "icon": "mdi:battery-charging",
+        "device_class": BinarySensorDeviceClass.BATTERY_CHARGING,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.e.lv.pwrstate": {
+        "name": "VW eUP! LV Power State",
+        "description": "Low voltage power state",
+        "icon": "mdi:power-settings",
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.e.serv.days": {
+        "name": "VW eUP! Service Days",
+        "description": "Days until next service",
+        "icon": "mdi:wrench-clock",
+        "device_class": SensorDeviceClass.DURATION,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTime.DAYS,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.m.soc.abs": {
+        "name": "VW eUP! Motor Controller Absolute SOC",
+        "description": "Motor controller absolute state of charge",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": CATEGORY_VW_EUP,
+    },
+"xvu.m.soc.norm": {
+        "name": "VW eUP! Motor Controller Normalized SOC",
+        "description": "Motor controller normalized state of charge",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.m.version": {
+        "name": "VW eUP! Module Version",
+        "description": "eUP module software version",
+        "icon": "mdi:tag-text",
+        "category": CATEGORY_VW_EUP,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    "xvu.v.t.diff": {
+        "name": "VW eUP! Tire Pressure Difference",
+        "description": "Difference in tire pressure values",
+        "icon": "mdi:gauge-gap",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": CATEGORY_VW_EUP,
+    },
+    "xvu.v.t.emgcy": {
+        "name": "VW eUP! Tire Emergency Values",
+        "description": "Emergency tire pressure values",
+        "icon": "mdi:car-tire-alert",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": CATEGORY_VW_EUP,
     }
 }
 
@@ -1659,7 +2052,7 @@ TOPIC_PATTERNS = {
         "unit": UnitOfSpeed.KILOMETERS_PER_HOUR,
         "category": CATEGORY_TRIP,
     },
-    "odometer": {
+"odometer": {
         "name": "Odometer",
         "icon": "mdi:counter",
         "device_class": SensorDeviceClass.DISTANCE,
@@ -1745,6 +2138,11 @@ TOPIC_PATTERNS = {
         "icon": "mdi:alert",
         "device_class": BinarySensorDeviceClass.PROBLEM,
         "category": CATEGORY_DIAGNOSTIC,
+    },
+    "xvu": {
+        "name": "VW eUP!",
+        "icon": "mdi:car-electric",
+        "category": CATEGORY_VW_EUP,
     }
 }
 
@@ -1763,8 +2161,8 @@ METRIC_CATEGORIES = {
     CATEGORY_NETWORK: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_NETWORK],
     CATEGORY_SYSTEM: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_SYSTEM],
     CATEGORY_TIRE: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_TIRE],
+    CATEGORY_VW_EUP: [k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_VW_EUP],
 }
-
 # Binary metrics that should be boolean
 BINARY_METRICS = [
     k for k, v in METRIC_DEFINITIONS.items() 
@@ -1794,6 +2192,11 @@ PREFIX_CATEGORIES = {
     "m.net": CATEGORY_NETWORK,
     "m": CATEGORY_SYSTEM,
     "s": CATEGORY_SYSTEM,
+    "xvu.b": CATEGORY_VW_EUP,
+    "xvu.c": CATEGORY_VW_EUP,
+    "xvu.e": CATEGORY_VW_EUP,
+    "xvu.m": CATEGORY_VW_EUP,
+    "xvu.v": CATEGORY_VW_EUP,
 }
 
 def get_metric_by_path(metric_path):
@@ -1824,7 +2227,8 @@ def determine_category_from_topic(topic_parts):
         if part_lower in [CATEGORY_BATTERY, CATEGORY_CHARGING, CATEGORY_CLIMATE, 
                           CATEGORY_DOOR, CATEGORY_LOCATION, CATEGORY_MOTOR, 
                           CATEGORY_TRIP, CATEGORY_DIAGNOSTIC, CATEGORY_POWER,
-                          CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE]:
+                          CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE,
+                          CATEGORY_VW_EUP]:
             return part_lower
     
     # Try matching by prefix
