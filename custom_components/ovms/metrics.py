@@ -2035,6 +2035,7 @@ TOPIC_PATTERNS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPower.WATT,
         "category": CATEGORY_POWER,
+        },
     },
     "energy": {
         "name": "Energy",
