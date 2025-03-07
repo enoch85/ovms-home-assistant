@@ -5,7 +5,7 @@
         "title": "MQTT-brokerinställningar",
         "description": "Konfigurera anslutning till MQTT-brokern där OVMS publicerar data",
         "data": {
-          "host": "Broker Host",
+          "host": "Host",
           "Port": "Anslutningsport",
           "username": "Användarnamn",
           "password": "Lösenord",
@@ -171,8 +171,12 @@
       "battery_soc": {
         "name": "Batteriladdningsnivå",
         "state_attributes": {
-          "category": "Kategori",
-          "last_updated": "Senast uppdaterad"
+          "category": {
+            "name": "Kategori"
+          },
+          "last_updated": {
+            "name": "Senast uppdaterad"
+          }
         }
       },
       "battery_range_est": {
