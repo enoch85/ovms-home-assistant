@@ -689,7 +689,7 @@ class OVMSMQTTClient:
             self.entity_queue.append(entity_data)
     
     def _create_friendly_name(self, metric_parts, entity_category):
-        """Create a user-friendly name based on metric path and category."""
+        """Create a user-friendly name based on metric path."""
         if not metric_parts:
             return "Unknown"
             
@@ -715,17 +715,14 @@ class OVMSMQTTClient:
             metric_info = get_metric_by_pattern(metric_parts)
         
         if metric_info and "name" in metric_info:
-            return f"{metric_info['name']} ({entity_category.title()})"
+            return metric_info['name']
         
         # If no metric definition found, use the original method for fallback naming
         if len(metric_parts) == 0:
             return "Unknown"
         
-        # Return the last part as a title with category
+        # Return the last part as a title without the category
         last_part = metric_parts[-1].replace("_", " ").title()
-        if entity_category and entity_category != "unknown":
-            return f"{last_part} ({entity_category.title()})"
-        
         return last_part
         
     async def _async_platforms_loaded(self) -> None:
