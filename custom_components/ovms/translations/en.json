@@ -171,8 +171,12 @@
       "battery_soc": {
         "name": "Battery State of Charge",
         "state_attributes": {
-          "category": "Category",
-          "last_updated": "Last Updated"
+          "category": {
+            "name": "Category"
+          },
+          "last_updated": {
+            "name": "Last Updated"
+          }
         }
       },
       "battery_range_est": {
