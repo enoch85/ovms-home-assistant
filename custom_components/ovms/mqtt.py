@@ -866,18 +866,32 @@ class OVMSMQTTClient:
             if hasattr(metric_info["device_class"], "__module__") and "binary_sensor" in metric_info["device_class"].__module__:
                 is_binary = True
                 entity_type = "binary_sensor"
-        
-        # Also check if this is a known binary metric or has binary pattern in name
-        if metric_path in BINARY_METRICS or any(binary_pattern in name.lower() for binary_pattern in 
-                                            ["on", "active", "enabled", "running", "connected", "locked", "door", "charging"]):
+
+        # Also check if this is a known binary metric
+        if metric_path in BINARY_METRICS:
             is_binary = True
             entity_type = "binary_sensor"
+            
+        # Check for binary patterns in name - but use word boundaries to avoid substring matches
+        binary_patterns = [r'\bon\b', r'\bactive\b', r'\benabled\b', r'\brunning\b', 
+                           r'\bconnected\b', r'\blocked\b', r'\bdoor\b', r'\bcharging\b']
+        if any(re.search(pattern, name.lower()) for pattern in binary_patterns):
+            is_binary = True
+            entity_type = "binary_sensor"
+            
+        # Specific checks for GPS and numeric data that should never be binary
+        if ("latitude" in name.lower() or "longitude" in name.lower() or 
+            "gps" in name.lower() or "location" in name.lower() or
+            "power" in name.lower() or "energy" in name.lower() or
+            "duration" in name.lower() or "consumption" in name.lower() or
+            "acceleration" in name.lower() or "direction" in name.lower() or
+            "monotonic" in name.lower()):
+            is_binary = False
+            entity_type = "sensor"
         
         # Check for location/GPS data
-        if "gps" in name.lower() or "latitude" in name.lower() or "longitude" in name.lower() or category == "location":
-            # If both latitude and longitude are in the topic, it's likely a location
-            if "latitude" in name.lower() and "longitude" in name.lower():
-                entity_type = "device_tracker"
+        if "latitude" in name.lower() and "longitude" in name.lower():
+            entity_type = "device_tracker"
         
         # Check for commands/switches
         if "command" in parts or any(switch_pattern in name.lower() for switch_pattern in 
