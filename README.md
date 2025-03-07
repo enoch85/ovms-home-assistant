@@ -232,6 +232,8 @@ You can for example use the developer tool in Home Assistant to update all the m
 
 ## Troubleshooting
 
+*Warning! The debug output is substancial. It may fill your disk if you are not careful, don't leave it turned on.*
+
 ### No Entities Created
 
 1. Check if your OVMS module is publishing to the MQTT broker
