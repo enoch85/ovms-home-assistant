@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e  # Exit immediately if a command exits with a non-zero status
+#set -e  # Exit immediately if a command exits with a non-zero status
 
 # Colors for better readability
 RED='\033[0;31m'
