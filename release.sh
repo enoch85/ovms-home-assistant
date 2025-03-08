@@ -12,7 +12,7 @@ NC='\033[0m' # No Color
 MAIN_NAME="OVMS Home Assistant"
 SHORT_NAME="OVMS"
 FULL_NAME="Open Vehicle Monitoring System HA"
-REPO_NAME="ovms-mqtt-integration"  # Current repository name
+REPO_NAME="ovms-home-assistant"  # Current repository name
 
 # Check if GitHub CLI is installed
 if ! command -v gh &> /dev/null; then
@@ -122,7 +122,8 @@ function generate_release_notes {
     local version_tag="$1"
     local last_tag=$(git describe --abbrev=0 --tags 2>/dev/null || echo "")
     
-    echo -e "${YELLOW}Generating release notes...${NC}"
+    # Status messages to stderr so they don't get captured in the variable assignment
+    echo -e "${YELLOW}Generating release notes...${NC}" >&2
     
     # Create a temporary file for release notes
     local release_notes_file=$(mktemp)
@@ -141,7 +142,7 @@ function generate_release_notes {
     
     if [[ -n "$last_tag" ]]; then
         # Get merged PRs since last tag using GitHub CLI
-        echo -e "${BLUE}Fetching merged PRs since ${last_tag}...${NC}"
+        echo -e "${BLUE}Fetching merged PRs since ${last_tag}...${NC}" >&2
         
         # Use GitHub CLI to get merged PRs
         pr_list=$(gh pr list --state merged --base main --json number,title,author,mergedAt,url --limit 100)
@@ -165,7 +166,7 @@ function generate_release_notes {
         fi
     else
         # If there's no previous tag, get all commits
-        echo -e "${BLUE}No previous tag found. Including all commits...${NC}"
+        echo -e "${BLUE}No previous tag found. Including all commits...${NC}" >&2
         
         # Get commits
         git log --pretty=format:"* %s (%h)" --no-merges | head -n 10 >> "$release_notes_file"
@@ -180,9 +181,9 @@ function generate_release_notes {
         echo "[${version_tag}](https://github.com/enoch85/${REPO_NAME}/releases/tag/${version_tag})" >> "$release_notes_file"
     fi
     
-    echo -e "${GREEN}✓ Release notes generated${NC}"
+    echo -e "${GREEN}✓ Release notes generated${NC}" >&2
     
-    # Return the file path
+    # Only output the filename, which will be captured by the variable assignment
     echo "$release_notes_file"
 }
 
@@ -278,7 +279,7 @@ echo -e "${GREEN}✓ Latest changes pulled${NC}"
 # Update manifest.json
 update_manifest "$VERSION_TAG"
 
-# Generate release notes
+# Generate release notes - Only capture the file path, not the status messages
 RELEASE_NOTES_FILE=$(generate_release_notes "$VERSION_TAG")
 
 # Create either a PR or a full release
