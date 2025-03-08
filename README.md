@@ -25,8 +25,6 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 - Maintains entity state based on real-time MQTT updates
 - Provides services to send commands to your vehicle
 
-![Entity Overview](/assets/entity-overview.svg)
-
 ## Features
 
 - **Automatic Discovery**: Detects all metrics published by your OVMS module
@@ -100,12 +98,12 @@ Configure your OVMS module to publish data to your MQTT broker:
 1. In the OVMS web UI, go to Config → Server V3 (MQTT)
 2. Configure the following settings:
    - Server: Your MQTT broker address
-   - Port: 1883 (standard) or 8883 (TLS/SSL)
+   - Port: 8883 (TLS/SSL, standard) or 1883 (unencrypted)
    - Username/Password: If required by your broker
    - Topic Prefix: `ovms` (default, can be customized)
    - Enable Auto-Start: YES
 
-![OVMS MQTT Configuration](/assets/ovms-mqtt-config.svg)
+![OVMS GUI](/assets/screenshot-ovms-gui.png)
 
 ## Home Assistant Configuration
 
