@@ -1,0 +1,323 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Open Vehicle Monitoring System HA",
+        "description": "Configure connection to the MQTT broker where OVMS is publishing data",
+        "data": {
+          "host": "Broker Host",
+          "Port": "Connection Port",
+          "username": "Username",
+          "password": "Password",
+          "qos": "QoS Level",
+          "allow_insecure_ssl": "Allow Insecure SSL Connections"
+        }
+      },
+      "topics": {
+        "title": "MQTT Topic Structure",
+        "description": "Configure how OVMS topics are structured",
+        "data": {
+          "topic_prefix": "Topic Prefix (default: ovms)",
+          "topic_structure": "Topic Structure",
+          "mqtt_username": "MQTT Username in Topic"
+        }
+      },
+      "custom_topic": {
+        "title": "Custom Topic Structure",
+        "description": "Enter your custom topic structure using the placeholders {prefix}, {vehicle_id}, and optionally {mqtt_username}",
+        "data": {
+          "custom_structure": "Custom Topic Structure"
+        }
+      },
+      "topic_discovery": {
+        "title": "Topic Discovery",
+        "description": "Discovering available OVMS topics...",
+        "data": {
+          "confirm_discovery": "Continue with discovered topics",
+          "retry_discovery": "Retry discovery"
+        }
+      },
+      "vehicle": {
+        "title": "Vehicle Configuration",
+        "description": "Configure your OVMS vehicle",
+        "data": {
+          "vehicle_id": "Vehicle ID"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the broker",
+      "invalid_auth": "Invalid authentication",
+      "timeout": "Connection timeout",
+      "invalid_response": "Invalid response from broker",
+      "no_topics": "No OVMS topics found",
+      "topic_access_denied": "Access denied to OVMS topics",
+      "tls_error": "TLS/SSL configuration error",
+      "unknown": "Unexpected error",
+      "missing_prefix": "Missing required {prefix} placeholder",
+      "missing_vehicle_id": "Missing required {vehicle_id} placeholder",
+      "invalid_placeholder": "Invalid placeholder in custom structure",
+      "invalid_format": "Invalid format in custom structure"
+    },
+    "abort": {
+      "already_configured": "This OVMS vehicle is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OVMS Options",
+        "data": {
+          "qos": "QoS Level",
+          "topic_prefix": "Topic Prefix",
+          "topic_structure": "Topic Structure",
+          "verify_ssl": "Verify SSL Certificate"
+        }
+      }
+    }
+  },
+  "services": {
+    "send_command": {
+      "name": "Send command",
+      "description": "Send a command to the OVMS module.",
+      "fields": {
+        "vehicle_id": {
+          "name": "Vehicle ID",
+          "description": "ID of the vehicle to send command to"
+        },
+        "command": {
+          "name": "Command",
+          "description": "Command to send"
+        },
+        "parameters": {
+          "name": "Parameters",
+          "description": "Command parameters"
+        },
+        "command_id": {
+          "name": "Command ID",
+          "description": "Unique ID for this command (auto-generated if not provided)"
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "Timeout in seconds to wait for response"
+        }
+      }
+    },
+    "set_feature": {
+      "name": "Set feature",
+      "description": "Set an OVMS module feature.",
+      "fields": {
+        "vehicle_id": {
+          "name": "Vehicle ID",
+          "description": "ID of the vehicle"
+        },
+        "feature": {
+          "name": "Feature",
+          "description": "Feature name to set"
+        },
+        "value": {
+          "name": "Value",
+          "description": "Value to set"
+        }
+      }
+    },
+    "control_climate": {
+      "name": "Control climate",
+      "description": "Control the vehicle's climate system.",
+      "fields": {
+        "vehicle_id": {
+          "name": "Vehicle ID",
+          "description": "ID of the vehicle"
+        },
+        "temperature": {
+          "name": "Temperature",
+          "description": "Target temperature"
+        },
+        "hvac_mode": {
+          "name": "HVAC Mode",
+          "description": "Mode to set"
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Duration in minutes"
+        }
+      }
+    },
+    "control_charging": {
+      "name": "Control charging",
+      "description": "Control the vehicle's charging system.",
+      "fields": {
+        "vehicle_id": {
+          "name": "Vehicle ID",
+          "description": "ID of the vehicle"
+        },
+        "action": {
+          "name": "Action",
+          "description": "Charging action"
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Charging mode"
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "Charge limit (percentage)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_soc": {
+        "name": "Battery State of Charge",
+        "state_attributes": {
+          "category": {
+            "name": "Category"
+          },
+          "last_updated": {
+            "name": "Last Updated"
+          }
+        }
+      },
+      "battery_range_est": {
+        "name": "Estimated Range"
+      },
+      "battery_power": {
+        "name": "Battery Power"
+      },
+      "battery_current": {
+        "name": "Battery Current"
+      },
+      "battery_voltage": {
+        "name": "Battery Voltage"
+      },
+      "battery_temperature": {
+        "name": "Battery Temperature"
+      },
+      "charging_time": {
+        "name": "Charging Time"
+      },
+      "charging_power": {
+        "name": "Charging Power"
+      },
+      "odometer": {
+        "name": "Odometer"
+      },
+      "temperature_cabin": {
+        "name": "Cabin Temperature"
+      },
+      "temperature_ambient": {
+        "name": "Ambient Temperature"
+      },
+      "trip": {
+        "name": "Trip Meter"
+      },
+      "speed": {
+        "name": "Vehicle Speed"
+      },
+      "status": {
+        "name": "Vehicle Status"
+      }
+    },
+    "binary_sensor": {
+      "charging": {
+        "name": "Charging Status",
+        "state": {
+          "on": "Charging",
+          "off": "Not Charging"
+        }
+      },
+      "door_lock": {
+        "name": "Door Lock Status",
+        "state": {
+          "on": "Locked",
+          "off": "Unlocked"
+        }
+      },
+      "connected": {
+        "name": "Connection Status",
+        "state": {
+          "on": "Connected",
+          "off": "Disconnected"
+        }
+      },
+      "door_fl": {
+        "name": "Front Left Door",
+        "state": {
+          "on": "Open",
+          "off": "Closed"
+        }
+      },
+      "door_fr": {
+        "name": "Front Right Door",
+        "state": {
+          "on": "Open",
+          "off": "Closed"
+        }
+      },
+      "door_rl": {
+        "name": "Rear Left Door",
+        "state": {
+          "on": "Open",
+          "off": "Closed"
+        }
+      },
+      "door_rr": {
+        "name": "Rear Right Door",
+        "state": {
+          "on": "Open",
+          "off": "Closed"
+        }
+      },
+      "trunk": {
+        "name": "Trunk",
+        "state": {
+          "on": "Open",
+          "off": "Closed"
+        }
+      },
+      "hood": {
+        "name": "Hood",
+        "state": {
+          "on": "Open",
+          "off": "Closed"
+        }
+      },
+      "status": {
+        "name": "Module Status",
+        "state": {
+          "on": "Online",
+          "off": "Offline"
+        }
+      }
+    },
+    "switch": {
+      "climate_control": {
+        "name": "Climate Control",
+        "state": {
+          "on": "On",
+          "off": "Off"
+        }
+      },
+      "charge_control": {
+        "name": "Charge Control",
+        "state": {
+          "on": "Enabled",
+          "off": "Disabled"
+        }
+      },
+      "valet_mode": {
+        "name": "Valet Mode",
+        "state": {
+          "on": "Enabled",
+          "off": "Disabled"
+        }
+      }
+    },
+    "device_tracker": {
+      "location": {
+        "name": "Vehicle Location"
+      }
+    }
+  }
+}

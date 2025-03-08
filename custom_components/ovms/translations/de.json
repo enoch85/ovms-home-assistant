@@ -1,0 +1,323 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Open Vehicle Monitoring System HA",
+        "description": "Verbindung zum MQTT-Broker konfigurieren, auf dem OVMS Daten veröffentlicht",
+        "data": {
+          "host": "Broker-Host",
+          "Port": "Verbindungsport",
+          "username": "Benutzername",
+          "password": "Passwort",
+          "qos": "QoS-Level",
+          "allow_insecure_ssl": "Unsichere SSL-Verbindungen zulassen"
+        }
+      },
+      "topics": {
+        "title": "MQTT-Themenstruktur",
+        "description": "Konfigurieren Sie die Struktur der OVMS-Themen",
+        "data": {
+          "topic_prefix": "Themenpräfix (Standard: ovms)",
+          "topic_structure": "Themenstruktur",
+          "mqtt_username": "MQTT-Benutzername im Thema"
+        }
+      },
+      "custom_topic": {
+        "title": "Benutzerdefinierte Themenstruktur",
+        "description": "Geben Sie Ihre benutzerdefinierte Themenstruktur mit den Platzhaltern {prefix}, {vehicle_id} und optional {mqtt_username} ein",
+        "data": {
+          "custom_structure": "Benutzerdefinierte Themenstruktur"
+        }
+      },
+      "topic_discovery": {
+        "title": "Themenerkennung",
+        "description": "Verfügbare OVMS-Themen werden erkannt...",
+        "data": {
+          "confirm_discovery": "Mit erkannten Themen fortfahren",
+          "retry_discovery": "Erkennung wiederholen"
+        }
+      },
+      "vehicle": {
+        "title": "Fahrzeugkonfiguration",
+        "description": "Konfigurieren Sie Ihr OVMS-Fahrzeug",
+        "data": {
+          "vehicle_id": "Fahrzeug-ID"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Broker fehlgeschlagen",
+      "invalid_auth": "Ungültige Authentifizierung",
+      "timeout": "Zeitüberschreitung bei der Verbindung",
+      "invalid_response": "Ungültige Antwort vom Broker",
+      "no_topics": "Keine OVMS-Themen gefunden",
+      "topic_access_denied": "Zugriff auf OVMS-Themen verweigert",
+      "tls_error": "TLS/SSL-Konfigurationsfehler",
+      "unknown": "Unerwarteter Fehler",
+      "missing_prefix": "Erforderlicher Platzhalter {prefix} fehlt",
+      "missing_vehicle_id": "Erforderlicher Platzhalter {vehicle_id} fehlt",
+      "invalid_placeholder": "Ungültiger Platzhalter in benutzerdefinierter Struktur",
+      "invalid_format": "Ungültiges Format in benutzerdefinierter Struktur"
+    },
+    "abort": {
+      "already_configured": "Dieses OVMS-Fahrzeug ist bereits konfiguriert"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OVMS-Optionen",
+        "data": {
+          "qos": "QoS-Level",
+          "topic_prefix": "Themenpräfix",
+          "topic_structure": "Themenstruktur",
+          "verify_ssl": "SSL-Zertifikat überprüfen"
+        }
+      }
+    }
+  },
+  "services": {
+    "send_command": {
+      "name": "Befehl senden",
+      "description": "Senden Sie einen Befehl an das OVMS-Modul.",
+      "fields": {
+        "vehicle_id": {
+          "name": "Fahrzeug-ID",
+          "description": "ID des Fahrzeugs, an das der Befehl gesendet werden soll"
+        },
+        "command": {
+          "name": "Befehl",
+          "description": "Zu sendender Befehl"
+        },
+        "parameters": {
+          "name": "Parameter",
+          "description": "Befehlsparameter"
+        },
+        "command_id": {
+          "name": "Befehls-ID",
+          "description": "Eindeutige ID für diesen Befehl (wird automatisch generiert, wenn nicht angegeben)"
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "Timeout in Sekunden für das Warten auf eine Antwort"
+        }
+      }
+    },
+    "set_feature": {
+      "name": "Funktion einstellen",
+      "description": "Stellen Sie eine OVMS-Modulfunktion ein.",
+      "fields": {
+        "vehicle_id": {
+          "name": "Fahrzeug-ID",
+          "description": "ID des Fahrzeugs"
+        },
+        "feature": {
+          "name": "Funktion",
+          "description": "Name der einzustellenden Funktion"
+        },
+        "value": {
+          "name": "Wert",
+          "description": "Einzustellender Wert"
+        }
+      }
+    },
+    "control_climate": {
+      "name": "Klima steuern",
+      "description": "Steuern Sie das Klimasystem des Fahrzeugs.",
+      "fields": {
+        "vehicle_id": {
+          "name": "Fahrzeug-ID",
+          "description": "ID des Fahrzeugs"
+        },
+        "temperature": {
+          "name": "Temperatur",
+          "description": "Zieltemperatur"
+        },
+        "hvac_mode": {
+          "name": "HVAC-Modus",
+          "description": "Einzustellender Modus"
+        },
+        "duration": {
+          "name": "Dauer",
+          "description": "Dauer in Minuten"
+        }
+      }
+    },
+    "control_charging": {
+      "name": "Laden steuern",
+      "description": "Steuern Sie das Ladesystem des Fahrzeugs.",
+      "fields": {
+        "vehicle_id": {
+          "name": "Fahrzeug-ID",
+          "description": "ID des Fahrzeugs"
+        },
+        "action": {
+          "name": "Aktion",
+          "description": "Ladeaktion"
+        },
+        "mode": {
+          "name": "Modus",
+          "description": "Lademodus"
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "Ladelimit (Prozent)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_soc": {
+        "name": "Akkuladezustand",
+        "state_attributes": {
+          "category": {
+            "name": "Kategorie"
+          },
+          "last_updated": {
+            "name": "Zuletzt aktualisiert"
+          }
+        }
+      },
+      "battery_range_est": {
+        "name": "Geschätzte Reichweite"
+      },
+      "battery_power": {
+        "name": "Akkuleistung"
+      },
+      "battery_current": {
+        "name": "Akkustrom"
+      },
+      "battery_voltage": {
+        "name": "Akkuspannung"
+      },
+      "battery_temperature": {
+        "name": "Akkutemperatur"
+      },
+      "charging_time": {
+        "name": "Ladezeit"
+      },
+      "charging_power": {
+        "name": "Ladeleistung"
+      },
+      "odometer": {
+        "name": "Kilometerzähler"
+      },
+      "temperature_cabin": {
+        "name": "Innenraumtemperatur"
+      },
+      "temperature_ambient": {
+        "name": "Umgebungstemperatur"
+      },
+      "trip": {
+        "name": "Fahrtenzähler"
+      },
+      "speed": {
+        "name": "Fahrzeuggeschwindigkeit"
+      },
+      "status": {
+        "name": "Fahrzeugstatus"
+      }
+    },
+    "binary_sensor": {
+      "charging": {
+        "name": "Ladestatus",
+        "state": {
+          "on": "Lädt",
+          "off": "Lädt nicht"
+        }
+      },
+      "door_lock": {
+        "name": "Türverriegelungsstatus",
+        "state": {
+          "on": "Verriegelt",
+          "off": "Entriegelt"
+        }
+      },
+      "connected": {
+        "name": "Verbindungsstatus",
+        "state": {
+          "on": "Verbunden",
+          "off": "Getrennt"
+        }
+      },
+      "door_fl": {
+        "name": "Vordere linke Tür",
+        "state": {
+          "on": "Offen",
+          "off": "Geschlossen"
+        }
+      },
+      "door_fr": {
+        "name": "Vordere rechte Tür",
+        "state": {
+          "on": "Offen",
+          "off": "Geschlossen"
+        }
+      },
+      "door_rl": {
+        "name": "Hintere linke Tür",
+        "state": {
+          "on": "Offen",
+          "off": "Geschlossen"
+        }
+      },
+      "door_rr": {
+        "name": "Hintere rechte Tür",
+        "state": {
+          "on": "Offen",
+          "off": "Geschlossen"
+        }
+      },
+      "trunk": {
+        "name": "Kofferraum",
+        "state": {
+          "on": "Offen",
+          "off": "Geschlossen"
+        }
+      },
+      "hood": {
+        "name": "Motorhaube",
+        "state": {
+          "on": "Offen",
+          "off": "Geschlossen"
+        }
+      },
+      "status": {
+        "name": "Modulstatus",
+        "state": {
+          "on": "Online",
+          "off": "Offline"
+        }
+      }
+    },
+    "switch": {
+      "climate_control": {
+        "name": "Klimasteuerung",
+        "state": {
+          "on": "Ein",
+          "off": "Aus"
+        }
+      },
+      "charge_control": {
+        "name": "Ladesteuerung",
+        "state": {
+          "on": "Aktiviert",
+          "off": "Deaktiviert"
+        }
+      },
+      "valet_mode": {
+        "name": "Parkhilfemodus",
+        "state": {
+          "on": "Aktiviert",
+          "off": "Deaktiviert"
+        }
+      }
+    },
+    "device_tracker": {
+      "location": {
+        "name": "Fahrzeugstandort"
+      }
+    }
+  }
+}

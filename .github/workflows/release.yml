@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir release
+          cp -r custom_components/ovms release/
+          cp README.md release/
+          cp LICENSE release/
+
+      - name: Create ZIP
+        run: |
+          cd release
+          zip -r ../ovms.zip .
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+        run: |
+          gh release create "$tag" \
+              --repo="$GITHUB_REPOSITORY" \
+              --title="OVMS Home Assistant $tag" \
+              --generate-notes \
+              --latest \
+              ovms.zip#"OVMS Home Assistant $tag"
