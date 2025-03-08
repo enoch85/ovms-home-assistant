@@ -4,11 +4,14 @@
 The [Open Vehicle Monitoring System (OVMS)](https://www.openvehicles.com/) integration for Home Assistant. Connect your electric vehicle with Home Assistant via MQTT, automatically creating sensors for all vehicle metrics.
 
 ## Screenshots
-![1](https://private-user-images.githubusercontent.com/4511254/420610352-19784697-0505-4647-bd01-da9a6ffd648e.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NDE0NTkzOTMsIm5iZiI6MTc0MTQ1OTA5MywicGF0aCI6Ii80NTExMjU0LzQyMDYxMDM1Mi0xOTc4NDY5Ny0wNTA1LTQ2NDctYmQwMS1kYTlhNmZmZDY0OGUucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI1MDMwOCUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNTAzMDhUMTgzODEzWiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9ZDJkMTc2YzMwMDk1ZDJkM2VhMzI1ZjA1NzkzZjY4ZTI3NzZiZmFkMTZjYmE4NTBjZTZhNzA5N2MyZDlmNmI4ZSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.2vKKeWZXcOOb7NAu9sIkWejdsB8dv5fdcaOt1u2SYhc)
+![1](/assets/screenshot-overview1.png|width=50)
+*Integration overview 1*
 
-![2](https://private-user-images.githubusercontent.com/4511254/420610358-691e887d-d009-46f1-bb94-17d3d7923fe6.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NDE0NTkzOTMsIm5iZiI6MTc0MTQ1OTA5MywicGF0aCI6Ii80NTExMjU0LzQyMDYxMDM1OC02OTFlODg3ZC1kMDA5LTQ2ZjEtYmI5NC0xN2QzZDc5MjNmZTYucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI1MDMwOCUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNTAzMDhUMTgzODEzWiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9ZDRhN2JlZGZmYjVjYmJhYjdlZmIyMWJjYjYzMzExODI0Mjc3MGRhNzRhNjJmNWRhMTc1ZTJiZDg0NTkyYzQ5NSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.MIYeU76GGV65AE7FvjnHb98RjgHjbwksfH_TFOOw9sY)
+![2](/assets/screenshot-overview1.png|width=50)
+*Integration overview 2*
 
-![3](https://private-user-images.githubusercontent.com/4511254/420610367-130fd858-eceb-4781-bc11-6dd1d9dfe878.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NDE0NTkzOTMsIm5iZiI6MTc0MTQ1OTA5MywicGF0aCI6Ii80NTExMjU0LzQyMDYxMDM2Ny0xMzBmZDg1OC1lY2ViLTQ3ODEtYmMxMS02ZGQxZDlkZmU4NzgucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI1MDMwOCUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNTAzMDhUMTgzODEzWiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9N2E3YWU2OGRiOTY1Y2FlMDEyYjZjOWQzODZhMGRmN2IyZGUyOTQxOGVkZmUyNTdmYjVmMThkODM0ZTczMjhkMCZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.FxRFaWmT7KFmFGN5XZN3Gxk_zJkP7Xvu7f3HtHuDl4k)
+![3](/assets/screenshot-overview1.png|width=50)
+*All topics with a lot of metrics are stored in attributes instead, where the average and median are caluclated and presented*
 
 ## Overview
 
@@ -19,7 +22,7 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 - Maintains entity state based on real-time MQTT updates
 - Provides services to send commands to your vehicle
 
-![Entity Overview](/assets/entity-overview.svg)
+![Entity Overview](/assets/entity-overview.svg|width=50)
 
 ## Features
 
@@ -99,7 +102,7 @@ Configure your OVMS module to publish data to your MQTT broker:
    - Topic Prefix: `ovms` (default, can be customized)
    - Enable Auto-Start: YES
 
-![OVMS MQTT Configuration](/assets/ovms-mqtt-config.svg)
+![OVMS MQTT Configuration](/assets/ovms-mqtt-config.svg|width=50)
 
 ## Home Assistant Configuration
 
@@ -117,7 +120,7 @@ Configure your OVMS module to publish data to your MQTT broker:
 5. The integration will scan for available OVMS vehicles
 6. Select your vehicle ID when prompted
 
-![Setup Flow](/assets/setup-flow.svg)
+![Setup Flow](/assets/setup-flow.svg|width=50)
 
 ### Testing Configuration
 
@@ -184,7 +187,7 @@ hold_action:
 name: "REG123: update all"
 ```
 
-![command button](https://private-user-images.githubusercontent.com/4511254/420617217-1e6c6c2e-b293-40f6-998c-298a6ae7ea39.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NDE0NTk3OTQsIm5iZiI6MTc0MTQ1OTQ5NCwicGF0aCI6Ii80NTExMjU0LzQyMDYxNzIxNy0xZTZjNmMyZS1iMjkzLTQwZjYtOTk4Yy0yOThhNmFlN2VhMzkucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI1MDMwOCUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNTAzMDhUMTg0NDU0WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9MzllZWQxOTA5ZTdhYmM5YzU0ZDY2ZjRjMTYyODI1NjIyYThmMGQ1MDk4YzRjZTcyOTdhZjAyYWYxZDBiNTIzZiZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.Yi2TB6lhoR7i8JetAiA7ElDw-l9eV_GmZhSC-fx7C4I)
+![screenshot-command](/assets/screenshot-command.png|width=50)
 
 #### `ovms.set_feature`
 Set an OVMS configuration feature.
