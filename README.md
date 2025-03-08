@@ -1,11 +1,11 @@
-# OVMS MQTT Integration for Home Assistant 
+# OVMS Home Assistant
 ![logo](/assets/logo.png)
 
-This integration connects your Open Vehicle Monitoring System (OVMS) with Home Assistant via MQTT, automatically creating sensors for all vehicle metrics.
+The Open Vehicle Monitoring System (OVMS) integration for Home Assistant. Connect your electric vehicle with Home Assistant via MQTT, automatically creating sensors for all vehicle metrics.
 
 ## Overview
 
-The OVMS MQTT Integration discovers and creates Home Assistant entities from MQTT topics published by your OVMS module. The integration automatically:
+The OVMS integration discovers and creates Home Assistant entities from MQTT topics published by your OVMS module. The integration automatically:
 
 - Identifies vehicle data and creates appropriate entity types (sensors, binary sensors, device trackers)
 - Categorizes entities by data type (battery, climate, location, etc.)
@@ -42,7 +42,7 @@ The OVMS MQTT Integration discovers and creates Home Assistant entities from MQT
    - Click "Add"
 
 2. Install the integration:
-   - Go to HACS → Integrations → "OVMS MQTT Integration"
+   - Go to HACS → Integrations → "OVMS Home Assistant"
    - Click "Download"
    - Restart Home Assistant
 
@@ -98,7 +98,7 @@ Configure your OVMS module to publish data to your MQTT broker:
 ### Basic Setup
 
 1. Go to Settings → Devices & Services → Add Integration
-2. Search for "OVMS MQTT Integration" and select it
+2. Search for "OVMS" and select it
 3. Enter the MQTT broker details:
    - MQTT Broker: Your broker address
    - Port: Choose between standard (1883) or TLS/SSL (8883)

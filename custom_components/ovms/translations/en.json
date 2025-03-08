@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "MQTT Broker Settings",
+        "title": "Open Vehicle Monitoring System HA",
         "description": "Configure connection to the MQTT broker where OVMS is publishing data",
         "data": {
           "host": "Broker Host",

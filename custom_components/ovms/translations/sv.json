@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "MQTT-brokerinställningar",
+        "title": "Open Vehicle Monitoring System HA",
         "description": "Konfigurera anslutning till MQTT-brokern där OVMS publicerar data",
         "data": {
           "host": "Host",
