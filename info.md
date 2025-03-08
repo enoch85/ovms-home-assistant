@@ -246,25 +246,3 @@ Other troubleshooting steps might include:
 
 If problems persist, collecting the debug logs along with your configuration details can be valuable when seeking support from the community or filing an issue on the GitHub repository.
 </details>
-
-## Integration in the Broader HA Ecosystem
-
-The info.md serves as a concise guide for users installing the integration through HACS.
-
-<details>
-<summary>Read more about the role of info.md</summary>
-
-The `info.md` file plays a specific role in the Home Assistant Community Store (HACS) ecosystem:
-
-1. **HACS Display**: When users browse the integration in HACS, the content of info.md is displayed in the UI. It serves as a quick reference that helps users understand what the integration does and how to set it up.
-
-2. **Complementary to README.md**: While the full README.md contains comprehensive documentation, info.md provides a more focused summary with just the essential information needed for installation and basic use.
-
-3. **Integration Documentation**: The file summarizes the core functionality, requirements, and services without the detailed development information that might be in the full README.
-
-4. **Installation Focus**: It emphasizes the practical aspects of getting the integration working, with specific attention to the configuration process and troubleshooting.
-
-The structure and content of info.md follows HACS best practices, making it easier for users to quickly evaluate if the integration meets their needs and how to get started with it. This helps improve user experience when discovering and installing custom integrations through HACS.
-
-This format - a concise summary with essential installation and usage information - is typical for custom integrations in the Home Assistant ecosystem, making it easier for users to manage and install various community-created components.
-</details>
