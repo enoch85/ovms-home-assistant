@@ -34,4 +34,5 @@ jobs:
               --repo="$GITHUB_REPOSITORY" \
               --title="OVMS Home Assistant $tag" \
               --generate-notes \
-              --files="ovms-home-assistant.zip"
+              --latest \
+              ovms-home-assistant.zip#"OVMS Home Assistant $tag"
