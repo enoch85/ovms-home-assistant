@@ -12,17 +12,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Fetch all history for release notes generation
-
-      # Fixed GitHub CLI setup
-      - name: Set up GitHub CLI
-        run: |
-          # GitHub CLI is pre-installed on GitHub-hosted runners
-          # This ensures it's available and authenticated
-          gh --version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare Release Assets
         run: |
@@ -36,97 +25,13 @@ jobs:
           cd release
           zip -r ../ovms-home-assistant.zip .
 
-      - name: Generate Release Notes
-        id: release_notes
-        run: |
-          # Get the current tag
-          CURRENT_TAG=${GITHUB_REF_NAME}
-          echo "Current tag: $CURRENT_TAG"
-
-          # Get the previous tag
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${CURRENT_TAG}^ 2>/dev/null || echo "")
-          
-          if [ -z "$PREVIOUS_TAG" ]; then
-            echo "No previous tag found, using all history"
-            PREVIOUS_TAG_ARG=""
-            COMPARE_LINK="[Full Changelog](https://github.com/${{ github.repository }}/releases/tag/${CURRENT_TAG})"
-          else
-            echo "Previous tag: $PREVIOUS_TAG"
-            PREVIOUS_TAG_ARG="${PREVIOUS_TAG}.."
-            COMPARE_LINK="[${PREVIOUS_TAG}...${CURRENT_TAG}](https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${CURRENT_TAG})"
-          fi
-          
-          # Generate the release notes
-          echo "# OVMS Home Assistant ${CURRENT_TAG}" > release_notes.md
-          echo "" >> release_notes.md
-          echo "Released on $(date +'%Y-%m-%d')" >> release_notes.md
-          echo "" >> release_notes.md
-          
-          echo "## What's Changed" >> release_notes.md
-          echo "" >> release_notes.md
-          
-          # List merged PRs and commits
-          if [ -n "$PREVIOUS_TAG" ]; then
-            # Try to get PR list using GitHub CLI
-            if PR_LIST=$(gh pr list --state merged --base main --json number,title,author,mergedAt --limit 20 2>/dev/null); then
-              # Process PR list with jq if available
-              if command -v jq > /dev/null && echo "$PR_LIST" | jq . > /dev/null 2>&1; then
-                # Filter PRs merged after the previous tag
-                PREVIOUS_TAG_DATE=$(git log -1 --format=%aI "$PREVIOUS_TAG")
-                
-                # Format PRs into markdown
-                echo "$PR_LIST" | jq -r --arg date "$PREVIOUS_TAG_DATE" '.[] | select(.mergedAt > $date) | "* " + .title + " (#" + (.number|tostring) + ")"' >> release_notes.md
-              fi
-            fi
-            
-            # If no PRs were found or processing failed, use git log
-            if [ ! -s release_notes.md ] || ! grep -q "^\* " release_notes.md; then
-              echo "Using git log for release notes" >&2
-              git log --pretty=format:"* %s (%h)" --no-merges ${PREVIOUS_TAG_ARG}${CURRENT_TAG} | head -n 15 >> release_notes.md
-            fi
-          else
-            # No previous tag, just list recent commits
-            git log --pretty=format:"* %s (%h)" --no-merges -n 15 >> release_notes.md
-          fi
-          
-          echo "" >> release_notes.md
-          echo "## Full Changelog" >> release_notes.md
-          echo "${COMPARE_LINK}" >> release_notes.md
-          
-          cat release_notes.md
-          
-          # Save release notes content to output variable
-          RELEASE_NOTES_CONTENT=$(cat release_notes.md)
-          echo "content<<EOF" >> $GITHUB_OUTPUT
-          echo "$RELEASE_NOTES_CONTENT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Create or Update Release
-        id: create_release
-        run: |
-          RELEASE_TITLE="OVMS Home Assistant ${GITHUB_REF_NAME}"
-
-          # Try to create the release, or update it if it already exists
-          if ! gh release view "${GITHUB_REF_NAME}" &>/dev/null; then
-            echo "Creating new release: ${GITHUB_REF_NAME}"
-            gh release create "${GITHUB_REF_NAME}" \
-              --title "${RELEASE_TITLE}" \
-              --notes-file release_notes.md
-          else
-            echo "Release already exists, updating: ${GITHUB_REF_NAME}"
-            gh release edit "${GITHUB_REF_NAME}" \
-              --title "${RELEASE_TITLE}" \
-              --notes-file release_notes.md
-          fi
-
-          # Get the release URL for the upload step
-          echo "release_url=$(gh release view ${GITHUB_REF_NAME} --json url -q .url)" >> $GITHUB_OUTPUT
+      - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Release Asset
+          tag: ${{ github.ref_name }}
         run: |
-          gh release upload ${GITHUB_REF_NAME} ovms-home-assistant.zip \
-            --clobber
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          gh release create "$tag" \
+              --repo="$GITHUB_REPOSITORY" \
+              --title="OVMS Home Assistant $tag" \
+              --generate-notes \
+              --files="ovms-home-assistant.zip"
