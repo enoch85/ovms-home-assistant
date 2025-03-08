@@ -225,17 +225,18 @@ function create_release_pr {
     echo "4. Run this script again without --pr-only to push the tag and create a release"
 }
 
-# Create a GitHub release
+# Create a GitHub release notice (modified to skip creating actual release)
 function create_github_release {
     local version_tag="$1"
     local release_notes_file="$2"
     
-    echo -e "${YELLOW}Creating GitHub release ${version_tag}...${NC}"
-    
-    # Create release using GitHub CLI with main name
-    gh release create "$version_tag" --notes-file "$release_notes_file" --title "${MAIN_NAME} ${version_tag}"
-    
-    echo -e "${GREEN}✓ GitHub release created${NC}"
+    echo -e "${YELLOW}Skipping GitHub release creation - will be handled by GitHub Actions...${NC}"
+    echo -e "${BLUE}Release notes that will be used for GitHub Actions:${NC}"
+    cat "$release_notes_file"
+    echo
+    echo -e "${GREEN}✓ GitHub release will be created automatically by GitHub Actions when tag is pushed${NC}"
+    echo -e "${BLUE}If you want to review the release after it's created, visit:${NC}"
+    echo "https://github.com/enoch85/${REPO_NAME}/releases/tag/${version_tag}"
 }
 
 # Main execution starts here
@@ -324,10 +325,12 @@ else
     git push origin "${VERSION_TAG}"
     echo -e "${GREEN}✓ Tag ${VERSION_TAG} created and pushed${NC}"
 
-    # Create GitHub release
+    # Create GitHub release (now just displays a notice)
     create_github_release "$VERSION_TAG" "$RELEASE_NOTES_FILE"
 
-    echo -e "${GREEN}${MAIN_NAME} ${VERSION_TAG} successfully released!${NC}"
+    echo -e "${GREEN}${MAIN_NAME} ${VERSION_TAG} successfully prepared!${NC}"
+    echo -e "${BLUE}The GitHub Actions workflow will now create the actual release.${NC}"
+    echo -e "${BLUE}You can monitor the process at:${NC} https://github.com/enoch85/${REPO_NAME}/actions"
 fi
 
 # Clean up temporary file
