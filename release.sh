@@ -288,7 +288,7 @@ echo -e "${YELLOW}Starting release process for ${MAIN_NAME} ${VERSION_TAG}...${N
 
 # Pull latest changes
 echo -e "${YELLOW}Pulling latest changes...${NC}"
-if ! git pull; then
+if ! git pull --rebase; then
     echo -e "${RED}Error:${NC} Failed to pull latest changes."
     echo "Please fix the error, then try again."
     exit 1
