@@ -152,14 +152,32 @@ function generate_release_notes {
             last_tag_date=$(git log -1 --format=%ai "$last_tag" 2>/dev/null)
             
             if [[ -n "$last_tag_date" ]]; then
-                # Format PRs into Markdown list
+                # Format PRs into Markdown list - avoid duplicate PR numbers
                 echo "$pr_list" | jq -r --arg date "$last_tag_date" '.[] | 
                     select(.mergedAt > $date) | 
-                    "* " + .title + " (#" + (.number|tostring) + ") @" + .author.login' >> "$release_notes_file"
+                    (
+                        # Check if title already contains the PR number
+                        if (.title | test("\\(#" + (.number|tostring) + "\\)")) then
+                            "* " + .title + " @" + .author.login
+                        elif (.title | test("#" + (.number|tostring) + "\\b")) then
+                            "* " + .title + " @" + .author.login
+                        else
+                            "* " + .title + " (#" + (.number|tostring) + ") @" + .author.login
+                        end
+                    )' >> "$release_notes_file"
             else
                 # If we can't get the last tag date, include all PRs
                 echo "$pr_list" | jq -r '.[] | 
-                    "* " + .title + " (#" + (.number|tostring) + ") @" + .author.login' >> "$release_notes_file"
+                    (
+                        # Check if title already contains the PR number
+                        if (.title | test("\\(#" + (.number|tostring) + "\\)")) then
+                            "* " + .title + " @" + .author.login
+                        elif (.title | test("#" + (.number|tostring) + "\\b")) then
+                            "* " + .title + " @" + .author.login
+                        else
+                            "* " + .title + " (#" + (.number|tostring) + ") @" + .author.login
+                        end
+                    )' >> "$release_notes_file"
             fi
         else
             echo "* No PRs merged since last release" >> "$release_notes_file"
