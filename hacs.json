@@ -1,10 +1,5 @@
 {
   "name": "OVMS Home Assistant",
   "render_readme": true,
-  "content_in_root": false,
-  "country": ["ALL"],
-  "homeassistant": "2025.2.0",
-  "persistent_directory": "userfiles",
-  "zip_release": true,
-  "filename": "ovms.zip",
+  "homeassistant": "2023.10.0"
 }
