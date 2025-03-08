@@ -107,6 +107,13 @@ function update_manifest {
 
     echo -e "${GREEN}Updating version in:${NC} $manifest_file"
 
+    # Check if version is already updated
+    local current_version=$(grep -o '"version": *"[^"]*"' "$manifest_file" | cut -d'"' -f4)
+    if [[ "$current_version" == "$version_tag" ]]; then
+        echo -e "${YELLOW}Note:${NC} Version is already set to ${version_tag} in manifest.json"
+        return 0
+    fi
+
     # Use different sed syntax for macOS vs Linux
     if [[ "$(uname)" == "Darwin" ]]; then
         sed -i '' "s|\"version\":.*|\"version\": \"${version_tag}\"|g" "$manifest_file"
@@ -115,6 +122,16 @@ function update_manifest {
     fi
 
     echo -e "${GREEN}✓ Version updated to ${version_tag} in manifest.json${NC}"
+    return 1  # Return non-zero to indicate changes were made
+}
+
+# Check if any changes were made to files
+function check_for_changes {
+    if git diff --quiet; then
+        return 1  # No changes
+    else
+        return 0  # Changes detected
+    fi
 }
 
 # Generate release notes based on commits and PRs since the last release
@@ -144,43 +161,49 @@ function generate_release_notes {
         # Get merged PRs since last tag using GitHub CLI
         echo -e "${BLUE}Fetching merged PRs since ${last_tag}...${NC}" >&2
         
-        # Use GitHub CLI to get merged PRs
-        pr_list=$(gh pr list --state merged --base main --json number,title,author,mergedAt,url --limit 100)
+        # Use GitHub CLI to get merged PRs - capture in variable and validate JSON
+        pr_list=$(gh pr list --state merged --base main --json number,title,author,mergedAt,url --limit 100 2>/dev/null || echo "[]")
         
-        if [[ -n "$pr_list" ]]; then
-            # Filter PRs merged after the last tag date
-            last_tag_date=$(git log -1 --format=%ai "$last_tag" 2>/dev/null)
-            
-            if [[ -n "$last_tag_date" ]]; then
-                # Format PRs into Markdown list - avoid duplicate PR numbers
-                echo "$pr_list" | jq -r --arg date "$last_tag_date" '.[] | 
-                    select(.mergedAt > $date) | 
-                    (
-                        # Check if title already contains the PR number
-                        if (.title | test("\\(#" + (.number|tostring) + "\\)")) then
-                            "* " + .title + " @" + .author.login
-                        elif (.title | test("#" + (.number|tostring) + "\\b")) then
-                            "* " + .title + " @" + .author.login
-                        else
-                            "* " + .title + " (#" + (.number|tostring) + ") @" + .author.login
-                        end
-                    )' >> "$release_notes_file"
-            else
-                # If we can't get the last tag date, include all PRs
-                echo "$pr_list" | jq -r '.[] | 
-                    (
-                        # Check if title already contains the PR number
-                        if (.title | test("\\(#" + (.number|tostring) + "\\)")) then
-                            "* " + .title + " @" + .author.login
-                        elif (.title | test("#" + (.number|tostring) + "\\b")) then
-                            "* " + .title + " @" + .author.login
-                        else
-                            "* " + .title + " (#" + (.number|tostring) + ") @" + .author.login
-                        end
-                    )' >> "$release_notes_file"
-            fi
+        # Validate JSON with jq
+        if ! echo "$pr_list" | jq empty &>/dev/null; then
+            echo -e "${YELLOW}Warning: Invalid JSON returned from GitHub CLI. Using fallback method.${NC}" >&2
+            # Fallback to a simpler approach - just list recent commits
+            echo "* No valid PR data available. Recent commits:" >> "$release_notes_file"
+            git log --pretty=format:"* %s (%h)" --no-merges -n 10 >> "$release_notes_file"
+        elif [[ "$pr_list" == "[]" || -z "$pr_list" ]]; then
+            echo -e "${YELLOW}No PRs found. Using commit history instead.${NC}" >&2
+            echo "* No PRs found. Recent commits:" >> "$release_notes_file"
+            git log --pretty=format:"* %s (%h)" --no-merges -n 10 >> "$release_notes_file"
         else
-            echo "* No PRs merged since last release" >> "$release_notes_file"
+            # Format PRs into Markdown list - safely process with jq
+            if [[ -n "$last_tag" ]]; then
+                last_tag_date=$(git log -1 --format=%ai "$last_tag" 2>/dev/null || echo "")
+                
+                if [[ -n "$last_tag_date" ]]; then
+                    # Use a safer jq query that handles errors gracefully
+                    pr_formatted=$(echo "$pr_list" | jq -r --arg date "$last_tag_date" '
+                        try (
+                            .[] | 
+                            select(.mergedAt > $date) | 
+                            "* " + .title + " (#" + (.number|tostring) + ")" +
+                            if .author and .author.login then " @" + .author.login else "" end
+                        ) catch "* Error processing PR data"
+                    ' || echo "* Error processing PR data with jq")
+                    
+                    if [[ -n "$pr_formatted" && "$pr_formatted" != "* Error processing PR data" ]]; then
+                        echo "$pr_formatted" >> "$release_notes_file"
+                    else
+                        echo "* No PRs found since last release or error processing data" >> "$release_notes_file"
+                    fi
+                else
+                    # If no last tag date, list all PRs
+                    echo "$pr_list" | jq -r 'try (
+                        .[] | 
+                        "* " + .title + " (#" + (.number|tostring) + ")" +
+                        if .author and .author.login then " @" + .author.login else "" end
+                    ) catch "* Error processing PR data"' >> "$release_notes_file"
+                fi
+            fi
         fi
     else
         # If there's no previous tag, get all commits
@@ -257,6 +280,16 @@ function create_github_release {
     echo "https://github.com/enoch85/${REPO_NAME}/releases/tag/${version_tag}"
 }
 
+# Creates and pushes a tag
+function create_and_push_tag {
+    local version_tag="$1"
+    
+    echo -e "${YELLOW}Creating and pushing tag ${version_tag}...${NC}"
+    git tag "${version_tag}"
+    git push origin "${version_tag}"
+    echo -e "${GREEN}✓ Tag ${version_tag} created and pushed${NC}"
+}
+
 # Main execution starts here
 
 # Parse arguments
@@ -295,53 +328,72 @@ if ! git pull --rebase; then
 fi
 echo -e "${GREEN}✓ Latest changes pulled${NC}"
 
-# Update manifest.json
+# Update manifest.json - returns 0 if already updated, 1 if changes were made
 update_manifest "$VERSION_TAG"
+changes_made=$?
 
-# Generate release notes - Only capture the file path, not the status messages
+# Generate release notes
 RELEASE_NOTES_FILE=$(generate_release_notes "$VERSION_TAG")
 
 # Create either a PR or a full release
 if [[ "$PR_ONLY" == true ]]; then
     create_release_pr "$VERSION_TAG" "$RELEASE_NOTES_FILE"
 else
-    # Stage files
-    echo -e "${YELLOW}Staging changes...${NC}"
-    git add -A
-    echo -e "${GREEN}✓ Changes staged${NC}"
+    # Check if there are any changes to commit
+    if [[ "$changes_made" -eq 1 ]] || check_for_changes; then
+        # Stage files
+        echo -e "${YELLOW}Staging changes...${NC}"
+        git add -A
+        echo -e "${GREEN}✓ Changes staged${NC}"
 
-    # Show summary of changes
-    echo -e "${YELLOW}Summary of changes to be committed:${NC}"
-    git status --short
+        # Show summary of changes
+        echo -e "${YELLOW}Summary of changes to be committed:${NC}"
+        git status --short
 
-    # Display release notes
-    echo -e "${YELLOW}Release Notes:${NC}"
-    cat "$RELEASE_NOTES_FILE"
-    echo
+        # Display release notes
+        echo -e "${YELLOW}Release Notes:${NC}"
+        cat "$RELEASE_NOTES_FILE"
+        echo
 
-    # Confirm commit
-    read -p "Do you want to proceed with the commit, push, and release? (y/n): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Aborting release process."
-        exit 1
+        # Confirm commit
+        read -p "Do you want to proceed with the commit, push, and release? (y/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Aborting release process."
+            exit 1
+        fi
+
+        # Commit changes
+        echo -e "${YELLOW}Committing changes...${NC}"
+        git commit -m "Release ${VERSION_TAG} of ${MAIN_NAME}"
+        echo -e "${GREEN}✓ Changes committed${NC}"
+
+        # Push to main
+        echo -e "${YELLOW}Pushing to main branch...${NC}"
+        git push origin main
+        echo -e "${GREEN}✓ Changes pushed to main${NC}"
+
+        # Create and push tag
+        create_and_push_tag "$VERSION_TAG"
+    else
+        echo -e "${YELLOW}No changes to commit. Manifest.json already has version ${VERSION_TAG}.${NC}"
+        
+        # Display release notes
+        echo -e "${YELLOW}Release Notes:${NC}"
+        cat "$RELEASE_NOTES_FILE"
+        echo
+        
+        # Confirm tag creation
+        read -p "Do you want to create and push the tag ${VERSION_TAG}? (y/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Aborting release process."
+            exit 1
+        fi
+        
+        # Create and push tag
+        create_and_push_tag "$VERSION_TAG"
     fi
-
-    # Commit changes
-    echo -e "${YELLOW}Committing changes...${NC}"
-    git commit -m "Release ${VERSION_TAG} of ${MAIN_NAME}"
-    echo -e "${GREEN}✓ Changes committed${NC}"
-
-    # Push to main
-    echo -e "${YELLOW}Pushing to main branch...${NC}"
-    git push origin main
-    echo -e "${GREEN}✓ Changes pushed to main${NC}"
-
-    # Create and push tag
-    echo -e "${YELLOW}Creating and pushing tag ${VERSION_TAG}...${NC}"
-    git tag "${VERSION_TAG}"
-    git push origin "${VERSION_TAG}"
-    echo -e "${GREEN}✓ Tag ${VERSION_TAG} created and pushed${NC}"
 
     # Create GitHub release (now just displays a notice)
     create_github_release "$VERSION_TAG" "$RELEASE_NOTES_FILE"
