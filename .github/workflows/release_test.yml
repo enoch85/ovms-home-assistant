@@ -32,18 +32,18 @@ jobs:
     name: Python Validation
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install flake8 pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          
+
       - name: Lint with flake8
         run: |
           # stop the build if there are Python syntax errors or undefined names
@@ -57,19 +57,19 @@ jobs:
     if: startsWith(github.head_ref, 'release/v')
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Extract version from branch name
         id: extract_version
         run: echo "version=$(echo ${{ github.head_ref }} | sed 's/release\///')" >> $GITHUB_OUTPUT
-        
+
       - name: Check manifest version
         run: |
           MANIFEST_VERSION=$(grep '"version"' custom_components/ovms/manifest.json | cut -d'"' -f4)
           BRANCH_VERSION="${{ steps.extract_version.outputs.version }}"
-          
+
           echo "Manifest version: $MANIFEST_VERSION"
           echo "Branch version: $BRANCH_VERSION"
-          
+
           if [ "$MANIFEST_VERSION" != "$BRANCH_VERSION" ]; then
             echo "Error: Version in manifest.json ($MANIFEST_VERSION) does not match branch version ($BRANCH_VERSION)"
             exit 1
