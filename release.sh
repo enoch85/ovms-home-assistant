@@ -5,12 +5,37 @@ set -e  # Exit immediately if a command exits with a non-zero status
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Integration naming constants
+MAIN_NAME="OVMS Home Assistant"
+SHORT_NAME="OVMS"
+FULL_NAME="Open Vehicle Monitoring System HA"
+REPO_NAME="ovms-mqtt-integration"  # Current repository name
+
+# Check if GitHub CLI is installed
+if ! command -v gh &> /dev/null; then
+    echo -e "${RED}Error:${NC} GitHub CLI (gh) is not installed."
+    echo "Please install it from https://cli.github.com/ and authenticate."
+    exit 1
+fi
+
+# Check if jq is installed
+if ! command -v jq &> /dev/null; then
+    echo -e "${RED}Error:${NC} jq is not installed."
+    echo "Please install it using your package manager."
+    exit 1
+fi
 
 # Display usage information
 function show_usage {
-    echo -e "${YELLOW}Usage:${NC} bash release.sh <version_tag>"
+    echo -e "${YELLOW}Usage:${NC} bash release.sh <version_tag> [options]"
     echo -e "${YELLOW}Example:${NC} bash release.sh v0.3.1"
+    echo ""
+    echo "Options:"
+    echo "  --pr-only     Create a PR for the release without pushing tags"
+    echo "  --help        Show this help message"
     echo ""
     echo "The version tag must follow the format 'vX.Y.Z' where X, Y, Z are numbers."
 }
@@ -92,22 +117,154 @@ function update_manifest {
     echo -e "${GREEN}✓ Version updated to ${version_tag} in manifest.json${NC}"
 }
 
+# Generate release notes based on commits and PRs since the last release
+function generate_release_notes {
+    local version_tag="$1"
+    local last_tag=$(git describe --abbrev=0 --tags 2>/dev/null || echo "")
+    
+    echo -e "${YELLOW}Generating release notes...${NC}"
+    
+    # Create a temporary file for release notes
+    local release_notes_file=$(mktemp)
+    
+    # Add header to release notes with main name
+    echo "# ${MAIN_NAME} ${version_tag}" > "$release_notes_file"
+    echo "" >> "$release_notes_file"
+    
+    # Add release date
+    echo "Released on $(date +'%Y-%m-%d')" >> "$release_notes_file"
+    echo "" >> "$release_notes_file"
+    
+    # Add section for merged PRs
+    echo "## What's Changed" >> "$release_notes_file"
+    echo "" >> "$release_notes_file"
+    
+    if [[ -n "$last_tag" ]]; then
+        # Get merged PRs since last tag using GitHub CLI
+        echo -e "${BLUE}Fetching merged PRs since ${last_tag}...${NC}"
+        
+        # Use GitHub CLI to get merged PRs
+        pr_list=$(gh pr list --state merged --base main --json number,title,author,mergedAt,url --limit 100)
+        
+        if [[ -n "$pr_list" ]]; then
+            # Filter PRs merged after the last tag date
+            last_tag_date=$(git log -1 --format=%ai "$last_tag" 2>/dev/null)
+            
+            if [[ -n "$last_tag_date" ]]; then
+                # Format PRs into Markdown list
+                echo "$pr_list" | jq -r --arg date "$last_tag_date" '.[] | 
+                    select(.mergedAt > $date) | 
+                    "* " + .title + " (#" + (.number|tostring) + ") @" + .author.login' >> "$release_notes_file"
+            else
+                # If we can't get the last tag date, include all PRs
+                echo "$pr_list" | jq -r '.[] | 
+                    "* " + .title + " (#" + (.number|tostring) + ") @" + .author.login' >> "$release_notes_file"
+            fi
+        else
+            echo "* No PRs merged since last release" >> "$release_notes_file"
+        fi
+    else
+        # If there's no previous tag, get all commits
+        echo -e "${BLUE}No previous tag found. Including all commits...${NC}"
+        
+        # Get commits
+        git log --pretty=format:"* %s (%h)" --no-merges | head -n 10 >> "$release_notes_file"
+    fi
+    
+    echo "" >> "$release_notes_file"
+    echo "## Full Changelog" >> "$release_notes_file"
+    
+    if [[ -n "$last_tag" ]]; then
+        echo "[$last_tag...${version_tag}](https://github.com/enoch85/${REPO_NAME}/compare/${last_tag}...${version_tag})" >> "$release_notes_file"
+    else
+        echo "[${version_tag}](https://github.com/enoch85/${REPO_NAME}/releases/tag/${version_tag})" >> "$release_notes_file"
+    fi
+    
+    echo -e "${GREEN}✓ Release notes generated${NC}"
+    
+    # Return the file path
+    echo "$release_notes_file"
+}
+
+# Create a PR for the release
+function create_release_pr {
+    local version_tag="$1"
+    local branch_name="release/${version_tag}"
+    local release_notes_file="$2"
+    
+    echo -e "${YELLOW}Creating release branch ${branch_name}...${NC}"
+    
+    # Create branch
+    git checkout -b "$branch_name"
+    
+    # Commit changes
+    git add -A
+    git commit -m "Release ${version_tag}"
+    
+    # Push branch
+    git push -u origin "$branch_name"
+    
+    echo -e "${GREEN}✓ Release branch pushed${NC}"
+    
+    # Create PR using GitHub CLI
+    echo -e "${YELLOW}Creating pull request...${NC}"
+    
+    # Use the release notes as PR description
+    pr_url=$(gh pr create --base main --head "$branch_name" --title "${MAIN_NAME} ${version_tag}" --body-file "$release_notes_file")
+    
+    echo -e "${GREEN}✓ Release PR created: ${pr_url}${NC}"
+    
+    # Cleanup
+    git checkout main
+    
+    echo -e "${BLUE}Instructions:${NC}"
+    echo "1. Review the PR: $pr_url"
+    echo "2. Make any necessary changes to the release branch"
+    echo "3. Once approved, merge the PR"
+    echo "4. Run this script again without --pr-only to push the tag and create a release"
+}
+
+# Create a GitHub release
+function create_github_release {
+    local version_tag="$1"
+    local release_notes_file="$2"
+    
+    echo -e "${YELLOW}Creating GitHub release ${version_tag}...${NC}"
+    
+    # Create release using GitHub CLI with main name
+    gh release create "$version_tag" --notes-file "$release_notes_file" --title "${MAIN_NAME} ${version_tag}"
+    
+    echo -e "${GREEN}✓ GitHub release created${NC}"
+}
+
 # Main execution starts here
 
+# Parse arguments
+PR_ONLY=false
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --pr-only) PR_ONLY=true; shift ;;
+        --help) show_usage; exit 0 ;;
+        -h) show_usage; exit 0 ;;
+        -*) echo "Unknown option: $1"; show_usage; exit 1 ;;
+        *) VERSION_TAG="$1"; shift ;;
+    esac
+done
+
 # Check if version tag is provided
-if [ -z "${1}" ]; then
+if [ -z "${VERSION_TAG}" ]; then
     echo -e "${RED}Error:${NC} You forgot to add a release tag!"
     show_usage
     exit 1
 fi
 
-VERSION_TAG="${1}"
 validate_version_tag "$VERSION_TAG"
 check_branch
 check_uncommitted_changes
 check_tag_exists "$VERSION_TAG"
 
-echo -e "${YELLOW}Starting release process for ${VERSION_TAG}...${NC}"
+echo -e "${YELLOW}Starting release process for ${MAIN_NAME} ${VERSION_TAG}...${NC}"
 
 # Pull latest changes
 echo -e "${YELLOW}Pulling latest changes...${NC}"
@@ -121,38 +278,58 @@ echo -e "${GREEN}✓ Latest changes pulled${NC}"
 # Update manifest.json
 update_manifest "$VERSION_TAG"
 
-# Stage files
-echo -e "${YELLOW}Staging changes...${NC}"
-git add -A
-echo -e "${GREEN}✓ Changes staged${NC}"
+# Generate release notes
+RELEASE_NOTES_FILE=$(generate_release_notes "$VERSION_TAG")
 
-# Show summary of changes
-echo -e "${YELLOW}Summary of changes to be committed:${NC}"
-git status --short
+# Create either a PR or a full release
+if [[ "$PR_ONLY" == true ]]; then
+    create_release_pr "$VERSION_TAG" "$RELEASE_NOTES_FILE"
+else
+    # Stage files
+    echo -e "${YELLOW}Staging changes...${NC}"
+    git add -A
+    echo -e "${GREEN}✓ Changes staged${NC}"
 
-# Confirm commit
-echo
-read -p "Do you want to proceed with the commit and push? (y/n): " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborting release process."
-    exit 1
+    # Show summary of changes
+    echo -e "${YELLOW}Summary of changes to be committed:${NC}"
+    git status --short
+
+    # Display release notes
+    echo -e "${YELLOW}Release Notes:${NC}"
+    cat "$RELEASE_NOTES_FILE"
+    echo
+
+    # Confirm commit
+    read -p "Do you want to proceed with the commit, push, and release? (y/n): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Aborting release process."
+        exit 1
+    fi
+
+    # Commit changes
+    echo -e "${YELLOW}Committing changes...${NC}"
+    git commit -m "Release ${VERSION_TAG} of ${MAIN_NAME}"
+    echo -e "${GREEN}✓ Changes committed${NC}"
+
+    # Push to main
+    echo -e "${YELLOW}Pushing to main branch...${NC}"
+    git push origin main
+    echo -e "${GREEN}✓ Changes pushed to main${NC}"
+
+    # Create and push tag
+    echo -e "${YELLOW}Creating and pushing tag ${VERSION_TAG}...${NC}"
+    git tag "${VERSION_TAG}"
+    git push origin "${VERSION_TAG}"
+    echo -e "${GREEN}✓ Tag ${VERSION_TAG} created and pushed${NC}"
+
+    # Create GitHub release
+    create_github_release "$VERSION_TAG" "$RELEASE_NOTES_FILE"
+
+    echo -e "${GREEN}${MAIN_NAME} ${VERSION_TAG} successfully released!${NC}"
 fi
 
-# Commit changes
-echo -e "${YELLOW}Committing changes...${NC}"
-git commit -m "Release ${VERSION_TAG}"
-echo -e "${GREEN}✓ Changes committed${NC}"
-
-# Push to main
-echo -e "${YELLOW}Pushing to main branch...${NC}"
-git push origin main
-echo -e "${GREEN}✓ Changes pushed to main${NC}"
-
-# Create and push tag
-echo -e "${YELLOW}Creating and pushing tag ${VERSION_TAG}...${NC}"
-git tag "${VERSION_TAG}"
-git push origin "${VERSION_TAG}"
-echo -e "${GREEN}✓ Tag ${VERSION_TAG} created and pushed${NC}"
-
-echo -e "${GREEN}Release ${VERSION_TAG} successfully completed!${NC}"
+# Clean up temporary file
+if [[ -f "$RELEASE_NOTES_FILE" ]]; then
+    rm "$RELEASE_NOTES_FILE"
+fi

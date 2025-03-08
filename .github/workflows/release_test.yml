@@ -1,0 +1,95 @@
+name: Release Testing
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'custom_components/**'
+      - '.github/workflows/**'
+
+jobs:
+  validate_hacs:
+    runs-on: ubuntu-latest
+    name: HACS Validation
+    steps:
+      - uses: actions/checkout@v4
+      - name: HACS Validation
+        uses: hacs/action@main
+        with:
+          category: integration
+
+  validate_hassfest:
+    runs-on: ubuntu-latest
+    name: Hassfest Validation
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hassfest Validation
+        uses: home-assistant/actions/hassfest@master
+
+  python_test:
+    runs-on: ubuntu-latest
+    name: Python Validation
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          
+      - name: Lint with flake8
+        run: |
+          # stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # exit-zero treats all errors as warnings
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+  check_version:
+    runs-on: ubuntu-latest
+    name: Version Check
+    if: startsWith(github.head_ref, 'release/v')
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Extract version from branch name
+        id: extract_version
+        run: echo "version=$(echo ${{ github.head_ref }} | sed 's/release\///')" >> $GITHUB_OUTPUT
+        
+      - name: Check manifest version
+        run: |
+          MANIFEST_VERSION=$(grep '"version"' custom_components/ovms/manifest.json | cut -d'"' -f4)
+          BRANCH_VERSION="${{ steps.extract_version.outputs.version }}"
+          
+          echo "Manifest version: $MANIFEST_VERSION"
+          echo "Branch version: $BRANCH_VERSION"
+          
+          if [ "$MANIFEST_VERSION" != "$BRANCH_VERSION" ]; then
+            echo "Error: Version in manifest.json ($MANIFEST_VERSION) does not match branch version ($BRANCH_VERSION)"
+            exit 1
+          else
+            echo "✅ Version check passed"
+          fi
+
+  add_release_label:
+    runs-on: ubuntu-latest
+    name: Add Release Label
+    if: startsWith(github.head_ref, 'release/v')
+    steps:
+      - name: Add release label
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['release']
+            })

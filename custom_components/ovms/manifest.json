@@ -1,6 +1,6 @@
 {
   "domain": "ovms",
-  "name": "Open Vehicle Monitoring System",
+  "name": "Open Vehicle Monitoring System HA",
   "codeowners": ["@enoch85"],
   "config_flow": true,
   "dependencies": ["mqtt"],

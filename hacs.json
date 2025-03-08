@@ -1,5 +1,5 @@
 {
-  "name": "Open Vehicle Monitoring System (OVMS)",
+  "name": "OVMS Home Assistant",
   "render_readme": true,
   "content_in_root": false,
   "domains": ["ovms"],
