@@ -13,8 +13,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Fixed GitHub CLI setup
       - name: Set up GitHub CLI
-        uses: cli/setup-gh@v1
+        run: |
+          # GitHub CLI is pre-installed on GitHub-hosted runners
+          # This ensures it's available and authenticated
+          gh --version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare Release Assets
         run: |
