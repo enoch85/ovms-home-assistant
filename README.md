@@ -4,13 +4,16 @@
 The [Open Vehicle Monitoring System (OVMS)](https://www.openvehicles.com/) integration for Home Assistant. Connect your electric vehicle with Home Assistant via MQTT, automatically creating sensors for all vehicle metrics.
 
 ## Screenshots
-![1](/assets/screenshot-overview1.png|width=50)
+![1](/assets/screenshot-overview1.png)
+
 *Integration overview 1*
 
-![2](/assets/screenshot-overview1.png|width=50)
+![2](/assets/screenshot-overview2.png)
+
 *Integration overview 2*
 
-![3](/assets/screenshot-overview1.png|width=50)
+![3](/assets/screenshot-overview3.png)
+
 *All topics with a lot of metrics are stored in attributes instead, where the average and median are caluclated and presented*
 
 ## Overview
@@ -22,7 +25,7 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 - Maintains entity state based on real-time MQTT updates
 - Provides services to send commands to your vehicle
 
-![Entity Overview](/assets/entity-overview.svg|width=50)
+![Entity Overview](/assets/entity-overview.svg)
 
 ## Features
 
@@ -102,7 +105,7 @@ Configure your OVMS module to publish data to your MQTT broker:
    - Topic Prefix: `ovms` (default, can be customized)
    - Enable Auto-Start: YES
 
-![OVMS MQTT Configuration](/assets/ovms-mqtt-config.svg|width=50)
+![OVMS MQTT Configuration](/assets/ovms-mqtt-config.svg)
 
 ## Home Assistant Configuration
 
@@ -120,7 +123,7 @@ Configure your OVMS module to publish data to your MQTT broker:
 5. The integration will scan for available OVMS vehicles
 6. Select your vehicle ID when prompted
 
-![Setup Flow](/assets/setup-flow.svg|width=50)
+![Setup Flow](/assets/setup-flow.svg)
 
 ### Testing Configuration
 
@@ -187,7 +190,9 @@ hold_action:
 name: "REG123: update all"
 ```
 
-![screenshot-command](/assets/screenshot-command.png|width=50)
+![screenshot-command](/assets/screenshot-command.png)
+
+*Example of how a command button could look like in the Lovelace UI*
 
 #### `ovms.set_feature`
 Set an OVMS configuration feature.
