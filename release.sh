@@ -172,125 +172,129 @@ function check_for_changes {
 }
 
 # Generate simple release notes when GitHub API fails
-function generate_simple_release_notes {
+function generate_release_notes {
     local version_tag="$1"
-    local last_tag=$(git describe --abbrev=0 --tags 2>/dev/null || echo "")
-    
-    # Create a temporary file for release notes
     local release_notes_file=$(mktemp)
     
-    # Add header to release notes with main name
+    info_log "Generating release notes for $version_tag..."
+    
+    # Get the previous tag - ONLY the immediate previous tag
+    local prev_tag=$(git describe --abbrev=0 --tags HEAD^ 2>/dev/null || echo "")
+    
+    # Add header to release notes
     echo "# ${MAIN_NAME} ${version_tag}" > "$release_notes_file"
     echo "" >> "$release_notes_file"
-    
-    # Add release date
     echo "Released on $(date +'%Y-%m-%d')" >> "$release_notes_file"
     echo "" >> "$release_notes_file"
     
-    # Add section for changes
-    echo "## What's Changed" >> "$release_notes_file"
-    echo "" >> "$release_notes_file"
-    
-    # Just list recent commits
-    if [[ -n "$last_tag" ]]; then
-        echo "Recent changes since $last_tag:" >> "$release_notes_file"
-        git log --pretty=format:"* %s (%h)" --no-merges "$last_tag..HEAD" | head -n 10 >> "$release_notes_file"
+    # Check if there are actual changes
+    local change_count=0
+    if [[ -n "$prev_tag" ]]; then
+        change_count=$(git rev-list --count "$prev_tag..HEAD")
     else
-        echo "Recent changes:" >> "$release_notes_file"
-        git log --pretty=format:"* %s (%h)" --no-merges -n 10 >> "$release_notes_file"
+        change_count=$(git rev-list --count HEAD)
     fi
     
+    debug_log "Found $change_count changes since previous tag ($prev_tag)"
+    
+    # If there are no changes, create minimal release notes
+    if [[ "$change_count" -eq 0 || "$change_count" -eq 1 ]]; then
+        # Only one commit (likely just the version bump)
+        echo "## Changes" >> "$release_notes_file"
+        echo "" >> "$release_notes_file"
+        echo "* Version bump to $version_tag" >> "$release_notes_file"
+        echo "" >> "$release_notes_file"
+        
+        # Add minimal changelog
+        if [[ -n "$prev_tag" ]]; then
+            echo "## Full Changelog" >> "$release_notes_file"
+            echo "[$prev_tag...${version_tag}](https://github.com/enoch85/${REPO_NAME}/compare/${prev_tag}...${version_tag})" >> "$release_notes_file"
+        fi
+        
+        debug_log "Generated minimal release notes (no significant changes)"
+        echo "$release_notes_file"
+        return
+    fi
+    
+    # There are actual changes, generate meaningful release notes
+    echo "## Changes" >> "$release_notes_file"
+    echo "" >> "$release_notes_file"
+    
+    # Try to get meaningful changes using different methods
+    local have_changes=false
+    
+    # 1. Try GitHub PR data if available
+    if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
+        debug_log "Attempting to get merged PRs using GitHub CLI"
+        
+        if [[ -n "$prev_tag" ]]; then
+            # Get previous tag commit date
+            local prev_date=$(git log -1 --format=%aI "$prev_tag")
+            debug_log "Previous tag ($prev_tag) date: $prev_date"
+            
+            # Get and process PRs merged since previous tag
+            if prs=$(gh pr list --state merged --base main --json number,title,mergedAt --limit 15 2>/dev/null); then
+                debug_log "Successfully retrieved PRs from GitHub"
+                
+                # Filter to PRs merged after previous tag
+                if [[ "$(command -v jq)" && -n "$prs" && "$prs" != "[]" ]]; then
+                    # Use jq if available
+                    local filtered_prs=$(echo "$prs" | jq -r --arg date "$prev_date" '.[] | select(.mergedAt > $date) | "* " + .title + " (#" + (.number|tostring) + ")"')
+                    
+                    if [[ -n "$filtered_prs" ]]; then
+                        echo "$filtered_prs" >> "$release_notes_file"
+                        have_changes=true
+                        debug_log "Added PR information to release notes"
+                    fi
+                fi
+            else
+                debug_log "Could not retrieve PRs from GitHub"
+            fi
+        fi
+    else
+        debug_log "GitHub CLI not available or not authenticated"
+    fi
+    
+    # 2. If we don't have changes yet, use git log to find meaningful commits
+    if [[ "$have_changes" != "true" ]]; then
+        debug_log "Using git log to find meaningful commits"
+        
+        # Get non-merge commits since previous tag (or all if no previous tag)
+        local commits
+        if [[ -n "$prev_tag" ]]; then
+            commits=$(git log --no-merges --pretty=format:"* %s (%h)" "$prev_tag..HEAD")
+        else
+            commits=$(git log --no-merges --pretty=format:"* %s (%h)" -n 10)
+        fi
+        
+        # Filter out automated version bump commits
+        local meaningful_commits=$(echo "$commits" | grep -v "Release.*of.*${MAIN_NAME}" | grep -v "Bump version" | head -n 10)
+        
+        if [[ -n "$meaningful_commits" ]]; then
+            echo "$meaningful_commits" >> "$release_notes_file"
+            have_changes=true
+            debug_log "Added commits to release notes"
+        fi
+    fi
+    
+    # 3. If still no changes found, add a fallback message
+    if [[ "$have_changes" != "true" ]]; then
+        echo "* Minor updates and improvements" >> "$release_notes_file"
+        debug_log "No specific changes found, using generic message"
+    fi
+    
+    # Add changelog section
     echo "" >> "$release_notes_file"
     echo "## Full Changelog" >> "$release_notes_file"
     
-    if [[ -n "$last_tag" ]]; then
-        echo "[$last_tag...${version_tag}](https://github.com/enoch85/${REPO_NAME}/compare/${last_tag}...${version_tag})" >> "$release_notes_file"
+    if [[ -n "$prev_tag" ]]; then
+        echo "[$prev_tag...${version_tag}](https://github.com/enoch85/${REPO_NAME}/compare/${prev_tag}...${version_tag})" >> "$release_notes_file"
     else
-        echo "[${version_tag}](https://github.com/enoch85/${REPO_NAME}/releases/tag/${version_tag})" >> "$release_notes_file"
+        echo "[$version_tag](https://github.com/enoch85/${REPO_NAME}/releases/tag/${version_tag})" >> "$release_notes_file"
     fi
     
-    debug_log "Simple release notes generated at $release_notes_file"
+    debug_log "Release notes generated successfully"
     echo "$release_notes_file"
-}
-
-# Generate release notes based on commits and PRs since the last release
-function generate_release_notes {
-    local version_tag="$1"
-    
-    # Try to use GitHub CLI, but fall back to simple release notes if it fails
-    info_log "Generating release notes..."
-    
-    # Create simple release notes by default
-    local simple_notes_file=$(generate_simple_release_notes "$version_tag")
-    
-    debug_log "Simple release notes created at $simple_notes_file"
-    
-    # Try to get more detailed release notes with GitHub CLI if possible
-    if [[ "$HAS_JQ" == "true" ]]; then
-        debug_log "Attempting to generate more detailed release notes using GitHub CLI..."
-        
-        local last_tag=$(git describe --abbrev=0 --tags 2>/dev/null || echo "")
-        local detailed_notes_file=$(mktemp)
-        
-        # Copy the simple notes header
-        head -n 5 "$simple_notes_file" > "$detailed_notes_file"
-        
-        # Add section for merged PRs
-        echo "## What's Changed" >> "$detailed_notes_file"
-        echo "" >> "$detailed_notes_file"
-        
-        # Check if GitHub CLI can access PR data
-        local pr_data_ok=false
-        
-        if gh pr list --limit 1 &>/dev/null; then
-            debug_log "GitHub CLI can access PR data"
-            pr_data_ok=true
-        else
-            debug_log "GitHub CLI cannot access PR data, using simple notes"
-            pr_data_ok=false
-        fi
-        
-        if [[ "$pr_data_ok" == "true" && -n "$last_tag" ]]; then
-            debug_log "Fetching PRs since $last_tag"
-            
-            # Try to get PR data, but don't fail if it doesn't work
-            if pr_list=$(gh pr list --state merged --base main --json number,title,author,mergedAt,url --limit 10 2>/dev/null); then
-                if echo "$pr_list" | jq empty &>/dev/null && [[ "$pr_list" != "[]" && -n "$pr_list" ]]; then
-                    debug_log "Got valid PR list from GitHub CLI"
-                    
-                    # Format PRs into markdown
-                    if pr_formatted=$(echo "$pr_list" | jq -r '.[] | "* " + .title + " (#" + (.number|tostring) + ")"'); then
-                        debug_log "Formatted PR list successfully"
-                        echo "$pr_formatted" >> "$detailed_notes_file"
-                        
-                        # Add the footer
-                        tail -n 3 "$simple_notes_file" >> "$detailed_notes_file"
-                        
-                        # Use the detailed notes
-                        debug_log "Using detailed release notes"
-                        rm "$simple_notes_file"
-                        echo "$detailed_notes_file"
-                        return
-                    else
-                        debug_log "Failed to format PR list, using simple notes"
-                    fi
-                else
-                    debug_log "Invalid or empty PR list, using simple notes"
-                fi
-            else
-                debug_log "Failed to get PR list, using simple notes"
-            fi
-        else
-            debug_log "No last tag or no PR data access, using simple notes"
-        fi
-        
-        # If we get here, something went wrong with detailed notes
-        rm "$detailed_notes_file"
-    fi
-    
-    # Return the simple notes if detailed ones weren't generated
-    debug_log "Using simple release notes as fallback"
-    echo "$simple_notes_file"
 }
 
 # Create a PR for the release
