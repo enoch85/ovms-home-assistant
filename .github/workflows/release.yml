@@ -25,7 +25,7 @@ jobs:
           prerelease: false
           body: |
             ## Changelog
-            - Automated release for OVMS MQTT Integration
+            - Automated release for Open Vehicle Monitoring System HA
             - See README for detailed changes and installation instructions
 
       - name: Prepare Release Assets
@@ -38,7 +38,7 @@ jobs:
       - name: Create ZIP
         run: |
           cd release
-          zip -r ../ovms-mqtt-integration.zip .
+          zip -r ../ovms-home-assistant.zip .
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -46,6 +46,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ovms-mqtt-integration.zip
-          asset_name: ovms-mqtt-integration.zip
+          asset_path: ./ovms-home-assistant.zip
+          asset_name: ovms-home-assistant.zip
           asset_content_type: application/zip
