@@ -228,7 +228,7 @@ function generate_release_notes {
     echo "$release_notes_file"
 }
 
-# Create a PR for the release
+# Create a PR for the release - FIXED VERSION
 function create_release_pr {
     local version_tag="$1"
     local branch_name="release/${version_tag}"
@@ -239,8 +239,19 @@ function create_release_pr {
     # Create branch
     git checkout -b "$branch_name"
     
+    # Check if there are any changes to commit
+    if git diff --quiet && git diff --cached --quiet; then
+        echo -e "${YELLOW}Warning: No changes detected to commit. Creating a dummy change for PR.${NC}"
+        # Create a temporary file with release information
+        echo "# Release $version_tag" > "release_info_$version_tag.md"
+        echo "This file was automatically generated for release PR. It can be deleted after merge." >> "release_info_$version_tag.md"
+        git add "release_info_$version_tag.md"
+    else
+        # Normal flow when changes exist
+        git add -A
+    fi
+    
     # Commit changes
-    git add -A
     git commit -m "Release ${version_tag}"
     
     # Push branch
