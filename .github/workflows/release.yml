@@ -23,7 +23,7 @@ jobs:
       - name: Create ZIP
         run: |
           cd release
-          zip -r ../ovms-home-assistant.zip .
+          zip -r ../ovms.zip .
 
       - name: Create release
         env:
@@ -35,4 +35,4 @@ jobs:
               --title="OVMS Home Assistant $tag" \
               --generate-notes \
               --latest \
-              ovms-home-assistant.zip#"OVMS Home Assistant $tag"
+              ovms.zip#"OVMS Home Assistant $tag"
