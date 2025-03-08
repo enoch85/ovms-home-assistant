@@ -13,20 +13,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-          body: |
-            ## Changelog
-            - Automated release for Open Vehicle Monitoring System HA
-            - See README for detailed changes and installation instructions
+      - name: Set up GitHub CLI
+        uses: cli/cli-action@v2
 
       - name: Prepare Release Assets
         run: |
@@ -40,12 +28,37 @@ jobs:
           cd release
           zip -r ../ovms-home-assistant.zip .
 
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+      - name: Create or Update Release
+        id: create_release
+        run: |
+          # Attempt to create release or update if it exists
+          RELEASE_NOTES="## Changelog
+          - Automated release for Open Vehicle Monitoring System HA
+          - See README for detailed changes and installation instructions"
+
+          RELEASE_TITLE="OVMS Home Assistant ${GITHUB_REF_NAME}"
+
+          # Try to create the release, or update it if it already exists
+          if ! gh release view "${GITHUB_REF_NAME}" &>/dev/null; then
+            echo "Creating new release: ${GITHUB_REF_NAME}"
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "${RELEASE_TITLE}" \
+              --notes "${RELEASE_NOTES}"
+          else
+            echo "Release already exists, updating: ${GITHUB_REF_NAME}"
+            gh release edit "${GITHUB_REF_NAME}" \
+              --title "${RELEASE_TITLE}" \
+              --notes "${RELEASE_NOTES}"
+          fi
+
+          # Get the release URL for the upload step
+          echo "release_url=$(gh release view ${GITHUB_REF_NAME} --json url -q .url)" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ovms-home-assistant.zip
-          asset_name: ovms-home-assistant.zip
-          asset_content_type: application/zip
+
+      - name: Upload Release Asset
+        run: |
+          gh release upload ${GITHUB_REF_NAME} ovms-home-assistant.zip \
+            --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
