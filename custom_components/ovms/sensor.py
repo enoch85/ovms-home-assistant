@@ -308,7 +308,9 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                 self._attr_native_value = None
             else:
                 try:
-                    self._attr_native_value = float(payload)
+                    # Limit to 4 decimal places for all cell sensors
+                    value = float(payload)
+                    self._attr_native_value = round(value, 4)
                 except (ValueError, TypeError):
                     self._attr_native_value = payload
             
