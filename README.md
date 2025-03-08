@@ -37,7 +37,7 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 
 1. Add this repository to HACS:
    - Go to HACS → Integrations → ⋮ (menu) → Custom repositories
-   - Enter repository URL: `https://github.com/enoch85/ovms-mqtt-integration`
+   - Enter repository URL: `https://github.com/enoch85/ovms-home-assistant`
    - Category: Integration
    - Click "Add"
 

@@ -889,13 +889,7 @@ class OVMSMQTTClient:
         if ("latitude" in name.lower() or "longitude" in name.lower() or 
             "gps" in name.lower() or "location" in name.lower()):
             is_binary = False
-            
-            # Make both latitude and longitude topics device_trackers
-            if "latitude" in name.lower() or "longitude" in name.lower():
-                entity_type = "device_tracker"
-            else:
-                entity_type = "sensor"
-                
+
         # Ensure other numeric data is never binary
         if ("power" in name.lower() or "energy" in name.lower() or
             "duration" in name.lower() or "consumption" in name.lower() or
@@ -903,7 +897,7 @@ class OVMSMQTTClient:
             "monotonic" in name.lower()):
             is_binary = False
             entity_type = "sensor"
-            
+
         # Check for commands/switches
         if "command" in parts or any(switch_pattern in name.lower() for switch_pattern in 
                                 ["switch", "toggle", "set", "enable", "disable"]):
