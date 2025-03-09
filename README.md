@@ -3,19 +3,6 @@
 
 The [Open Vehicle Monitoring System (OVMS)](https://www.openvehicles.com/) integration for Home Assistant. Connect your electric vehicle with Home Assistant via MQTT, automatically creating sensors for all vehicle metrics.
 
-## Screenshots
-![1](/assets/screenshot-overview1.png)
-
-*Integration overview 1*
-
-![2](/assets/screenshot-overview2.png)
-
-*Integration overview 2*
-
-![3](/assets/screenshot-overview3.png)
-
-*All topics with a lot of metrics are stored in attributes instead, where the average and median are caluclated and presented*
-
 ## Overview
 
 The OVMS integration discovers and creates Home Assistant entities from MQTT topics published by your OVMS module. The integration automatically:
@@ -45,6 +32,19 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 - OVMS module publishing to the same MQTT broker
 - OVMS firmware 3.3.001 or newer recommended
 - Python package: paho-mqtt>=1.6.1 (installed automatically)
+
+## Screenshots
+![1](/assets/screenshot-overview1.png)
+
+*Integration overview 1*
+
+![2](/assets/screenshot-overview2.png)
+
+*Integration overview 2*
+
+![3](/assets/screenshot-overview3.png)
+
+*All topics with a lot of metrics are stored in attributes instead, where the average and median are caluclated and presented*
 
 ## Installation
 
