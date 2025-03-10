@@ -2,6 +2,7 @@
 import json
 import logging
 import re
+import hashlib
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from homeassistant.const import (
@@ -150,8 +151,6 @@ def generate_unique_id(components: List[str]) -> str:
 
     This ensures the ID is URL and filesystem safe.
     """
-    import hashlib
-
     # Join components and create hash
     combined = "_".join(str(c) for c in components if c)
     if not combined:
