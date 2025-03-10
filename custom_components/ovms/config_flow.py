@@ -8,7 +8,7 @@ import time
 import re
 import hashlib
 import traceback
-from typing import Dict, Any, Optional, cast
+from typing import Any
 
 import voluptuous as vol
 import paho.mqtt.client as mqtt
@@ -64,7 +64,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.debug_info = {}
         self.discovered_topics = set()
 
-    def is_matching(self, user_input):
+    def is_matching(self, _user_input):
         """Check if a host + vehicle_id combo is unique."""
         # Implement matching check
         return False
@@ -443,7 +443,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # More generic pattern to match various username formats for OVMS
         general_pattern = fr"^{re.escape(prefix)}/([^/]+)/([^/]+)/"
         _LOGGER.debug(
-            "Using general pattern to extract vehicle IDs: %s", 
+            "Using general pattern to extract vehicle IDs: %s",
             general_pattern
         )
 
@@ -560,7 +560,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             _LOGGER.debug("%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags)
 
-        def on_disconnect(_, __, rc, properties=None):
+        def on_disconnect(_, __, rc, _properties=None):
             """Handle disconnection."""
             connection_status["connected"] = False
             connection_status["disconnect_rc"] = rc
@@ -926,14 +926,23 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             }
 
-        except (ConnectionError, TimeoutError) as ex:
-            _LOGGER.exception("%s - Connection error: %s", log_prefix, ex)
+        except ConnectionError as conn_ex:
+            _LOGGER.exception("%s - Connection error: %s", log_prefix, conn_ex)
             _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
             return {
                 "success": False,
-                "message": f"Connection error: {ex}",
+                "message": f"Connection error: {conn_ex}",
                 "topic": test_topic,
-                "details": f"Connection error during subscription: {ex}"
+                "details": f"Connection error during subscription: {conn_ex}"
+            }
+        except TimeoutError as timeout_ex:
+            _LOGGER.exception("%s - Timeout error: %s", log_prefix, timeout_ex)
+            _LOGGER.debug("%s - Timeout error details: %s", log_prefix, traceback.format_exc())
+            return {
+                "success": False,
+                "message": f"Timeout error: {timeout_ex}",
+                "topic": test_topic,
+                "details": f"Timeout error during subscription: {timeout_ex}"
             }
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.exception("%s - Subscription error: %s", log_prefix, ex)
@@ -996,7 +1005,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             discovered_topics.add(msg.topic)
 
-        def on_disconnect(_, __, rc, properties=None):
+        def on_disconnect(_, __, rc, _properties=None):
             """Handle disconnection."""
             connection_status["connected"] = False
             connection_status["disconnect_rc"] = rc
@@ -1106,13 +1115,13 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         f"{topic_prefix}/+/{vehicle_id}/client/rr/command/{command_id}"
                     )
                     mqttc.publish(
-                        alt_test_topic, 
-                        test_payload, 
+                        alt_test_topic,
+                        test_payload,
                         qos=config.get(CONF_QOS, DEFAULT_QOS)
                     )
                     _LOGGER.debug(
-                        "%s - Also testing alternative topic: %s", 
-                        log_prefix, 
+                        "%s - Also testing alternative topic: %s",
+                        log_prefix,
                         alt_test_topic
                     )
 
@@ -1260,7 +1269,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             log_prefix, direct_topic
                         )
                         mqttc.subscribe(
-                            direct_topic, 
+                            direct_topic,
                             qos=config.get(CONF_QOS, DEFAULT_QOS)
                         )
 
@@ -1271,7 +1280,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         log_prefix, alt_topic
                     )
                     mqttc.subscribe(
-                        alt_topic, 
+                        alt_topic,
                         qos=config.get(CONF_QOS, DEFAULT_QOS)
                     )
 
@@ -1427,6 +1436,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LOGGER.debug("%s - Command response received!", log_prefix)
                 else:
                     _LOGGER.debug("%s - No command response received", log_prefix)
+            except (ConnectionError, TimeoutError) as ex:
+                _LOGGER.warning("%s - Connection error sending command: %s", log_prefix, ex)
+                _LOGGER.debug("%s - Command error details: %s", log_prefix, traceback.format_exc())
+            except OSError as ex:
+                _LOGGER.warning("%s - OS error sending command: %s", log_prefix, ex)
+                _LOGGER.debug("%s - Command error details: %s", log_prefix, traceback.format_exc())
             except Exception as ex:
                 _LOGGER.warning("%s - Error sending command: %s", log_prefix, ex)
                 _LOGGER.debug("%s - Command error details: %s", log_prefix, traceback.format_exc())
@@ -1479,33 +1494,61 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "message": "Connection timeout",
                 "details": "Connection to MQTT broker timed out during topic testing",
             }
-        except socket.error as err:
-            _LOGGER.error("%s - Connection error: %s", log_prefix, err)
+        except socket.error as socket_err:
+            _LOGGER.error("%s - Connection error: %s", log_prefix, socket_err)
             _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
             debug_info["error"] = {
                 "type": "socket",
-                "message": str(err),
+                "message": str(socket_err),
             }
             self.debug_info.update(debug_info)
             return {
                 "success": False,
                 "error_type": ERROR_CANNOT_CONNECT,
-                "message": f"Connection error: {err}",
-                "details": f"Socket error during topic testing: {err}",
+                "message": f"Connection error: {socket_err}",
+                "details": f"Socket error during topic testing: {socket_err}",
             }
-        except (ConnectionError, TimeoutError, OSError) as ex:
-            _LOGGER.error("%s - Connection error: %s", log_prefix, ex)
+        except ConnectionError as conn_ex:
+            _LOGGER.error("%s - Connection error: %s", log_prefix, conn_ex)
             _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
             debug_info["error"] = {
                 "type": "connection",
-                "message": str(ex),
+                "message": str(conn_ex),
             }
             self.debug_info.update(debug_info)
             return {
                 "success": False,
                 "error_type": ERROR_CANNOT_CONNECT,
-                "message": f"Connection error: {ex}",
-                "details": f"Connection error during topic testing: {ex}",
+                "message": f"Connection error: {conn_ex}",
+                "details": f"Connection error during topic testing: {conn_ex}",
+            }
+        except TimeoutError as timeout_ex:
+            _LOGGER.error("%s - Timeout error: %s", log_prefix, timeout_ex)
+            _LOGGER.debug("%s - Timeout error details: %s", log_prefix, traceback.format_exc())
+            debug_info["error"] = {
+                "type": "timeout",
+                "message": str(timeout_ex),
+            }
+            self.debug_info.update(debug_info)
+            return {
+                "success": False,
+                "error_type": ERROR_TIMEOUT,
+                "message": f"Timeout error: {timeout_ex}",
+                "details": f"Timeout error during topic testing: {timeout_ex}",
+            }
+        except OSError as os_ex:
+            _LOGGER.error("%s - OS error: %s", log_prefix, os_ex)
+            _LOGGER.debug("%s - OS error details: %s", log_prefix, traceback.format_exc())
+            debug_info["error"] = {
+                "type": "os",
+                "message": str(os_ex),
+            }
+            self.debug_info.update(debug_info)
+            return {
+                "success": False,
+                "error_type": ERROR_CANNOT_CONNECT,
+                "message": f"OS error: {os_ex}",
+                "details": f"OS error during topic testing: {os_ex}",
             }
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
