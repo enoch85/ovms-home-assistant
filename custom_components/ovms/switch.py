@@ -90,11 +90,10 @@ async def async_setup_entry(
     )
 
 
+# pylint: disable=too-many-instance-attributes,too-many-arguments,abstract-method
 class OVMSSwitch(SwitchEntity, RestoreEntity):
     """Representation of an OVMS switch."""
 
-    # pylint: disable=too-many-instance-attributes
-    # pylint: disable=too-many-arguments
     def __init__(
         self,
         unique_id: str,
