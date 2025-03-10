@@ -20,12 +20,7 @@ from .const import (
     SIGNAL_UPDATE_ENTITY
 )
 
-from .metrics import (
-    METRIC_DEFINITIONS,
-    TOPIC_PATTERNS,
-    get_metric_by_path,
-    get_metric_by_pattern,
-)
+from .metrics import get_metric_by_path, get_metric_by_pattern
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -97,6 +92,8 @@ async def async_setup_entry(
 class OVMSSwitch(SwitchEntity, RestoreEntity):
     """Representation of an OVMS switch."""
 
+    # pylint: disable=too-many-instance-attributes
+    # pylint: disable=too-many-arguments
     def __init__(
         self,
         unique_id: str,
