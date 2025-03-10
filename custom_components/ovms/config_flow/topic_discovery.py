@@ -3,9 +3,11 @@ import asyncio
 import logging
 import re
 import socket
-import ssl  # Added missing import
+import ssl
+import time
 import traceback
 import uuid
+from typing import Dict, Any, Optional, Set
 
 import paho.mqtt.client as mqtt  # pylint: disable=import-error
 
@@ -29,9 +31,10 @@ from ..const import (
     DEFAULT_TOPIC_STRUCTURE,
     DEFAULT_VERIFY_SSL,
     DISCOVERY_TOPIC,
-    TOPIC_TEMPLATE,
-    COMMAND_TOPIC_TEMPLATE,
-    RESPONSE_TOPIC_TEMPLATE,
+    # Import outside toplevel fixed by importing here
+    TOPIC_TEMPLATE as CONST_TOPIC_TEMPLATE,
+    COMMAND_TOPIC_TEMPLATE as CONST_COMMAND_TOPIC_TEMPLATE,
+    RESPONSE_TOPIC_TEMPLATE as CONST_RESPONSE_TOPIC_TEMPLATE,
     LOGGER_NAME,
     ERROR_CANNOT_CONNECT,
     ERROR_TIMEOUT,
@@ -119,6 +122,7 @@ def extract_vehicle_ids(topics, config):
     return potential_ids
 
 
+# pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 async def discover_topics(hass: HomeAssistant, config):
     """Discover available OVMS topics on the broker."""
     topic_prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
@@ -151,7 +155,8 @@ async def discover_topics(hass: HomeAssistant, config):
         """Handle connection result."""
         connection_status["connected"] = rc == 0
         connection_status["rc"] = rc
-        connection_status["timestamp"] = asyncio.get_event_loop().time()
+        # Using time.time() instead of asyncio.get_event_loop().time()
+        connection_status["timestamp"] = time.time()
 
         _LOGGER.debug("%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags)
 
@@ -175,7 +180,8 @@ async def discover_topics(hass: HomeAssistant, config):
         """Handle disconnection."""
         connection_status["connected"] = False
         connection_status["disconnect_rc"] = rc
-        connection_status["disconnect_timestamp"] = asyncio.get_event_loop().time()
+        # Using time.time() instead of asyncio.get_event_loop().time()
+        connection_status["disconnect_timestamp"] = time.time()
         _LOGGER.debug("%s - Disconnected with result code: %s", log_prefix, rc)
 
     def on_log(_, __, ___, buf):
@@ -384,15 +390,9 @@ async def discover_topics(hass: HomeAssistant, config):
         }
 
 
+# pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 async def test_topic_availability(hass: HomeAssistant, config):
     """Test if the OVMS topics are available for a specific vehicle."""
-    # Use local imports for these constants to avoid redefinition
-    from ..const import (
-        TOPIC_TEMPLATE as CONST_TOPIC_TEMPLATE,
-        COMMAND_TOPIC_TEMPLATE as CONST_COMMAND_TOPIC_TEMPLATE,
-        RESPONSE_TOPIC_TEMPLATE as CONST_RESPONSE_TOPIC_TEMPLATE
-    )
-
     vehicle_id = config[CONF_VEHICLE_ID]
     log_prefix = f"Topic availability test for vehicle {vehicle_id}"
     _LOGGER.debug("%s - Starting", log_prefix)
@@ -446,7 +446,8 @@ async def test_topic_availability(hass: HomeAssistant, config):
         """Handle connection result."""
         connection_status["connected"] = rc == 0
         connection_status["rc"] = rc
-        connection_status["timestamp"] = asyncio.get_event_loop().time()
+        # Using time.time() instead of asyncio.get_event_loop().time()
+        connection_status["timestamp"] = time.time()
 
         _LOGGER.debug("%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags)
 
@@ -499,7 +500,8 @@ async def test_topic_availability(hass: HomeAssistant, config):
         message_info = {
             "topic": msg.topic,
             "payload_length": len(msg.payload),
-            "timestamp": asyncio.get_event_loop().time(),
+            # Using time.time() instead of asyncio.get_event_loop().time()
+            "timestamp": time.time(),
         }
 
         # Try to decode payload for logging
@@ -524,7 +526,8 @@ async def test_topic_availability(hass: HomeAssistant, config):
         """Handle disconnection."""
         connection_status["connected"] = False
         connection_status["disconnect_rc"] = rc
-        connection_status["disconnect_timestamp"] = asyncio.get_event_loop().time()
+        # Using time.time() instead of asyncio.get_event_loop().time()
+        connection_status["disconnect_timestamp"] = time.time()
         _LOGGER.debug("%s - Disconnected with result code: %s", log_prefix, rc)
 
     def on_log(_, __, ___, buf):
@@ -551,6 +554,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
             password=config[CONF_PASSWORD] if CONF_PASSWORD in config else None,
         )
 
+    # Configure TLS if needed
     if config[CONF_PROTOCOL] == "mqtts":
         _LOGGER.debug("%s - Enabling SSL/TLS for port 8883", log_prefix)
         verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
@@ -641,28 +645,6 @@ async def test_topic_availability(hass: HomeAssistant, config):
                 _LOGGER.debug("%s - Command response received!", log_prefix)
             else:
                 _LOGGER.debug("%s - No command response received", log_prefix)
-        except ConnectionError as conn_ex:
-            _LOGGER.warning(
-                "%s - Connection error sending command: %s",
-                log_prefix,
-                conn_ex
-            )
-            _LOGGER.debug(
-                "%s - Command error details: %s",
-                log_prefix,
-                traceback.format_exc()
-            )
-        except TimeoutError as timeout_ex:
-            _LOGGER.warning(
-                "%s - Timeout error sending command: %s",
-                log_prefix,
-                timeout_ex
-            )
-            _LOGGER.debug(
-                "%s - Command error details: %s",
-                log_prefix,
-                traceback.format_exc()
-            )
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.warning("%s - Error sending command: %s", log_prefix, ex)
             _LOGGER.debug(
@@ -718,7 +700,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
             "details": "Connection to MQTT broker timed out during topic testing",
             "debug_info": debug_info,
         }
-    # Fixed except clauses order: more specific exceptions first
+    # Fixed exception order
     except ConnectionError as conn_ex:
         _LOGGER.error("%s - Connection error: %s", log_prefix, conn_ex)
         _LOGGER.debug(
@@ -756,8 +738,8 @@ async def test_topic_availability(hass: HomeAssistant, config):
             "debug_info": debug_info,
         }
     except socket.error as socket_err:
-        _LOGGER.error("%s - Connection error: %s", log_prefix, socket_err)
-        _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
+        _LOGGER.error("%s - Socket error: %s", log_prefix, socket_err)
+        _LOGGER.debug("%s - Socket error details: %s", log_prefix, traceback.format_exc())
         debug_info["error"] = {
             "type": "socket",
             "message": str(socket_err),
@@ -765,7 +747,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
         return {
             "success": False,
             "error_type": ERROR_CANNOT_CONNECT,
-            "message": f"Connection error: {socket_err}",
+            "message": f"Socket error: {socket_err}",
             "details": f"Socket error during topic testing: {socket_err}",
             "debug_info": debug_info,
         }
