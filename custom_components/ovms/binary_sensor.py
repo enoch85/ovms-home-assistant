@@ -23,9 +23,6 @@ from .const import (
 )
 
 from .metrics import (
-    METRIC_DEFINITIONS,
-    TOPIC_PATTERNS,
-    BINARY_METRICS,
     get_metric_by_path,
     get_metric_by_pattern,
 )
@@ -58,6 +55,29 @@ BINARY_SENSOR_TYPES = {
     }
 }
 
+class OVMSBinarySensorConfig:
+    """Configuration for OVMSBinarySensor to reduce init parameters."""
+    
+    def __init__(
+        self,
+        unique_id: str,
+        name: str,
+        topic: str,
+        initial_state: str,
+        device_info: DeviceInfo,
+        attributes: Dict[str, Any],
+        friendly_name: Optional[str] = None,
+    ):
+        """Initialize the configuration."""
+        self.unique_id = unique_id
+        self.name = name
+        self.topic = topic
+        self.initial_state = initial_state
+        self.device_info = device_info
+        self.attributes = attributes
+        self.friendly_name = friendly_name
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -70,16 +90,17 @@ async def async_setup_entry(
             
         _LOGGER.info("Adding binary sensor: %s", data["name"])
         
-        sensor = OVMSBinarySensor(
+        config = OVMSBinarySensorConfig(
             data["unique_id"],
             data["name"],
             data["topic"],
             data["payload"],
             data["device_info"],
             data["attributes"],
-            hass,
             data.get("friendly_name"),
         )
+        
+        sensor = OVMSBinarySensor(config, hass)
         
         async_add_entities([sensor])
     
@@ -94,27 +115,21 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
     
     def __init__(
         self,
-        unique_id: str,
-        name: str,
-        topic: str,
-        initial_state: str,
-        device_info: DeviceInfo,
-        attributes: Dict[str, Any],
+        config: OVMSBinarySensorConfig,
         hass: Optional[HomeAssistant] = None,
-        friendly_name: Optional[str] = None,
     ) -> None:
         """Initialize the binary sensor."""
-        self._attr_unique_id = unique_id
+        self._attr_unique_id = config.unique_id
         # Use the entity_id compatible name for internal use
-        self._internal_name = name
+        self._internal_name = config.name
         # Set the entity name that will display in UI to friendly name or name
-        self._attr_name = friendly_name or name.replace("_", " ").title()
-        self._topic = topic
-        self._attr_is_on = self._parse_state(initial_state)
-        self._attr_device_info = device_info
+        self._attr_name = config.friendly_name or config.name.replace("_", " ").title()
+        self._topic = config.topic
+        self._attr_is_on = self._parse_state(config.initial_state)
+        self._attr_device_info = config.device_info
         self._attr_extra_state_attributes = {
-            **attributes,
-            "topic": topic,
+            **config.attributes,
+            "topic": config.topic,
             "last_updated": dt_util.utcnow().isoformat(),
         }
         
@@ -122,7 +137,7 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
         if hass:
             self.entity_id = async_generate_entity_id(
                 "binary_sensor.{}", 
-                name.lower(),
+                config.name.lower(),
                 hass=hass
             )
         
