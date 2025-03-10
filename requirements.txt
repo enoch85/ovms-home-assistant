@@ -1,1 +1,2 @@
 paho-mqtt>=1.6.1
+homeassistant>=2025.2.5
