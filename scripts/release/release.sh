@@ -463,7 +463,7 @@ function check_project_structure {
         error_log "LICENSE file not found in project root"
         echo "This file is required for the release package."
         exit 1
-    }
+    fi
     
     debug_log "Project structure validated"
     return 0
