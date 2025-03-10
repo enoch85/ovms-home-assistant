@@ -7,22 +7,18 @@ from homeassistant.components.device_tracker import SourceType, TrackerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity import async_generate_entity_id
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    DOMAIN,
     LOGGER_NAME,
     SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY
 )
 
 from .metrics import (
-    METRIC_DEFINITIONS,
-    TOPIC_PATTERNS,
     get_metric_by_path,
     get_metric_by_pattern,
 )
@@ -60,6 +56,7 @@ async def async_setup_entry(
     )
 
 
+# pylint: disable=too-many-instance-attributes,too-many-arguments,too-many-positional-arguments
 class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     """OVMS device tracker."""
 
@@ -115,14 +112,12 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         if "category" in self._attr_extra_state_attributes:
             category = self._attr_extra_state_attributes["category"]
             if category == "diagnostic":
-                from homeassistant.helpers.entity import EntityCategory
                 self._attr_entity_category = EntityCategory.DIAGNOSTIC
                 return
         # Try to find matching metric by converting topic to dot notation
         topic_suffix = self._topic
         if self._topic.count('/') >= 3:  # Skip the prefix part
             parts = self._topic.split('/')
-            # Find where the actual metric path starts
             for i, part in enumerate(parts):
                 if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
                     topic_suffix = '/'.join(parts[i:])
@@ -220,52 +215,64 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                     return
 
                 # Check for additional attributes
-                for attr_field, attr_name in [
-                    (["alt", "altitude", "ALT", "Altitude"], "altitude"),
-                    (["spd", "speed", "SPD", "Speed"], "speed"),
-                    (["hdg", "heading", "bearing", "direction"], "heading"),
-                    (["acc", "accuracy", "hor_acc", "horizontal_accuracy"], "accuracy"),
-                ]:
-                    for field in attr_field:
-                        if field in data:
-                            try:
-                                self._attr_extra_state_attributes[attr_name] = float(data[field])
-                                break
-                            except (ValueError, TypeError):
-                                pass
+                self._extract_additional_attributes(data)
 
         except (ValueError, TypeError, json.JSONDecodeError):
             # Not JSON, try comma-separated values
-            parts = payload.split(",")
-            if len(parts) >= 2:
-                try:
-                    lat = float(parts[0].strip())
-                    lon = float(parts[1].strip())
+            self._parse_csv_payload(payload)
 
-                    if -90 <= lat <= 90 and -180 <= lon <= 180:
-                        self._attr_latitude = lat
-                        self._attr_longitude = lon
-                        _LOGGER.debug("Parsed location from CSV: %f, %f", lat, lon)
+    def _extract_additional_attributes(self, data: Dict[str, Any]) -> None:
+        """Extract additional attributes from location data."""
+        # Map of field patterns to attribute names
+        attribute_mapping = [
+            (["alt", "altitude", "ALT", "Altitude"], "altitude"),
+            (["spd", "speed", "SPD", "Speed"], "speed"),
+            (["hdg", "heading", "bearing", "direction"], "heading"),
+            (["acc", "accuracy", "hor_acc", "horizontal_accuracy"], "accuracy"),
+        ]
 
-                        # If we have more parts, they might be altitude, speed, etc.
-                        if len(parts) >= 3:
-                            try:
-                                self._attr_extra_state_attributes["altitude"] = float(parts[2].strip())
-                            except (ValueError, TypeError):
-                                pass
+        # Check each field pattern
+        for field_patterns, attr_name in attribute_mapping:
+            for field in field_patterns:
+                if field in data:
+                    try:
+                        self._attr_extra_state_attributes[attr_name] = float(data[field])
+                        break
+                    except (ValueError, TypeError):
+                        pass
 
-                        if len(parts) >= 4:
-                            try:
-                                self._attr_extra_state_attributes["speed"] = float(parts[3].strip())
-                            except (ValueError, TypeError):
-                                pass
+    def _parse_csv_payload(self, payload: str) -> None:
+        """Parse location from CSV format payload."""
+        parts = payload.split(",")
+        if len(parts) >= 2:
+            try:
+                lat = float(parts[0].strip())
+                lon = float(parts[1].strip())
 
-                        if len(parts) >= 5:
-                            try:
-                                self._attr_extra_state_attributes["heading"] = float(parts[4].strip())
-                            except (ValueError, TypeError):
-                                pass
-                    else:
-                        _LOGGER.warning("Invalid lat/lon values: %f, %f", lat, lon)
-                except (ValueError, TypeError):
-                    _LOGGER.warning("Could not parse location data as CSV: %s", payload)
+                if -90 <= lat <= 90 and -180 <= lon <= 180:
+                    self._attr_latitude = lat
+                    self._attr_longitude = lon
+                    _LOGGER.debug("Parsed location from CSV: %f, %f", lat, lon)
+
+                    # If we have more parts, they might be altitude, speed, etc.
+                    if len(parts) >= 3:
+                        try:
+                            self._attr_extra_state_attributes["altitude"] = float(parts[2].strip())
+                        except (ValueError, TypeError):
+                            pass
+
+                    if len(parts) >= 4:
+                        try:
+                            self._attr_extra_state_attributes["speed"] = float(parts[3].strip())
+                        except (ValueError, TypeError):
+                            pass
+
+                    if len(parts) >= 5:
+                        try:
+                            self._attr_extra_state_attributes["heading"] = float(parts[4].strip())
+                        except (ValueError, TypeError):
+                            pass
+                else:
+                    _LOGGER.warning("Invalid lat/lon values: %f, %f", lat, lon)
+            except (ValueError, TypeError):
+                _LOGGER.warning("Could not parse location data as CSV: %s", payload)
