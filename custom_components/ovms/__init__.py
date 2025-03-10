@@ -20,8 +20,8 @@ from .services import async_setup_services, async_unload_services
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 PLATFORMS = [
-    Platform.SENSOR, 
-    Platform.BINARY_SENSOR, 
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
     Platform.SWITCH,
     Platform.DEVICE_TRACKER,
 ]
