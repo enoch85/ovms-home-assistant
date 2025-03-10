@@ -3,6 +3,7 @@ import asyncio
 import logging
 import re
 import socket
+import ssl  # Added missing import
 import traceback
 import uuid
 
@@ -336,18 +337,7 @@ async def discover_topics(hass: HomeAssistant, config):
             "error_type": ERROR_TIMEOUT,
             "message": "Connection timeout during topic discovery",
         }
-    except socket.error as socket_err:
-        _LOGGER.error("%s - Connection error: %s", log_prefix, socket_err)
-        _LOGGER.debug(
-            "%s - Connection error details: %s",
-            log_prefix,
-            traceback.format_exc()
-        )
-        return {
-            "success": False,
-            "error_type": ERROR_CANNOT_CONNECT,
-            "message": f"Connection error during topic discovery: {socket_err}",
-        }
+    # Fixed except clauses order: more specific exceptions first
     except ConnectionError as conn_ex:
         _LOGGER.error("%s - Connection error: %s", log_prefix, conn_ex)
         _LOGGER.debug(
@@ -372,13 +362,17 @@ async def discover_topics(hass: HomeAssistant, config):
             "error_type": ERROR_TIMEOUT,
             "message": f"Timeout error during topic discovery: {timeout_ex}",
         }
-    except OSError as os_ex:
-        _LOGGER.error("%s - OS error: %s", log_prefix, os_ex)
-        _LOGGER.debug("%s - OS error details: %s", log_prefix, traceback.format_exc())
+    except socket.error as socket_err:
+        _LOGGER.error("%s - Connection error: %s", log_prefix, socket_err)
+        _LOGGER.debug(
+            "%s - Connection error details: %s",
+            log_prefix,
+            traceback.format_exc()
+        )
         return {
             "success": False,
             "error_type": ERROR_CANNOT_CONNECT,
-            "message": f"OS error during topic discovery: {os_ex}",
+            "message": f"Connection error during topic discovery: {socket_err}",
         }
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.error("%s - MQTT error: %s", log_prefix, ex)
@@ -392,11 +386,11 @@ async def discover_topics(hass: HomeAssistant, config):
 
 async def test_topic_availability(hass: HomeAssistant, config):
     """Test if the OVMS topics are available for a specific vehicle."""
-    # Get constants
+    # Use local imports for these constants to avoid redefinition
     from ..const import (
-        TOPIC_TEMPLATE,
-        COMMAND_TOPIC_TEMPLATE,
-        RESPONSE_TOPIC_TEMPLATE
+        TOPIC_TEMPLATE as CONST_TOPIC_TEMPLATE,
+        COMMAND_TOPIC_TEMPLATE as CONST_COMMAND_TOPIC_TEMPLATE,
+        RESPONSE_TOPIC_TEMPLATE as CONST_RESPONSE_TOPIC_TEMPLATE
     )
 
     vehicle_id = config[CONF_VEHICLE_ID]
@@ -414,17 +408,17 @@ async def test_topic_availability(hass: HomeAssistant, config):
     }
 
     # Format the topic template
-    topic = TOPIC_TEMPLATE.format(structure_prefix=structure_prefix)
+    topic = CONST_TOPIC_TEMPLATE.format(structure_prefix=structure_prefix)
     _LOGGER.debug("%s - Using subscription topic: %s", log_prefix, topic)
     debug_info["subscription_topic"] = topic
 
     # Format command and response topics for request-response test
     command_id = uuid.uuid4().hex[:8]
-    command_topic = COMMAND_TOPIC_TEMPLATE.format(
+    command_topic = CONST_COMMAND_TOPIC_TEMPLATE.format(
         structure_prefix=structure_prefix,
         command_id=command_id
     )
-    response_topic = RESPONSE_TOPIC_TEMPLATE.format(
+    response_topic = CONST_RESPONSE_TOPIC_TEMPLATE.format(
         structure_prefix=structure_prefix,
         command_id=command_id
     )
@@ -669,13 +663,6 @@ async def test_topic_availability(hass: HomeAssistant, config):
                 log_prefix,
                 traceback.format_exc()
             )
-        except OSError as os_ex:
-            _LOGGER.warning("%s - OS error sending command: %s", log_prefix, os_ex)
-            _LOGGER.debug(
-                "%s - Command error details: %s",
-                log_prefix,
-                traceback.format_exc()
-            )
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.warning("%s - Error sending command: %s", log_prefix, ex)
             _LOGGER.debug(
@@ -731,24 +718,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
             "details": "Connection to MQTT broker timed out during topic testing",
             "debug_info": debug_info,
         }
-    except socket.error as socket_err:
-        _LOGGER.error("%s - Connection error: %s", log_prefix, socket_err)
-        _LOGGER.debug(
-            "%s - Connection error details: %s",
-            log_prefix,
-            traceback.format_exc()
-        )
-        debug_info["error"] = {
-            "type": "socket",
-            "message": str(socket_err),
-        }
-        return {
-            "success": False,
-            "error_type": ERROR_CANNOT_CONNECT,
-            "message": f"Connection error: {socket_err}",
-            "details": f"Socket error during topic testing: {socket_err}",
-            "debug_info": debug_info,
-        }
+    # Fixed except clauses order: more specific exceptions first
     except ConnectionError as conn_ex:
         _LOGGER.error("%s - Connection error: %s", log_prefix, conn_ex)
         _LOGGER.debug(
@@ -785,18 +755,18 @@ async def test_topic_availability(hass: HomeAssistant, config):
             "details": f"Timeout error during topic testing: {timeout_ex}",
             "debug_info": debug_info,
         }
-    except OSError as os_ex:
-        _LOGGER.error("%s - OS error: %s", log_prefix, os_ex)
-        _LOGGER.debug("%s - OS error details: %s", log_prefix, traceback.format_exc())
+    except socket.error as socket_err:
+        _LOGGER.error("%s - Connection error: %s", log_prefix, socket_err)
+        _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
         debug_info["error"] = {
-            "type": "os",
-            "message": str(os_ex),
+            "type": "socket",
+            "message": str(socket_err),
         }
         return {
             "success": False,
             "error_type": ERROR_CANNOT_CONNECT,
-            "message": f"OS error: {os_ex}",
-            "details": f"OS error during topic testing: {os_ex}",
+            "message": f"Connection error: {socket_err}",
+            "details": f"Socket error during topic testing: {socket_err}",
             "debug_info": debug_info,
         }
     except Exception as ex:  # pylint: disable=broad-except
