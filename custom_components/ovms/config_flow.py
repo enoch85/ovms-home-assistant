@@ -8,7 +8,7 @@ import time
 import re
 import hashlib
 import traceback
-from typing import Any
+from typing import Dict, Any, Optional, cast
 
 import voluptuous as vol
 import paho.mqtt.client as mqtt
@@ -22,7 +22,6 @@ from homeassistant.const import (
     CONF_PROTOCOL,
 )
 from homeassistant.core import callback
-import homeassistant.helpers.config_validation as cv
 
 from .const import (
     DOMAIN,
@@ -38,7 +37,6 @@ from .const import (
     CONF_TOPIC_STRUCTURE,
     CONF_VERIFY_SSL,
     CONF_ORIGINAL_VEHICLE_ID,
-    PROTOCOLS,
     TOPIC_STRUCTURES,
     LOGGER_NAME,
     DISCOVERY_TOPIC,
@@ -90,7 +88,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.debug("Converting ReasonCodes to serializable")
             try:
                 return [int(code) for code in obj]
-            except:  # noqa: E722
+            except (ValueError, TypeError):
                 return str(obj)
         else:
             return obj
@@ -552,7 +550,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Define callback for debugging
         def on_connect(_, __, flags, rc, properties=None):
             """Handle connection result."""
-            connection_status["connected"] = (rc == 0)
+            connection_status["connected"] = rc == 0
             connection_status["rc"] = rc
             connection_status["flags"] = flags
             connection_status["timestamp"] = time.time()
@@ -656,10 +654,8 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 port_result = s.connect_ex((config[CONF_HOST], config[CONF_PORT]))
                 port_open = port_result == 0
-                port_error = f"Port check result: {port_result}"
             except socket.error as err:
                 port_open = False
-                port_error = str(err)
             finally:
                 s.close()
             port_check_time = time.time() - port_check_start
@@ -820,6 +816,22 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "message": f"Connection error: {err}",
                 "details": f"Socket error when connecting to {config[CONF_HOST]}:{config[CONF_PORT]}: {err}",
             }
+        except (ConnectionError, TimeoutError, OSError) as ex:
+            _LOGGER.exception("%s - Connection error: %s", log_prefix, ex)
+            _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
+            error_type = ERROR_CANNOT_CONNECT
+
+            debug_info["error"] = {
+                "type": "connection",
+                "message": str(ex),
+            }
+            self.debug_info.update(debug_info)
+            return {
+                "success": False,
+                "error_type": error_type,
+                "message": f"Connection Error: {ex}",
+                "details": f"Connection error: {ex}",
+            }
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
             _LOGGER.debug("%s - Unexpected error details: %s", log_prefix, traceback.format_exc())
@@ -905,6 +917,15 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             }
 
+        except (ConnectionError, TimeoutError) as ex:
+            _LOGGER.exception("%s - Connection error: %s", log_prefix, ex)
+            _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
+            return {
+                "success": False,
+                "message": f"Connection error: {ex}",
+                "topic": test_topic,
+                "details": f"Connection error during subscription: {ex}"
+            }
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.exception("%s - Subscription error: %s", log_prefix, ex)
             _LOGGER.debug("%s - Subscription error details: %s", log_prefix, traceback.format_exc())
@@ -920,9 +941,6 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _discover_topics(self, config):
         """Discover available OVMS topics on the broker."""
-        from .const import DISCOVERY_TOPIC
-        import socket
-
         topic_prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
         log_prefix = f"Topic discovery for prefix {topic_prefix}"
         _LOGGER.debug("%s - Starting", log_prefix)
@@ -951,7 +969,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Define callbacks
         def on_connect(_, __, flags, rc, properties=None):
             """Handle connection result."""
-            connection_status["connected"] = (rc == 0)
+            connection_status["connected"] = rc == 0
             connection_status["rc"] = rc
             connection_status["timestamp"] = time.time()
 
@@ -1124,6 +1142,14 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "error_type": ERROR_CANNOT_CONNECT,
                 "message": f"Connection error during topic discovery: {err}",
             }
+        except (ConnectionError, TimeoutError, OSError) as ex:
+            _LOGGER.error("%s - Connection error: %s", log_prefix, ex)
+            _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
+            return {
+                "success": False,
+                "error_type": ERROR_CANNOT_CONNECT,
+                "message": f"Connection error during topic discovery: {ex}",
+            }
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.error("%s - MQTT error: %s", log_prefix, ex)
             _LOGGER.debug("%s - MQTT error details: %s", log_prefix, traceback.format_exc())
@@ -1135,9 +1161,8 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _test_topic_availability(self, config):
         """Test if the OVMS topics are available for a specific vehicle."""
-        # Import here to avoid circular imports
+        # Import constants outside the function to avoid pylint issues
         from .const import TOPIC_TEMPLATE, COMMAND_TOPIC_TEMPLATE, RESPONSE_TOPIC_TEMPLATE
-        import socket
 
         vehicle_id = config[CONF_VEHICLE_ID]
         log_prefix = f"Topic availability test for vehicle {vehicle_id}"
@@ -1190,7 +1215,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Define callbacks
         def on_connect(_, __, flags, rc, properties=None):
             """Handle connection result."""
-            connection_status["connected"] = (rc == 0)
+            connection_status["connected"] = rc == 0
             connection_status["rc"] = rc
             connection_status["timestamp"] = time.time()
 
@@ -1442,6 +1467,20 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "error_type": ERROR_CANNOT_CONNECT,
                 "message": f"Connection error: {err}",
                 "details": f"Socket error during topic testing: {err}",
+            }
+        except (ConnectionError, TimeoutError, OSError) as ex:
+            _LOGGER.error("%s - Connection error: %s", log_prefix, ex)
+            _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
+            debug_info["error"] = {
+                "type": "connection",
+                "message": str(ex),
+            }
+            self.debug_info.update(debug_info)
+            return {
+                "success": False,
+                "error_type": ERROR_CANNOT_CONNECT,
+                "message": f"Connection error: {ex}",
+                "details": f"Connection error during topic testing: {ex}",
             }
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
