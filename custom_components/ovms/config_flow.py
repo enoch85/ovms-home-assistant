@@ -8,7 +8,7 @@ import time
 import re
 import hashlib
 import traceback
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 import voluptuous as vol
 import paho.mqtt.client as mqtt
@@ -22,7 +22,6 @@ from homeassistant.const import (
     CONF_PROTOCOL,
 )
 from homeassistant.core import callback
-import homeassistant.helpers.config_validation as cv
 
 from .const import (
     DOMAIN,
@@ -40,7 +39,6 @@ from .const import (
     CONF_TOPIC_STRUCTURE,
     CONF_VERIFY_SSL,
     CONF_ORIGINAL_VEHICLE_ID,
-    PROTOCOLS,
     TOPIC_STRUCTURES,
     LOGGER_NAME,
     DISCOVERY_TOPIC,
@@ -81,13 +79,13 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return [self._ensure_serializable(item) for item in obj]
         elif hasattr(obj, '__dict__'):
             _LOGGER.debug("Converting object with __dict__ to serializable: %s", type(obj).__name__)
-            return {k: self._ensure_serializable(v) for k, v in obj.__dict__.items() 
+            return {k: self._ensure_serializable(v) for k, v in obj.__dict__.items()
                     if not k.startswith('_')}
         elif obj.__class__.__name__ == 'ReasonCodes':
             _LOGGER.debug("Converting ReasonCodes to serializable")
             try:
                 return [int(code) for code in obj]
-            except:
+            except (ValueError, TypeError):
                 return str(obj)
         else:
             return obj
@@ -97,7 +95,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            _LOGGER.debug("Starting OVMS MQTT broker setup with input: %s", 
+            _LOGGER.debug("Starting OVMS MQTT broker setup with input: %s",
                          {k: v for k, v in user_input.items() if k != CONF_PASSWORD})
             self.debug_info["broker_setup_start"] = time.time()
             
@@ -124,7 +122,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
             self.debug_info["broker_setup_end"] = time.time()
             self.debug_info["broker_setup_duration"] = self.debug_info["broker_setup_end"] - self.debug_info["broker_setup_start"]
-            _LOGGER.debug("MQTT connection test completed in %.2f seconds: %s", 
+            _LOGGER.debug("MQTT connection test completed in %.2f seconds: %s",
                          self.debug_info["broker_setup_duration"], result)
             
             if result["success"]:
@@ -134,12 +132,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Store debug info for later
                 self.mqtt_config["debug_info"] = self._ensure_serializable(self.debug_info)
                 return await self.async_step_topics()
-            else:
-                _LOGGER.error("MQTT Connection test failed: %s", result["message"])
-                errors["base"] = result["error_type"]
-                # Add detailed error to UI
-                if "details" in result:
-                    errors["details"] = result["details"]
+            
+            _LOGGER.error("MQTT Connection test failed: %s", result["message"])
+            errors["base"] = result["error_type"]
+            # Add detailed error to UI
+            if "details" in result:
+                errors["details"] = result["details"]
 
         # Build the schema using radio buttons for connection options
         schema_dict = {
@@ -232,7 +230,6 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 except KeyError as ex:
                     errors["custom_structure"] = "invalid_placeholder"
                     _LOGGER.error("Invalid placeholder in custom structure: %s", ex)
-
                 except ValueError as ex:
                     errors["custom_structure"] = "invalid_format"
                     _LOGGER.error("Invalid format in custom structure: %s", ex)
@@ -266,9 +263,9 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if discovery_result and discovery_result.get("success", False):
             self.discovered_topics = discovery_result.get("discovered_topics", set())
-            _LOGGER.debug("Discovered %d topics: %s", 
+            _LOGGER.debug("Discovered %d topics: %s",
                          len(self.discovered_topics or []),
-                         list(self.discovered_topics)[:10] if len(self.discovered_topics) > 10 
+                         list(self.discovered_topics)[:10] if len(self.discovered_topics) > 10
                          else self.discovered_topics)
 
             # Extract potential vehicle IDs from discovered topics
@@ -291,23 +288,23 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "potential_vehicle_ids": ", ".join(potential_vehicle_ids) if potential_vehicle_ids else "None found",
                 },
             )
-        else:
-            errors["base"] = discovery_result["error_type"]
-            _LOGGER.error("Topic discovery failed: %s", discovery_result["message"])
-            
-            # Create an empty schema to show error
-            data_schema = vol.Schema({
-                vol.Required("retry_discovery", default=True): bool,
-            })
+        
+        errors["base"] = discovery_result["error_type"]
+        _LOGGER.error("Topic discovery failed: %s", discovery_result["message"])
+        
+        # Create an empty schema to show error
+        data_schema = vol.Schema({
+            vol.Required("retry_discovery", default=True): bool,
+        })
 
-            return self.async_show_form(
-                step_id="topic_discovery",
-                data_schema=data_schema,
-                errors=errors,
-                description_placeholders={
-                    "error_message": discovery_result["message"],
-                },
-            )
+        return self.async_show_form(
+            step_id="topic_discovery",
+            data_schema=data_schema,
+            errors=errors,
+            description_placeholders={
+                "error_message": discovery_result["message"],
+            },
+        )
 
     async def async_step_vehicle(self, user_input=None):
         """Configure vehicle settings."""
@@ -335,7 +332,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             self.debug_info["topic_test_end"] = time.time()
             self.debug_info["topic_test_duration"] = self.debug_info["topic_test_end"] - self.debug_info["topic_test_start"]
-            _LOGGER.debug("Topic availability test completed in %.2f seconds: %s", 
+            _LOGGER.debug("Topic availability test completed in %.2f seconds: %s",
                          self.debug_info["topic_test_duration"], result)
 
             if result["success"]:
@@ -356,21 +353,21 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self.mqtt_config["debug_info"] = self._ensure_serializable(self.debug_info)
                 
                 # Log complete final configuration
-                _LOGGER.debug("Final config for entry creation: %s", 
+                _LOGGER.debug("Final config for entry creation: %s",
                              {k: v for k, v in self.mqtt_config.items() if k != CONF_PASSWORD})
                 
                 title = f"OVMS - {self.mqtt_config[CONF_VEHICLE_ID]}"
                 _LOGGER.info("Creating config entry with title: %s", title)
                 return self.async_create_entry(
-                    title=title, 
+                    title=title,
                     data=self.mqtt_config
                 )
-            else:
-                _LOGGER.error("Topic availability test failed: %s", result["message"])
-                errors["base"] = result["error_type"]
-                # Add detailed error to UI
-                if "details" in result:
-                    errors["details"] = result["details"]
+            
+            _LOGGER.error("Topic availability test failed: %s", result["message"])
+            errors["base"] = result["error_type"]
+            # Add detailed error to UI
+            if "details" in result:
+                errors["details"] = result["details"]
 
         # Build the schema
         data_schema = vol.Schema({
@@ -407,7 +404,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 username = match.group(1)
                 vehicle_id = match.group(2)
                 if vehicle_id not in ["client", "rr"]:
-                    _LOGGER.debug("Found potential vehicle ID '%s' with username '%s' from topic '%s'", 
+                    _LOGGER.debug("Found potential vehicle ID '%s' with username '%s' from topic '%s'",
                                vehicle_id, username, topic)
                     # Save the discovered username for future use
                     discovered_username = username
@@ -417,7 +414,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if discovered_username:
             current_username = config.get(CONF_MQTT_USERNAME, "")
             if current_username != discovered_username:
-                _LOGGER.debug("Updating MQTT username from '%s' to discovered '%s'", 
+                _LOGGER.debug("Updating MQTT username from '%s' to discovered '%s'",
                            current_username, discovered_username)
                 config[CONF_MQTT_USERNAME] = discovered_username
                 # Also update the mqtt_config in the class
@@ -433,7 +430,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         vehicle_id = config.get(CONF_VEHICLE_ID, "")
         mqtt_username = config.get(CONF_MQTT_USERNAME, "")
 
-        _LOGGER.debug("Formatting structure prefix with: structure=%s, prefix=%s, vehicle_id=%s, mqtt_username=%s", 
+        _LOGGER.debug("Formatting structure prefix with: structure=%s, prefix=%s, vehicle_id=%s, mqtt_username=%s",
                      structure, prefix, vehicle_id, mqtt_username)
 
         # If username format appears inconsistent, try to adapt
@@ -441,7 +438,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # If username doesn't already contain vehicle ID, consider adding it for better pattern matching
             if vehicle_id.lower() not in mqtt_username.lower():
                 alternative_username = f"ovms-mqtt-{vehicle_id.lower()}"
-                _LOGGER.debug("Username %s may not match pattern. Also trying %s", 
+                _LOGGER.debug("Username %s may not match pattern. Also trying %s",
                              mqtt_username, alternative_username)
                 # Don't replace the username yet, just log the possibility
         
@@ -453,7 +450,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 mqtt_username=mqtt_username
             )
         except KeyError as e:
-            _LOGGER.error("Error formatting structure prefix: %s - Variables available: prefix=%s, vehicle_id=%s, mqtt_username=%s", 
+            _LOGGER.error("Error formatting structure prefix: %s - Variables available: prefix=%s, vehicle_id=%s, mqtt_username=%s",
                          e, prefix, vehicle_id, mqtt_username)
             # Fallback to a default format
             structure_prefix = f"{prefix}/{mqtt_username}/{vehicle_id}"
@@ -482,7 +479,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         
         debug_info["mqtt_protocol_version"] = "MQTTv5" if hasattr(mqtt, 'MQTTv5') else "MQTTv311"
         
-        _LOGGER.debug("%s - Creating client with ID: %s and protocol: %s", 
+        _LOGGER.debug("%s - Creating client with ID: %s and protocol: %s",
                      log_prefix, client_id, debug_info["mqtt_protocol_version"])
         
         mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
@@ -565,6 +562,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 socket.gethostbyname(config[CONF_HOST])
                 dns_success = True
+                dns_error = None
             except socket.gaierror as err:
                 dns_success = False
                 dns_error = str(err)
@@ -590,6 +588,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             port_check_start = time.time()
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(2)
+            port_error = None
             try:
                 port_result = s.connect_ex((config[CONF_HOST], config[CONF_PORT]))
                 port_open = (port_result == 0)
@@ -684,42 +683,42 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "success": True,
                     "details": "Connection and subscription tests passed successfully",
                 }
-            else:
-                error_message = "Failed to connect"
-                error_type = ERROR_CANNOT_CONNECT
-                details = "Could not establish connection to the MQTT broker"
-                
-                # Check for specific connection issues
-                rc = connection_status.get("rc")
-                if rc is not None:
-                    if rc == 1:
-                        error_message = "Connection refused - incorrect protocol version"
-                    elif rc == 2:
-                        error_message = "Connection refused - invalid client identifier"
-                    elif rc == 3:
-                        error_message = "Connection refused - server unavailable"
-                    elif rc == 4:
-                        error_message = "Connection refused - bad username or password"
-                        error_type = ERROR_INVALID_AUTH
-                        details = "Authentication failed. Please check your username and password."
-                    elif rc == 5:
-                        error_message = "Connection refused - not authorized"
-                        error_type = ERROR_INVALID_AUTH
-                        details = "Not authorized to connect. Check your credentials and broker permissions."
-                        
-                _LOGGER.error("%s - %s (rc=%s)", log_prefix, error_message, rc)
-                debug_info["error"] = {
-                    "message": error_message,
-                    "rc": rc,
-                }
-                
-                self.debug_info.update(debug_info)
-                return {
-                    "success": False,
-                    "error_type": error_type,
-                    "message": error_message,
-                    "details": details,
-                }
+            
+            error_message = "Failed to connect"
+            error_type = ERROR_CANNOT_CONNECT
+            details = "Could not establish connection to the MQTT broker"
+            
+            # Check for specific connection issues
+            rc = connection_status.get("rc")
+            if rc is not None:
+                if rc == 1:
+                    error_message = "Connection refused - incorrect protocol version"
+                elif rc == 2:
+                    error_message = "Connection refused - invalid client identifier"
+                elif rc == 3:
+                    error_message = "Connection refused - server unavailable"
+                elif rc == 4:
+                    error_message = "Connection refused - bad username or password"
+                    error_type = ERROR_INVALID_AUTH
+                    details = "Authentication failed. Please check your username and password."
+                elif rc == 5:
+                    error_message = "Connection refused - not authorized"
+                    error_type = ERROR_INVALID_AUTH
+                    details = "Not authorized to connect. Check your credentials and broker permissions."
+                    
+            _LOGGER.error("%s - %s (rc=%s)", log_prefix, error_message, rc)
+            debug_info["error"] = {
+                "message": error_message,
+                "rc": rc,
+            }
+            
+            self.debug_info.update(debug_info)
+            return {
+                "success": False,
+                "error_type": error_type,
+                "message": error_message,
+                "details": details,
+            }
                 
         except socket.timeout:
             _LOGGER.error("%s - Connection timeout", log_prefix)
@@ -819,14 +818,14 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if subscription_confirmed:
                 _LOGGER.debug("%s - Subscription successful", log_prefix)
                 return {"success": True, "topic": test_topic}
-            else:
-                _LOGGER.error("%s - Subscription not confirmed", log_prefix)
-                return {
-                    "success": False,
-                    "message": "Subscription request was not confirmed by the broker",
-                    "topic": test_topic,
-                    "details": "The MQTT broker did not confirm the subscription request. This may be due to ACL rules on the broker preventing subscription to the test topic, connectivity issues, or broker configuration. Check the broker's logs and access control settings."
-                }
+            
+            _LOGGER.error("%s - Subscription not confirmed", log_prefix)
+            return {
+                "success": False,
+                "message": "Subscription request was not confirmed by the broker",
+                "topic": test_topic,
+                "details": "The MQTT broker did not confirm the subscription request. This may be due to ACL rules on the broker preventing subscription to the test topic, connectivity issues, or broker configuration. Check the broker's logs and access control settings."
+            }
                 
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.exception("%s - Subscription error: %s", log_prefix, ex)
@@ -840,9 +839,6 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _discover_topics(self, config):
         """Discover available OVMS topics on the broker."""
-        from .const import DISCOVERY_TOPIC
-        import socket
-        
         topic_prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
         log_prefix = f"Topic discovery for prefix {topic_prefix}"
         _LOGGER.debug("%s - Starting", log_prefix)
@@ -883,7 +879,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
         def on_message(client, userdata, msg):
             """Handle incoming messages."""
-            _LOGGER.debug("%s - Message received on topic: %s (payload len: %d)", 
+            _LOGGER.debug("%s - Message received on topic: %s (payload len: %d)",
                          log_prefix, msg.topic, len(msg.payload))
             discovered_topics.add(msg.topic)
             
@@ -1016,7 +1012,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             debug_info["topics_count"] = topics_count
             debug_info["topics"] = list(discovered_topics)
             
-            _LOGGER.debug("%s - Discovery complete. Found %d topics: %s", 
+            _LOGGER.debug("%s - Discovery complete. Found %d topics: %s",
                          log_prefix, topics_count, list(discovered_topics))
             
             return {
@@ -1025,7 +1021,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "topic_count": topics_count,
             }
             
-        except socket.timeout as err:
+        except socket.timeout:
             _LOGGER.error("%s - Connection timeout", log_prefix)
             return {
                 "success": False,
@@ -1040,7 +1036,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "error_type": ERROR_CANNOT_CONNECT,
                 "message": f"Connection error during topic discovery: {err}",
             }
-        except Exception as ex:  # Catch all exceptions
+        except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.error("%s - MQTT error: %s", log_prefix, ex)
             _LOGGER.debug("%s - MQTT error details: %s", log_prefix, traceback.format_exc())
             return {
@@ -1052,7 +1048,6 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def _test_topic_availability(self, config):
         """Test if the OVMS topics are available for a specific vehicle."""
         from .const import TOPIC_TEMPLATE, COMMAND_TOPIC_TEMPLATE, RESPONSE_TOPIC_TEMPLATE
-        import socket
         
         vehicle_id = config[CONF_VEHICLE_ID]
         log_prefix = f"Topic availability test for vehicle {vehicle_id}"
@@ -1130,7 +1125,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
         def on_message(client, userdata, msg):
             """Handle incoming messages."""
-            _LOGGER.debug("%s - Message received on topic: %s (payload len: %d)", 
+            _LOGGER.debug("%s - Message received on topic: %s (payload len: %d)",
                          log_prefix, msg.topic, len(msg.payload))
             
             message_info = {
@@ -1302,7 +1297,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             debug_info["messages"] = self._ensure_serializable(messages_received)
             debug_info["responses_received"] = len(responses_received)
             
-            _LOGGER.debug("%s - Test complete. Messages: %d, Topics: %d, Responses: %d", 
+            _LOGGER.debug("%s - Test complete. Messages: %d, Topics: %d, Responses: %d",
                          log_prefix, messages_count, topics_count, len(responses_received))
             
             # Even if we didn't receive messages, we'll consider it a success with a warning
@@ -1324,7 +1319,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "success": False,
                 "error_type": ERROR_TIMEOUT,
                 "message": "Connection timeout",
-                "details": f"Connection to MQTT broker timed out during topic testing",
+                "details": "Connection to MQTT broker timed out during topic testing",
             }
         except socket.error as err:
             _LOGGER.error("%s - Connection error: %s", log_prefix, err)
@@ -1340,7 +1335,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "message": f"Connection error: {err}",
                 "details": f"Socket error during topic testing: {err}",
             }
-        except Exception as ex:  # Catch all exceptions
+        except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
             _LOGGER.debug("%s - Unexpected error details: %s", log_prefix, traceback.format_exc())
             debug_info["error"] = {
@@ -1367,7 +1362,6 @@ class OVMSOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self, config_entry):
         """Initialize options flow."""
-        # Fix: Use a different attribute name to avoid deprecation warning
         self._config_entry = config_entry
         _LOGGER.debug("Initializing options flow for entry: %s", config_entry.entry_id)
 
@@ -1389,7 +1383,7 @@ class OVMSOptionsFlow(config_entries.OptionsFlow):
             vol.Required(
                 CONF_TOPIC_PREFIX,
                 default=self._config_entry.options.get(
-                    CONF_TOPIC_PREFIX, 
+                    CONF_TOPIC_PREFIX,
                     self._config_entry.data.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
                 ),
             ): str,
