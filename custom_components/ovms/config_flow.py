@@ -442,7 +442,10 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # More generic pattern to match various username formats for OVMS
         general_pattern = fr"^{re.escape(prefix)}/([^/]+)/([^/]+)/"
-        _LOGGER.debug("Using general pattern to extract vehicle IDs: %s", general_pattern)
+        _LOGGER.debug(
+            "Using general pattern to extract vehicle IDs: %s", 
+            general_pattern
+        )
 
         for topic in topics:
             match = re.match(general_pattern, topic)
@@ -643,7 +646,10 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "success": False,
                     "error_type": ERROR_CANNOT_CONNECT,
                     "message": f"DNS resolution failed: {dns_error}",
-                    "details": f"Could not resolve hostname '{config[CONF_HOST]}': {dns_error}",
+                    "details": (
+                        f"Could not resolve hostname '{config[CONF_HOST]}': "
+                        f"{dns_error}"
+                    ),
                 }
 
             # Port check
@@ -672,7 +678,10 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "success": False,
                     "error_type": ERROR_CANNOT_CONNECT,
                     "message": f"Port {config[CONF_PORT]} is closed",
-                    "details": f"Port {config[CONF_PORT]} on host '{config[CONF_HOST]}' is not open.",
+                    "details": (
+                        f"Port {config[CONF_PORT]} on host '{config[CONF_HOST]}' "
+                        f"is not open."
+                    ),
                 }
 
             # Now try the actual MQTT connection
@@ -1093,9 +1102,19 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Also try a more generic topic to catch any responding devices
                 vehicle_id = config.get(CONF_VEHICLE_ID, "")
                 if vehicle_id:
-                    alt_test_topic = f"{topic_prefix}/+/{vehicle_id}/client/rr/command/{command_id}"
-                    mqttc.publish(alt_test_topic, test_payload, qos=config.get(CONF_QOS, DEFAULT_QOS))
-                    _LOGGER.debug("%s - Also testing alternative topic: %s", log_prefix, alt_test_topic)
+                    alt_test_topic = (
+                        f"{topic_prefix}/+/{vehicle_id}/client/rr/command/{command_id}"
+                    )
+                    mqttc.publish(
+                        alt_test_topic, 
+                        test_payload, 
+                        qos=config.get(CONF_QOS, DEFAULT_QOS)
+                    )
+                    _LOGGER.debug(
+                        "%s - Also testing alternative topic: %s", 
+                        log_prefix, 
+                        alt_test_topic
+                    )
 
                 # Wait a bit longer for responses
                 await asyncio.sleep(2)
@@ -1240,7 +1259,10 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             "%s - Also subscribing to direct topic: %s",
                             log_prefix, direct_topic
                         )
-                        mqttc.subscribe(direct_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
+                        mqttc.subscribe(
+                            direct_topic, 
+                            qos=config.get(CONF_QOS, DEFAULT_QOS)
+                        )
 
                     # Also try with the pattern matching any username
                     alt_topic = f"{prefix}/+/{vehicle_id}/#"
@@ -1248,7 +1270,10 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "%s - Also subscribing to alternative topic: %s",
                         log_prefix, alt_topic
                     )
-                    mqttc.subscribe(alt_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
+                    mqttc.subscribe(
+                        alt_topic, 
+                        qos=config.get(CONF_QOS, DEFAULT_QOS)
+                    )
 
         def on_message(_, __, msg):
             """Handle incoming messages."""
@@ -1521,34 +1546,39 @@ class OVMSOptionsFlow(config_entries.OptionsFlow):
             _LOGGER.debug("Saving options: %s", user_input)
             return self.async_create_entry(title="", data=user_input)
 
-        options = {
-            vol.Required(
-                CONF_QOS,
-                default=self._config_entry.options.get(
-                    CONF_QOS, self._config_entry.data.get(CONF_QOS, DEFAULT_QOS)
-                ),
-            ): vol.In([0, 1, 2]),
-            vol.Required(
-                CONF_TOPIC_PREFIX,
-                default=self._config_entry.options.get(
+                    # Get data and options from config entry
+            entry_data = self._config_entry.data
+            entry_options = self._config_entry.options
+            
+            # Create options schema
+            options = {
+                vol.Required(
+                    CONF_QOS,
+                    default=entry_options.get(
+                        CONF_QOS, entry_data.get(CONF_QOS, DEFAULT_QOS)
+                    ),
+                ): vol.In([0, 1, 2]),
+                vol.Required(
                     CONF_TOPIC_PREFIX,
-                    self._config_entry.data.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
-                ),
-            ): str,
-            vol.Optional(
-                CONF_TOPIC_STRUCTURE,
-                default=self._config_entry.options.get(
+                    default=entry_options.get(
+                        CONF_TOPIC_PREFIX,
+                        entry_data.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
+                    ),
+                ): str,
+                vol.Optional(
                     CONF_TOPIC_STRUCTURE,
-                    self._config_entry.data.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
-                ),
-            ): vol.In(TOPIC_STRUCTURES),
-            vol.Required(
-                CONF_VERIFY_SSL,
-                default=self._config_entry.options.get(
+                    default=entry_options.get(
+                        CONF_TOPIC_STRUCTURE,
+                        entry_data.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
+                    ),
+                ): vol.In(TOPIC_STRUCTURES),
+                vol.Required(
                     CONF_VERIFY_SSL,
-                    self._config_entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
-                ),
-            ): bool,
-        }
+                    default=entry_options.get(
+                        CONF_VERIFY_SSL,
+                        entry_data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+                    ),
+                ): bool,
+            }
 
         return self.async_show_form(step_id="init", data_schema=vol.Schema(options))
