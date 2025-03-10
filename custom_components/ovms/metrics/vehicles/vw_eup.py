@@ -12,9 +12,9 @@ from homeassistant.const import (
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
-    UnitOfLength,
+    UnitOfLength,  # noqa: F401
     UnitOfPower,
-    UnitOfTemperature,
+    UnitOfTemperature,  # noqa: F401
     UnitOfTime,
 )
 from homeassistant.helpers.entity import EntityCategory
