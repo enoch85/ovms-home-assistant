@@ -1,5 +1,6 @@
 """Constants for the OVMS integration."""
-from homeassistant.const import (
+# Re-exported constants from Home Assistant for convenience
+from homeassistant.const import (  # noqa: W0611
     CONF_HOST,
     CONF_PASSWORD,
     CONF_PORT,
