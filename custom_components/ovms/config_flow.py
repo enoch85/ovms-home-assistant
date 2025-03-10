@@ -959,7 +959,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if rc == 0:
                 _LOGGER.debug("%s - Subscribing to discovery topic: %s", log_prefix, discovery_topic)
-                client.subscribe(discovery_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
+                mqttc.subscribe(discovery_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
         def on_message(_, __, msg):
             """Handle incoming messages."""
@@ -1199,10 +1199,10 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if rc == 0:
                 # Subscribe to general topics and response topic
                 _LOGGER.debug("%s - Subscribing to general topic: %s", log_prefix, topic)
-                client.subscribe(topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
+                mqttc.subscribe(topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
                 _LOGGER.debug("%s - Subscribing to response topic: %s", log_prefix, response_topic)
-                client.subscribe(response_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
+                mqttc.subscribe(response_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
                 # Also try a direct subscription to known topic patterns
                 prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
@@ -1215,7 +1215,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             "%s - Also subscribing to direct topic: %s",
                             log_prefix, direct_topic
                         )
-                        client.subscribe(direct_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
+                        mqttc.subscribe(direct_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
                     # Also try with the pattern matching any username
                     alt_topic = f"{prefix}/+/{vehicle_id}/#"
@@ -1223,7 +1223,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "%s - Also subscribing to alternative topic: %s",
                         log_prefix, alt_topic
                     )
-                    client.subscribe(alt_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
+                    mqttc.subscribe(alt_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
         def on_message(_, __, msg):
             """Handle incoming messages."""
