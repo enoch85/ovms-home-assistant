@@ -69,16 +69,17 @@ async def async_setup_entry(
         # Get the MQTT client for publishing commands
         mqtt_client = hass.data[DOMAIN][entry.entry_id]["mqtt_client"]
 
+        # Use kwargs to reduce positional arguments
         switch = OVMSSwitch(
-            data["unique_id"],
-            data["name"],
-            data["topic"],
-            data["payload"],
-            data["device_info"],
-            data["attributes"],
-            mqtt_client.async_send_command,
-            hass,
-            data.get("friendly_name"),
+            unique_id=data["unique_id"],
+            name=data["name"],
+            topic=data["topic"],
+            initial_state=data["payload"],
+            device_info=data["device_info"],
+            attributes=data["attributes"],
+            command_function=mqtt_client.async_send_command,
+            hass=hass,
+            friendly_name=data.get("friendly_name"),
         )
 
         async_add_entities([switch])
@@ -300,7 +301,8 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             if isinstance(json_data, dict):
                 # Add useful attributes from the data
                 for key, value in json_data.items():
-                    if key not in ["value", "state", "status"] and key not in self._attr_extra_state_attributes:
+                    if (key not in ["value", "state", "status"] and 
+                            key not in self._attr_extra_state_attributes):
                         self._attr_extra_state_attributes[key] = value
 
                 # If there's a timestamp in the JSON, use it
