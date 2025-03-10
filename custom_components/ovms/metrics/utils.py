@@ -2,11 +2,31 @@
 
 from .patterns import TOPIC_PATTERNS
 
+# Placeholders for initial definition to avoid circular imports
+# These will be populated on first use
+METRIC_DEFINITIONS = None
+CATEGORY_BATTERY = None
+CATEGORY_CHARGING = None
+CATEGORY_CLIMATE = None
+CATEGORY_DOOR = None
+CATEGORY_LOCATION = None
+CATEGORY_MOTOR = None
+CATEGORY_TRIP = None
+CATEGORY_DIAGNOSTIC = None
+CATEGORY_POWER = None
+CATEGORY_NETWORK = None
+CATEGORY_SYSTEM = None
+CATEGORY_TIRE = None
+CATEGORY_VW_EUP = None
+PREFIX_CATEGORIES = None
+
 def get_metric_by_path(metric_path):
     """Get metric definition by exact path match."""
-    # This function now needs to import METRIC_DEFINITIONS from the metrics module
-    # This is a circular import, so we need to import inside the function
-    from . import METRIC_DEFINITIONS
+    global METRIC_DEFINITIONS
+    if METRIC_DEFINITIONS is None:
+        # Import only when needed
+        from . import METRIC_DEFINITIONS as MD
+        METRIC_DEFINITIONS = MD
     return METRIC_DEFINITIONS.get(metric_path)
 
 
@@ -29,24 +49,20 @@ def get_metric_by_pattern(topic_parts):
 
 def determine_category_from_topic(topic_parts):
     """Determine the most likely category from topic parts."""
-    # This function needs to import categories and PREFIX_CATEGORIES from metrics
-    from . import (
-        CATEGORY_BATTERY,
-        CATEGORY_CHARGING,
-        CATEGORY_CLIMATE,
-        CATEGORY_DOOR,
-        CATEGORY_LOCATION,
-        CATEGORY_MOTOR,
-        CATEGORY_TRIP,
-        CATEGORY_DIAGNOSTIC,
-        CATEGORY_POWER,
-        CATEGORY_NETWORK,
-        CATEGORY_SYSTEM,
-        CATEGORY_TIRE,
-        CATEGORY_VW_EUP,
-        PREFIX_CATEGORIES,
-    )
-
+    global CATEGORY_BATTERY, CATEGORY_CHARGING, CATEGORY_CLIMATE, CATEGORY_DOOR
+    global CATEGORY_LOCATION, CATEGORY_MOTOR, CATEGORY_TRIP, CATEGORY_DIAGNOSTIC
+    global CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE
+    global CATEGORY_VW_EUP, PREFIX_CATEGORIES
+    
+    # Initialize categories if not already done
+    if CATEGORY_BATTERY is None:
+        from . import (
+            CATEGORY_BATTERY, CATEGORY_CHARGING, CATEGORY_CLIMATE, CATEGORY_DOOR,
+            CATEGORY_LOCATION, CATEGORY_MOTOR, CATEGORY_TRIP, CATEGORY_DIAGNOSTIC,
+            CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE,
+            CATEGORY_VW_EUP, PREFIX_CATEGORIES
+        )
+    
     # Check for known categories in topic
     for part in topic_parts:
         part_lower = part.lower()
