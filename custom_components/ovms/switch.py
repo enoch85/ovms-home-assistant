@@ -301,7 +301,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             if isinstance(json_data, dict):
                 # Add useful attributes from the data
                 for key, value in json_data.items():
-                    if (key not in ["value", "state", "status"] and 
+                    if (key not in ["value", "state", "status"] and
                             key not in self._attr_extra_state_attributes):
                         self._attr_extra_state_attributes[key] = value
 

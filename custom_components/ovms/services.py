@@ -67,7 +67,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 entry = hass.config_entries.async_get_entry(entry_id)
                 if entry and entry.data.get(CONF_VEHICLE_ID) == vehicle_id:
                     return data["mqtt_client"]
-        
+
         return None
 
     async def async_send_command(call: ServiceCall) -> Dict[str, Any]:
