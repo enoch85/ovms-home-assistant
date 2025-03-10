@@ -8,5 +8,5 @@ find "../custom_components/ovms" -name "*.py" -exec sed -i 's/[ \t]*$//' {} \;
 
 # Commit and push!
 git commit -a -s -m "fix whitespace"
-git push origin fix-lint-p2
+git push origin fix-lint-p3
 
