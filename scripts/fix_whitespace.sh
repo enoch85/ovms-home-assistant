@@ -4,8 +4,8 @@
 git pull
 
 # Fix whitespace
-cd "$(pwd)/custom_components/ovms"
-find . -name "*.py" -exec sed -i 's/[ \t]*$//' {} \;
+#"$(pwd)/custom_components/ovms"
+find "../custom_components/ovms" -name "*.py" -exec sed -i 's/[ \t]*$//' {} \;
 
 # Commit and push!
 git commit -a -s -m "fix whitespace"
