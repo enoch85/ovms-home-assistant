@@ -3,8 +3,10 @@ import asyncio
 import logging
 import socket
 import ssl
+import time
 import traceback
 import uuid
+from typing import Dict, Any, Optional
 
 import paho.mqtt.client as mqtt  # pylint: disable=import-error
 
@@ -37,25 +39,24 @@ def ensure_serializable(obj):
     """Ensure objects are JSON serializable."""
     if isinstance(obj, dict):
         return {k: ensure_serializable(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
+    if isinstance(obj, list):
         return [ensure_serializable(item) for item in obj]
-    elif isinstance(obj, tuple):
+    if isinstance(obj, tuple):
         return [ensure_serializable(item) for item in obj]
-    elif hasattr(obj, '__dict__'):
+    if hasattr(obj, '__dict__'):
         return {
             k: ensure_serializable(v)
             for k, v in obj.__dict__.items() if not k.startswith('_')
         }
-    elif obj.__class__.__name__ == 'ReasonCodes':
+    if obj.__class__.__name__ == 'ReasonCodes':
         try:
             return [int(code) for code in obj]
         except (ValueError, TypeError):
             return str(obj)
-    else:
-        return obj
+    return obj
 
 
-async def test_mqtt_connection(hass: HomeAssistant, config):
+async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
     """Test if we can connect to the MQTT broker."""
     log_prefix = f"MQTT connection test to {config[CONF_HOST]}:{config[CONF_PORT]}"
     _LOGGER.debug("%s - Starting", log_prefix)
@@ -91,7 +92,8 @@ async def test_mqtt_connection(hass: HomeAssistant, config):
         connection_status["connected"] = rc == 0
         connection_status["rc"] = rc
         connection_status["flags"] = flags
-        connection_status["timestamp"] = asyncio.get_event_loop().time()
+        # Using time.time() instead of asyncio.get_event_loop().time()
+        connection_status["timestamp"] = time.time()
 
         _LOGGER.debug("%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags)
 
@@ -99,7 +101,8 @@ async def test_mqtt_connection(hass: HomeAssistant, config):
         """Handle disconnection."""
         connection_status["connected"] = False
         connection_status["disconnect_rc"] = rc
-        connection_status["disconnect_timestamp"] = asyncio.get_event_loop().time()
+        # Using time.time() instead of asyncio.get_event_loop().time()
+        connection_status["disconnect_timestamp"] = time.time()
         _LOGGER.debug("%s - Disconnected with result code: %s", log_prefix, rc)
 
     def on_log(_, __, ___, buf):
@@ -195,7 +198,7 @@ async def test_mqtt_connection(hass: HomeAssistant, config):
         try:
             port_result = s.connect_ex((config[CONF_HOST], config[CONF_PORT]))
             port_open = port_result == 0
-        except socket.error as socket_err:
+        except socket.error:
             port_open = False
         finally:
             s.close()
@@ -269,29 +272,29 @@ async def test_mqtt_connection(hass: HomeAssistant, config):
             if not sub_result["success"]:
                 try:
                     mqttc.disconnect()
-                except Exception:
+                except Exception:  # pylint: disable=broad-except
                     pass
 
                 # Prepare detailed error message
-                error_details = sub_result.get("details", "Could not subscribe to test topics")
                 error_topic = sub_result.get("topic", "unknown")
+                error_details_text = sub_result.get("details", "Could not subscribe to test topics")
 
                 return {
                     "success": False,
                     "error_type": ERROR_TOPIC_ACCESS_DENIED,
                     "message": f"Topic subscription test failed for {error_topic}",
                     "details": (
-                        "Access denied to the test topic '{error_topic}'. This is "
-                        "likely due to MQTT ACL (Access Control List) restrictions. "
-                        "For EMQX broker, ensure the user has 'Subscribe' permission "
-                        "for '{error_topic}' or 'homeassistant/#' wildcard topic. "
-                        "{error_details}"
+                        f"Access denied to the test topic '{error_topic}'. This is "
+                        f"likely due to MQTT ACL (Access Control List) restrictions. "
+                        f"For EMQX broker, ensure the user has 'Subscribe' permission "
+                        f"for '{error_topic}' or 'homeassistant/#' wildcard topic. "
+                        f"{error_details_text}"
                     ),
                 }
 
             try:
                 mqttc.disconnect()
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 pass
             return {
                 "success": True,
@@ -351,23 +354,7 @@ async def test_mqtt_connection(hass: HomeAssistant, config):
             ),
             "debug_info": debug_info,
         }
-    except socket.error as socket_err:
-        _LOGGER.error("%s - Connection error: %s", log_prefix, socket_err)
-        _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
-        debug_info["error"] = {
-            "type": "socket",
-            "message": str(socket_err),
-        }
-        return {
-            "success": False,
-            "error_type": ERROR_CANNOT_CONNECT,
-            "message": f"Connection error: {socket_err}",
-            "details": (
-                f"Socket error when connecting to "
-                f"{config[CONF_HOST]}:{config[CONF_PORT]}: {socket_err}"
-            ),
-            "debug_info": debug_info,
-        }
+    # Handling exception order correctly
     except ConnectionError as conn_ex:
         _LOGGER.error("%s - Connection error: %s", log_prefix, conn_ex)
         _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
@@ -396,18 +383,18 @@ async def test_mqtt_connection(hass: HomeAssistant, config):
             "details": f"Timeout error: {timeout_ex}",
             "debug_info": debug_info,
         }
-    except OSError as os_ex:
-        _LOGGER.error("%s - OS error: %s", log_prefix, os_ex)
-        _LOGGER.debug("%s - OS error details: %s", log_prefix, traceback.format_exc())
+    except socket.error as socket_err:
+        _LOGGER.error("%s - Socket error: %s", log_prefix, socket_err)
+        _LOGGER.debug("%s - Socket error details: %s", log_prefix, traceback.format_exc())
         debug_info["error"] = {
-            "type": "os",
-            "message": str(os_ex),
+            "type": "socket",
+            "message": str(socket_err),
         }
         return {
             "success": False,
             "error_type": ERROR_CANNOT_CONNECT,
-            "message": f"OS error: {os_ex}",
-            "details": f"OS error: {os_ex}",
+            "message": f"Socket error: {socket_err}",
+            "details": f"Socket error when connecting: {socket_err}",
             "debug_info": debug_info,
         }
     except Exception as ex:  # pylint: disable=broad-except
@@ -433,7 +420,7 @@ async def test_mqtt_connection(hass: HomeAssistant, config):
         }
 
 
-async def test_subscription(hass, mqtt_client, config, client_id):
+async def test_subscription(hass, mqtt_client, config, client_id):  # pylint: disable=too-many-locals
     """Test if we can subscribe to a topic."""
     log_prefix = f"MQTT subscription test for {config[CONF_HOST]}:{config[CONF_PORT]}"
 
@@ -496,6 +483,7 @@ async def test_subscription(hass, mqtt_client, config, client_id):
             )
         }
 
+    # Correct exception order
     except ConnectionError as conn_ex:
         _LOGGER.exception("%s - Connection error: %s", log_prefix, conn_ex)
         _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
