@@ -77,7 +77,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return [self._ensure_serializable(item) for item in obj]
         elif hasattr(obj, '__dict__'):
             _LOGGER.debug(
-                "Converting object with __dict__ to serializable: %s", 
+                "Converting object with __dict__ to serializable: %s",
                 type(obj).__name__
             )
             return {
@@ -342,7 +342,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Suggest vehicle IDs from discovery if available
         suggested_vehicle_ids = extract_vehicle_ids(
-            self.discovered_topics, 
+            self.discovered_topics,
             self.mqtt_config
         )
         default_vehicle_id = next(iter(suggested_vehicle_ids), "")

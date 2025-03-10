@@ -40,7 +40,7 @@ class OVMSOptionsFlow(OptionsFlow):
         # Get data and options from config entry
         entry_data = self._config_entry.data
         entry_options = self._config_entry.options
-        
+
         # Create options schema
         options = {
             vol.Required(

@@ -156,8 +156,8 @@ async def discover_topics(hass: HomeAssistant, config):
 
         if rc == 0:
             _LOGGER.debug(
-                "%s - Subscribing to discovery topic: %s", 
-                log_prefix, 
+                "%s - Subscribing to discovery topic: %s",
+                log_prefix,
                 discovery_topic
             )
             mqttc.subscribe(discovery_topic, qos=config.get(CONF_QOS, 1))
@@ -264,7 +264,7 @@ async def discover_topics(hass: HomeAssistant, config):
         # Try to publish a message to stimulate response
         try:
             _LOGGER.debug(
-                "%s - Publishing test message to stimulate responses", 
+                "%s - Publishing test message to stimulate responses",
                 log_prefix
             )
             command_id = uuid.uuid4().hex[:8]
@@ -298,8 +298,8 @@ async def discover_topics(hass: HomeAssistant, config):
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.warning("%s - Error publishing test message: %s", log_prefix, ex)
             _LOGGER.debug(
-                "%s - Test message error details: %s", 
-                log_prefix, 
+                "%s - Test message error details: %s",
+                log_prefix,
                 traceback.format_exc()
             )
 
@@ -339,8 +339,8 @@ async def discover_topics(hass: HomeAssistant, config):
     except socket.error as socket_err:
         _LOGGER.error("%s - Connection error: %s", log_prefix, socket_err)
         _LOGGER.debug(
-            "%s - Connection error details: %s", 
-            log_prefix, 
+            "%s - Connection error details: %s",
+            log_prefix,
             traceback.format_exc()
         )
         return {
@@ -351,8 +351,8 @@ async def discover_topics(hass: HomeAssistant, config):
     except ConnectionError as conn_ex:
         _LOGGER.error("%s - Connection error: %s", log_prefix, conn_ex)
         _LOGGER.debug(
-            "%s - Connection error details: %s", 
-            log_prefix, 
+            "%s - Connection error details: %s",
+            log_prefix,
             traceback.format_exc()
         )
         return {
@@ -363,8 +363,8 @@ async def discover_topics(hass: HomeAssistant, config):
     except TimeoutError as timeout_ex:
         _LOGGER.error("%s - Timeout error: %s", log_prefix, timeout_ex)
         _LOGGER.debug(
-            "%s - Timeout error details: %s", 
-            log_prefix, 
+            "%s - Timeout error details: %s",
+            log_prefix,
             traceback.format_exc()
         )
         return {
@@ -398,7 +398,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
         COMMAND_TOPIC_TEMPLATE,
         RESPONSE_TOPIC_TEMPLATE
     )
-    
+
     vehicle_id = config[CONF_VEHICLE_ID]
     log_prefix = f"Topic availability test for vehicle {vehicle_id}"
     _LOGGER.debug("%s - Starting", log_prefix)
@@ -462,8 +462,8 @@ async def test_topic_availability(hass: HomeAssistant, config):
             mqttc.subscribe(topic, qos=config.get(CONF_QOS, 1))
 
             _LOGGER.debug(
-                "%s - Subscribing to response topic: %s", 
-                log_prefix, 
+                "%s - Subscribing to response topic: %s",
+                log_prefix,
                 response_topic
             )
             mqttc.subscribe(response_topic, qos=config.get(CONF_QOS, 1))
@@ -649,38 +649,38 @@ async def test_topic_availability(hass: HomeAssistant, config):
                 _LOGGER.debug("%s - No command response received", log_prefix)
         except ConnectionError as conn_ex:
             _LOGGER.warning(
-                "%s - Connection error sending command: %s", 
-                log_prefix, 
+                "%s - Connection error sending command: %s",
+                log_prefix,
                 conn_ex
             )
             _LOGGER.debug(
-                "%s - Command error details: %s", 
-                log_prefix, 
+                "%s - Command error details: %s",
+                log_prefix,
                 traceback.format_exc()
             )
         except TimeoutError as timeout_ex:
             _LOGGER.warning(
-                "%s - Timeout error sending command: %s", 
-                log_prefix, 
+                "%s - Timeout error sending command: %s",
+                log_prefix,
                 timeout_ex
             )
             _LOGGER.debug(
-                "%s - Command error details: %s", 
-                log_prefix, 
+                "%s - Command error details: %s",
+                log_prefix,
                 traceback.format_exc()
             )
         except OSError as os_ex:
             _LOGGER.warning("%s - OS error sending command: %s", log_prefix, os_ex)
             _LOGGER.debug(
-                "%s - Command error details: %s", 
-                log_prefix, 
+                "%s - Command error details: %s",
+                log_prefix,
                 traceback.format_exc()
             )
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.warning("%s - Error sending command: %s", log_prefix, ex)
             _LOGGER.debug(
-                "%s - Command error details: %s", 
-                log_prefix, 
+                "%s - Command error details: %s",
+                log_prefix,
                 traceback.format_exc()
             )
 
@@ -734,8 +734,8 @@ async def test_topic_availability(hass: HomeAssistant, config):
     except socket.error as socket_err:
         _LOGGER.error("%s - Connection error: %s", log_prefix, socket_err)
         _LOGGER.debug(
-            "%s - Connection error details: %s", 
-            log_prefix, 
+            "%s - Connection error details: %s",
+            log_prefix,
             traceback.format_exc()
         )
         debug_info["error"] = {
@@ -752,8 +752,8 @@ async def test_topic_availability(hass: HomeAssistant, config):
     except ConnectionError as conn_ex:
         _LOGGER.error("%s - Connection error: %s", log_prefix, conn_ex)
         _LOGGER.debug(
-            "%s - Connection error details: %s", 
-            log_prefix, 
+            "%s - Connection error details: %s",
+            log_prefix,
             traceback.format_exc()
         )
         debug_info["error"] = {
@@ -770,8 +770,8 @@ async def test_topic_availability(hass: HomeAssistant, config):
     except TimeoutError as timeout_ex:
         _LOGGER.error("%s - Timeout error: %s", log_prefix, timeout_ex)
         _LOGGER.debug(
-            "%s - Timeout error details: %s", 
-            log_prefix, 
+            "%s - Timeout error details: %s",
+            log_prefix,
             traceback.format_exc()
         )
         debug_info["error"] = {
@@ -802,8 +802,8 @@ async def test_topic_availability(hass: HomeAssistant, config):
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
         _LOGGER.debug(
-            "%s - Unexpected error details: %s", 
-            log_prefix, 
+            "%s - Unexpected error details: %s",
+            log_prefix,
             traceback.format_exc()
         )
         debug_info["error"] = {

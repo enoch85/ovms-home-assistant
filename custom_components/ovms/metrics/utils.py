@@ -53,7 +53,7 @@ def determine_category_from_topic(topic_parts):
     global CATEGORY_LOCATION, CATEGORY_MOTOR, CATEGORY_TRIP, CATEGORY_DIAGNOSTIC
     global CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE
     global CATEGORY_VW_EUP, PREFIX_CATEGORIES
-    
+
     # Initialize categories if not already done
     if CATEGORY_BATTERY is None:
         from . import (
@@ -62,7 +62,7 @@ def determine_category_from_topic(topic_parts):
             CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE,
             CATEGORY_VW_EUP, PREFIX_CATEGORIES
         )
-    
+
     # Check for known categories in topic
     for part in topic_parts:
         part_lower = part.lower()

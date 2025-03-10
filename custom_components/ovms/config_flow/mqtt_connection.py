@@ -208,8 +208,8 @@ async def test_mqtt_connection(hass: HomeAssistant, config):
 
         if not port_open:
             _LOGGER.error(
-                "%s - Port check failed, port %d is closed", 
-                log_prefix, 
+                "%s - Port check failed, port %d is closed",
+                log_prefix,
                 config[CONF_PORT]
             )
             debug_info["port_check"]["error"] = f"Port {config[CONF_PORT]} is closed"
