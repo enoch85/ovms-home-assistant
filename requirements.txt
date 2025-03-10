@@ -1,4 +1,4 @@
 paho-mqtt>=1.6.1
-homeassistant>=2025.2.5
+homeassistant>=2025.1.4
 pylint>=2.17.0
 voluptuous>=0.13.1
