@@ -17,7 +17,8 @@ on:
   pull_request:
     branches: [ $default-branch, $protected-branches ]
   schedule:
-    - cron: $cron-weekly
+    - cron: "07 23 * * 6"
+
 
 jobs:
   analyze:
