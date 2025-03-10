@@ -1,7 +1,7 @@
 """Services for OVMS integration."""
 import logging
 import uuid
-from typing import Any, Dict, Optional
+from typing import Dict, Any
 
 import voluptuous as vol
 
@@ -10,14 +10,10 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
-    CONF_QOS,
-    CONF_TOPIC_PREFIX,
     CONF_VEHICLE_ID,
-    DEFAULT_QOS,
     DOMAIN,
     LOGGER_NAME
 )
-from .utils import format_command_parameters
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -63,17 +59,18 @@ CONTROL_CHARGING_SCHEMA = vol.Schema({
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Set up OVMS services."""
 
-    async def async_find_mqtt_client(vehicle_id: str):
-        """Find the MQTT client for a vehicle ID."""
+    @callback
+    def find_mqtt_client(vehicle_id: str):
+        """Find the MQTT client for a vehicle ID synchronously."""
         for entry_id, data in hass.data[DOMAIN].items():
             if isinstance(data, dict) and "mqtt_client" in data:
                 entry = hass.config_entries.async_get_entry(entry_id)
                 if entry and entry.data.get(CONF_VEHICLE_ID) == vehicle_id:
                     return data["mqtt_client"]
 
-        raise HomeAssistantError(f"No OVMS integration found for vehicle_id: {vehicle_id}")
+        return None
 
-    async def async_send_command(call: ServiceCall) -> None:
+    async def async_send_command(call: ServiceCall) -> Dict[str, Any]:
         """Send a command to the OVMS module."""
         vehicle_id = call.data.get("vehicle_id")
         command = call.data.get("command")
@@ -84,10 +81,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         _LOGGER.debug("Service call send_command for vehicle %s: %s %s",
                      vehicle_id, command, parameters)
 
-        try:
-            # Find the MQTT client for this vehicle
-            mqtt_client = await async_find_mqtt_client(vehicle_id)
+        # Find client synchronously first
+        mqtt_client = find_mqtt_client(vehicle_id)
+        if not mqtt_client:
+            raise HomeAssistantError(f"No OVMS integration found for vehicle_id: {vehicle_id}")
 
+        try:
             # Send the command and get the result
             result = await mqtt_client.async_send_command(
                 command=command,
@@ -99,14 +98,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             # Return the result as service data
             return result
 
-        except HomeAssistantError as err:
-            _LOGGER.error("Error in send_command service: %s", err)
-            raise
         except Exception as ex:
-            _LOGGER.exception("Unexpected error in send_command service: %s", ex)
-            raise HomeAssistantError(f"Failed to send command: {ex}")
+            _LOGGER.exception("Error in send_command service: %s", ex)
+            raise HomeAssistantError(f"Failed to send command: {ex}") from ex
 
-    async def async_set_feature(call: ServiceCall) -> None:
+    async def async_set_feature(call: ServiceCall) -> Dict[str, Any]:
         """Set a feature on the OVMS module."""
         vehicle_id = call.data.get("vehicle_id")
         feature = call.data.get("feature")
@@ -115,10 +111,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         _LOGGER.debug("Service call set_feature for vehicle %s: %s=%s",
                      vehicle_id, feature, value)
 
-        try:
-            # Find the MQTT client for this vehicle
-            mqtt_client = await async_find_mqtt_client(vehicle_id)
+        # Find client synchronously first
+        mqtt_client = find_mqtt_client(vehicle_id)
+        if not mqtt_client:
+            raise HomeAssistantError(f"No OVMS integration found for vehicle_id: {vehicle_id}")
 
+        try:
             # Format the command
             command = "config set"
             parameters = f"{feature} {value}"
@@ -131,14 +129,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
             return result
 
-        except HomeAssistantError as err:
-            _LOGGER.error("Error in set_feature service: %s", err)
-            raise
         except Exception as ex:
-            _LOGGER.exception("Unexpected error in set_feature service: %s", ex)
-            raise HomeAssistantError(f"Failed to set feature: {ex}")
+            _LOGGER.exception("Error in set_feature service: %s", ex)
+            raise HomeAssistantError(f"Failed to set feature: {ex}") from ex
 
-    async def async_control_climate(call: ServiceCall) -> None:
+    async def async_control_climate(call: ServiceCall) -> Dict[str, Any]:
         """Control the vehicle's climate system."""
         vehicle_id = call.data.get("vehicle_id")
         temperature = call.data.get("temperature")
@@ -147,10 +142,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
         _LOGGER.debug("Service call control_climate for vehicle %s", vehicle_id)
 
-        try:
-            # Find the MQTT client for this vehicle
-            mqtt_client = await async_find_mqtt_client(vehicle_id)
+        # Find client synchronously first
+        mqtt_client = find_mqtt_client(vehicle_id)
+        if not mqtt_client:
+            raise HomeAssistantError(f"No OVMS integration found for vehicle_id: {vehicle_id}")
 
+        try:
             # Build the climate command
             command = "climate"
             command_parts = []
@@ -175,14 +172,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
             return result
 
-        except HomeAssistantError as err:
-            _LOGGER.error("Error in control_climate service: %s", err)
-            raise
         except Exception as ex:
-            _LOGGER.exception("Unexpected error in control_climate service: %s", ex)
-            raise HomeAssistantError(f"Failed to control climate: {ex}")
+            _LOGGER.exception("Error in control_climate service: %s", ex)
+            raise HomeAssistantError(f"Failed to control climate: {ex}") from ex
 
-    async def async_control_charging(call: ServiceCall) -> None:
+    async def async_control_charging(call: ServiceCall) -> Dict[str, Any]:
         """Control the vehicle's charging system."""
         vehicle_id = call.data.get("vehicle_id")
         action = call.data.get("action")
@@ -192,10 +186,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         _LOGGER.debug("Service call control_charging for vehicle %s: %s",
                      vehicle_id, action)
 
-        try:
-            # Find the MQTT client for this vehicle
-            mqtt_client = await async_find_mqtt_client(vehicle_id)
+        # Find client synchronously first
+        mqtt_client = find_mqtt_client(vehicle_id)
+        if not mqtt_client:
+            raise HomeAssistantError(f"No OVMS integration found for vehicle_id: {vehicle_id}")
 
+        try:
             # Build the charge command
             command = "charge"
             command_parts = [action]
@@ -214,12 +210,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
             return result
 
-        except HomeAssistantError as err:
-            _LOGGER.error("Error in control_charging service: %s", err)
-            raise
         except Exception as ex:
-            _LOGGER.exception("Unexpected error in control_charging service: %s", ex)
-            raise HomeAssistantError(f"Failed to control charging: {ex}")
+            _LOGGER.exception("Error in control_charging service: %s", ex)
+            raise HomeAssistantError(f"Failed to control charging: {ex}") from ex
 
     # Register the services
     hass.services.async_register(
@@ -251,7 +244,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     )
 
 
-async def async_unload_services(hass: HomeAssistant) -> None:
+@callback
+def async_unload_services(hass: HomeAssistant) -> None:
     """Unload OVMS services."""
     services = [
         SERVICE_SEND_COMMAND,

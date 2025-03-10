@@ -3,7 +3,6 @@ import logging
 import json
 import uuid
 import hashlib
-from datetime import datetime
 from typing import Any, Dict, Optional, List
 
 from homeassistant.components.sensor import (
@@ -26,9 +25,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_call_later
-from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.entity import async_generate_entity_id
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -204,8 +202,8 @@ async def async_setup_entry(
                     sensors.append(sensor)
 
                 async_add_entities(sensors)
-            except Exception as e:
-                _LOGGER.error("Error creating cell sensors: %s", e)
+            except Exception as ex:  # pylint: disable=broad-except
+                _LOGGER.error("Error creating cell sensors: %s", ex)
             return
 
         try:
@@ -221,8 +219,8 @@ async def async_setup_entry(
             )
 
             async_add_entities([sensor])
-        except Exception as e:
-            _LOGGER.error("Error creating sensor: %s", e)
+        except Exception as ex:  # pylint: disable=broad-except
+            _LOGGER.error("Error creating sensor: %s", ex)
 
     # Subscribe to discovery events
     entry.async_on_unload(
@@ -332,7 +330,11 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         """Check if this sensor requires a numeric value based on its device class."""
         return (
             self._attr_device_class in NUMERIC_DEVICE_CLASSES or
-            self._attr_state_class in [SensorStateClass.MEASUREMENT, SensorStateClass.TOTAL, SensorStateClass.TOTAL_INCREASING]
+            self._attr_state_class in [
+                SensorStateClass.MEASUREMENT,
+                SensorStateClass.TOTAL,
+                SensorStateClass.TOTAL_INCREASING
+            ]
         )
 
     def _is_special_state_value(self, value) -> bool:
@@ -441,8 +443,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         n = len(sorted_values)
         if n % 2 == 0:
             return (sorted_values[n//2 - 1] + sorted_values[n//2]) / 2
-        else:
-            return sorted_values[n//2]
+        return sorted_values[n//2]
 
     def _determine_sensor_type(self) -> None:
         """Determine the sensor type based on metrics definitions."""
@@ -461,8 +462,10 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 from homeassistant.helpers.entity import EntityCategory
                 self._attr_entity_category = EntityCategory.DIAGNOSTIC
                 if category != "diagnostic":  # Don't return for network/system to allow further processing
-                    _LOGGER.debug("Setting EntityCategory.DIAGNOSTIC for %s category: %s",
-                                 category, self._internal_name)
+                    _LOGGER.debug(
+                        "Setting EntityCategory.DIAGNOSTIC for %s category: %s",
+                        category, self._internal_name
+                    )
 
         # Special check for timer mode sensors to avoid numeric conversion issues
         if "timermode" in self._internal_name.lower() or "timer_mode" in self._internal_name.lower():
@@ -521,7 +524,11 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         """Check if this sensor requires a numeric value based on its device class."""
         return (
             self._attr_device_class in NUMERIC_DEVICE_CLASSES or
-            self._attr_state_class in [SensorStateClass.MEASUREMENT, SensorStateClass.TOTAL, SensorStateClass.TOTAL_INCREASING]
+            self._attr_state_class in [
+                SensorStateClass.MEASUREMENT,
+                SensorStateClass.TOTAL,
+                SensorStateClass.TOTAL_INCREASING
+            ]
         )
 
     def _is_special_state_value(self, value) -> bool:
@@ -576,9 +583,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
                     for i, val in enumerate(parts):
                         self._attr_extra_state_attributes[f"{stat_type}_{i+1}"] = val
-
-                    # Set flag to skip creating individual cell sensors
-                    self._cell_sensors_created = True
 
                     # Return average as the main value, rounded to 4 decimal places for display
                     return round(avg_value, 4)
@@ -687,6 +691,22 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Not JSON, that's fine
             pass
 
+    def _update_cell_sensor_values(self, cell_values):
+        """Update the values of existing cell sensors."""
+        if not self.hass or not hasattr(self, '_cell_sensors'):
+            return
+
+        # Update each cell sensor with its new value
+        for i, value in enumerate(cell_values):
+            if i < len(self._cell_sensors):
+                cell_id = self._cell_sensors[i]
+                # Use the dispatcher to signal an update
+                async_dispatcher_send(
+                    self.hass,
+                    f"{SIGNAL_UPDATE_ENTITY}_{cell_id}",
+                    value,
+                )
+
     def _create_cell_sensors(self, cell_values):
         """Create individual sensors for each cell value."""
         # Skip creating individual sensors if the flag is set
@@ -770,19 +790,3 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     "parent_entity": self.entity_id,
                 }
             )
-
-    def _update_cell_sensor_values(self, cell_values):
-        """Update the values of existing cell sensors."""
-        if not self.hass or not hasattr(self, '_cell_sensors'):
-            return
-
-        # Update each cell sensor with its new value
-        for i, value in enumerate(cell_values):
-            if i < len(self._cell_sensors):
-                cell_id = self._cell_sensors[i]
-                # Use the dispatcher to signal an update
-                async_dispatcher_send(
-                    self.hass,
-                    f"{SIGNAL_UPDATE_ENTITY}_{cell_id}",
-                    value,
-                )

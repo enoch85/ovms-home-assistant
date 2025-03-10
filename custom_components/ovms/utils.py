@@ -2,6 +2,7 @@
 import json
 import logging
 import re
+import hashlib
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from homeassistant.const import (
@@ -21,7 +22,7 @@ def convert_temperature(value: float, to_unit: str) -> float:
     """Convert temperature between units."""
     if to_unit == UnitOfTemperature.CELSIUS:
         return value
-    elif to_unit == UnitOfTemperature.FAHRENHEIT:
+    if to_unit == UnitOfTemperature.FAHRENHEIT:
         return (value * 9/5) + 32
     return value
 
@@ -30,7 +31,7 @@ def convert_distance(value: float, to_unit: str) -> float:
     """Convert distance between units."""
     if to_unit == UnitOfLength.KILOMETERS:
         return value
-    elif to_unit == UnitOfLength.MILES:
+    if to_unit == UnitOfLength.MILES:
         return value * 0.621371
     return value
 
@@ -39,7 +40,7 @@ def convert_speed(value: float, to_unit: str) -> float:
     """Convert speed between units."""
     if to_unit == UnitOfSpeed.KILOMETERS_PER_HOUR:
         return value
-    elif to_unit == UnitOfSpeed.MILES_PER_HOUR:
+    if to_unit == UnitOfSpeed.MILES_PER_HOUR:
         return value * 0.621371
     return value
 
@@ -48,7 +49,7 @@ def convert_volume(value: float, to_unit: str) -> float:
     """Convert volume between units."""
     if to_unit == UnitOfVolume.LITERS:
         return value
-    elif to_unit == UnitOfVolume.GALLONS:
+    if to_unit == UnitOfVolume.GALLONS:
         return value * 0.264172
     return value
 
@@ -63,14 +64,13 @@ def get_unit_system(use_metric: bool) -> Dict[str, str]:
             "volume": UnitOfVolume.LITERS,
             "mass": UnitOfMass.KILOGRAMS,
         }
-    else:
-        return {
-            "temperature": UnitOfTemperature.FAHRENHEIT,
-            "distance": UnitOfLength.MILES,
-            "speed": UnitOfSpeed.MILES_PER_HOUR,
-            "volume": UnitOfVolume.GALLONS,
-            "mass": UnitOfMass.POUNDS,
-        }
+    return {
+        "temperature": UnitOfTemperature.FAHRENHEIT,
+        "distance": UnitOfLength.MILES,
+        "speed": UnitOfSpeed.MILES_PER_HOUR,
+        "volume": UnitOfVolume.GALLONS,
+        "mass": UnitOfMass.POUNDS,
+    }
 
 
 def clean_topic(topic: str) -> str:
@@ -151,8 +151,6 @@ def generate_unique_id(components: List[str]) -> str:
 
     This ensures the ID is URL and filesystem safe.
     """
-    import hashlib
-
     # Join components and create hash
     combined = "_".join(str(c) for c in components if c)
     if not combined:
