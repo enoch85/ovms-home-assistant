@@ -6,8 +6,7 @@ import time
 import json
 import uuid
 import hashlib
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
-from collections import deque
+from typing import Any, Dict, Optional, Tuple
 
 import paho.mqtt.client as mqtt
 
@@ -15,7 +14,6 @@ from homeassistant.const import (
     CONF_HOST,
     CONF_PASSWORD,
     CONF_PORT,
-    CONF_PROTOCOL,
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant
@@ -43,15 +41,10 @@ from .const import (
     TOPIC_TEMPLATE,
     COMMAND_TOPIC_TEMPLATE,
     RESPONSE_TOPIC_TEMPLATE,
-    TOPIC_WILDCARD,
 )
 from .rate_limiter import CommandRateLimiter
 from .metrics import (
-    METRIC_DEFINITIONS,
-    TOPIC_PATTERNS,
-    METRIC_CATEGORIES,
     BINARY_METRICS,
-    PREFIX_CATEGORIES,
     get_metric_by_path,
     get_metric_by_pattern,
     determine_category_from_topic,
@@ -59,6 +52,7 @@ from .metrics import (
 )
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
 
 def ensure_serializable(obj):
     """Ensure objects are JSON serializable.
@@ -77,10 +71,9 @@ def ensure_serializable(obj):
     elif obj.__class__.__name__ == 'ReasonCodes':  # Handle MQTT ReasonCodes specifically
         try:
             return [int(code) for code in obj]  # Convert to list of integers
-        except:
+        except (ValueError, TypeError):
             return str(obj)   # Fall back to string representation
-    else:
-        return obj
+    return obj
 
 
 class OVMSMQTTClient:
@@ -97,6 +90,7 @@ class OVMSMQTTClient:
         self.entity_registry = {}
         self.entity_types = {}  # Track entity types for diagnostics
         self.structure_prefix = None  # Will be initialized in setup
+        self._cleanup_task = None
 
         # Set up command response tracking
         self.pending_commands = {}
@@ -113,7 +107,7 @@ class OVMSMQTTClient:
         self.last_reconnect_time = 0
 
         # Entity queue for those discovered before platforms are ready
-        self.entity_queue = deque()
+        self.entity_queue = asyncio.Queue()
         self.platforms_loaded = False
 
         # Status tracking
@@ -172,8 +166,8 @@ class OVMSMQTTClient:
         _LOGGER.debug("Creating MQTT client with ID: %s", client_id)
         try:
             client = mqtt.Client(client_id=client_id, protocol=protocol)
-        except Exception as e:
-            _LOGGER.error("Failed to create MQTT client: %s", e)
+        except Exception as ex:
+            _LOGGER.error("Failed to create MQTT client: %s", ex)
             return None
 
         # Configure authentication if provided
@@ -188,6 +182,7 @@ class OVMSMQTTClient:
         # Configure TLS if needed
         if self.config.get(CONF_PORT) == 8883:
             _LOGGER.debug("Enabling SSL/TLS for port 8883")
+            # pylint: disable=import-outside-toplevel
             import ssl
             verify_ssl = self.config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
 
@@ -217,8 +212,8 @@ class OVMSMQTTClient:
                 properties.UserProperty = ("client_type", "home_assistant_ovms")
                 properties.UserProperty = ("version", "1.0.0")
                 client.connect_properties = properties
-            except (TypeError, AttributeError) as e:
-                _LOGGER.debug("Failed to set MQTT v5 properties: %s", e)
+            except (TypeError, AttributeError) as ex:
+                _LOGGER.debug("Failed to set MQTT v5 properties: %s", ex)
                 # Continue without properties
 
         return client
@@ -246,7 +241,9 @@ class OVMSMQTTClient:
 
             # Schedule reconnection if not intentional disconnect
             if rc != 0:
-                _LOGGER.warning("Unintentional disconnect. Scheduling reconnection attempt.")
+                _LOGGER.warning(
+                    "Unintentional disconnect. Scheduling reconnection attempt."
+                )
                 asyncio.run_coroutine_threadsafe(
                     self._async_reconnect(),
                     self.hass.loop,
@@ -255,14 +252,19 @@ class OVMSMQTTClient:
         def on_message(client, userdata, msg):
             """Handle incoming messages."""
             self.message_count += 1
-            _LOGGER.debug("Message #%d received on topic: %s (payload len: %d)",
-                         self.message_count, msg.topic, len(msg.payload))
+            log_msg = f"Message #{self.message_count} received on topic: {msg.topic}"
+            log_msg += f" (payload len: {len(msg.payload)})"
+            _LOGGER.debug(log_msg)
 
             # Try to decode payload for debug logging
             if _LOGGER.isEnabledFor(logging.DEBUG):
                 try:
                     payload_str = msg.payload.decode('utf-8')
-                    _LOGGER.debug("Payload: %s", payload_str[:200] + "..." if len(payload_str) > 200 else payload_str)
+                    if len(payload_str) > 200:
+                        payload_preview = f"{payload_str[:200]}..."
+                    else:
+                        payload_preview = payload_str
+                    _LOGGER.debug("Payload: %s", payload_preview)
                 except UnicodeDecodeError:
                     _LOGGER.debug("Payload: <binary data>")
 
@@ -310,8 +312,12 @@ class OVMSMQTTClient:
 
             # Publish online status when connected
             if self._status_topic:
-                client.publish(self._status_topic, self._connected_payload,
-                              qos=self.config.get(CONF_QOS, 1), retain=True)
+                client.publish(
+                    self._status_topic,
+                    self._connected_payload,
+                    qos=self.config.get(CONF_QOS, 1),
+                    retain=True
+                )
         else:
             self.connected = False
             _LOGGER.error("Failed to connect to MQTT broker: %s", rc)
@@ -353,7 +359,8 @@ class OVMSMQTTClient:
         """Reconnect to the MQTT broker with exponential backoff."""
         # Calculate backoff time based on reconnect count
         backoff = min(30, 2 ** min(self.reconnect_count, 5))  # Cap at 30 seconds
-        _LOGGER.info("Reconnecting in %d seconds (attempt #%d)", backoff, self.reconnect_count)
+        reconnect_msg = f"Reconnecting in {backoff} seconds (attempt #{self.reconnect_count})"
+        _LOGGER.info(reconnect_msg)
 
         await asyncio.sleep(backoff)
 
@@ -400,7 +407,9 @@ class OVMSMQTTClient:
                 for command_id in expired_commands:
                     future = self.pending_commands[command_id]["future"]
                     if not future.done():
-                        future.set_exception(asyncio.TimeoutError("Command expired during cleanup"))
+                        future.set_exception(
+                            asyncio.TimeoutError("Command expired during cleanup")
+                        )
                     del self.pending_commands[command_id]
 
                 _LOGGER.debug("Cleaned up %d expired commands", len(expired_commands))
@@ -450,13 +459,16 @@ class OVMSMQTTClient:
         mqtt_username = self.config.get(CONF_MQTT_USERNAME, "")
 
         # If username format appears inconsistent, try to adapt
-        if mqtt_username and vehicle_id and mqtt_username.lower() != f"ovms-mqtt-{vehicle_id.lower()}":
-            # If username doesn't already contain vehicle ID, consider adding it for better pattern matching
-            if vehicle_id.lower() not in mqtt_username.lower():
-                alternative_username = f"ovms-mqtt-{vehicle_id.lower()}"
-                _LOGGER.debug("Username %s may not match pattern. Also trying %s",
-                             mqtt_username, alternative_username)
-                # Don't replace the username yet, just log the possibility
+        if mqtt_username and vehicle_id:
+            expected_username = f"ovms-mqtt-{vehicle_id.lower()}"
+            if mqtt_username.lower() != expected_username:
+                # If username doesn't already contain vehicle ID, consider adding it
+                if vehicle_id.lower() not in mqtt_username.lower():
+                    alternative_username = f"ovms-mqtt-{vehicle_id.lower()}"
+                    log_msg = f"Username {mqtt_username} may not match pattern. "
+                    log_msg += f"Also trying {alternative_username}"
+                    _LOGGER.debug(log_msg)
+                    # Don't replace the username yet, just log the possibility
 
         # Replace the variables in the structure
         structure_prefix = structure.format(
@@ -477,7 +489,12 @@ class OVMSMQTTClient:
             _LOGGER.warning("Failed to decode payload for topic %s", topic)
             payload = "<binary data>"
 
-        _LOGGER.debug("Processing message: %s = %s", topic, payload[:50] + "..." if len(payload) > 50 else payload)
+        # Log message for debugging with truncation for long payloads
+        if len(payload) > 50:
+            log_payload = f"{payload[:50]}..."
+        else:
+            log_payload = payload
+        _LOGGER.debug("Processing message: %s = %s", topic, log_payload)
 
         # Check if this is a response to a command
         if self._is_response_topic(topic):
@@ -511,9 +528,20 @@ class OVMSMQTTClient:
                     f"{SIGNAL_UPDATE_ENTITY}_{entity_id}",
                     payload,
                 )
-            elif not topic.endswith("/event") and "client/rr/command" not in topic and "client/rr/response" not in topic:
-                # Skip logging warning for event, command, and response topics
-                _LOGGER.warning("Topic %s in discovered_topics but no entity_id found in registry", topic)
+            elif not self._is_system_topic(topic):
+                # Skip logging warning for system topics
+                _LOGGER.warning(
+                    "Topic %s in discovered_topics but no entity_id found in registry",
+                    topic
+                )
+
+    def _is_system_topic(self, topic: str) -> bool:
+        """Check if topic is a system topic that doesn't need an entity."""
+        return (
+            topic.endswith("/event") or
+            "client/rr/command" in topic or
+            "client/rr/response" in topic
+        )
 
     def _update_firmware_version(self, device_id: str, version: str) -> None:
         """Update the firmware version in the device registry."""
@@ -525,8 +553,30 @@ class OVMSMQTTClient:
                     device_entry.id, sw_version=version
                 )
                 _LOGGER.info("Updated firmware version to %s", version)
-        except Exception as ex:
+            else:
+                # Device not registered yet, retry later
+                _LOGGER.debug("Device not registered yet, will try again later")
+                asyncio.create_task(self._retry_firmware_update(device_id, version))
+        except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.error("Error updating firmware version: %s", ex)
+
+    async def _retry_firmware_update(self, device_id, version, attempts=3):
+        """Retry firmware update after a delay."""
+        for attempt in range(attempts):
+            await asyncio.sleep(5 * (attempt + 1))  # Increasing delay
+            try:
+                device_registry = dr.async_get(self.hass)
+                device_entry = device_registry.async_get_device({(DOMAIN, device_id)})
+                if device_entry:
+                    device_registry.async_update_device(
+                        device_entry.id, sw_version=version
+                    )
+                    _LOGGER.info("Successfully updated firmware version to %s on retry", version)
+                    return
+            except Exception as ex:  # pylint: disable=broad-except
+                _LOGGER.error("Error during firmware update retry: %s", ex)
+        
+        _LOGGER.warning("Failed to update firmware version after %d attempts", attempts)
 
     def _is_response_topic(self, topic: str) -> bool:
         """Check if the topic is a response topic."""
@@ -584,8 +634,10 @@ class OVMSMQTTClient:
             _LOGGER.debug("Invalid entity info for topic: %s", topic)
             return
 
-        _LOGGER.info("Adding new entity for topic: %s (type: %s, name: %s)",
-                    topic, entity_type, entity_info['name'])
+        _LOGGER.info(
+            "Adding new entity for topic: %s (type: %s, name: %s)",
+            topic, entity_type, entity_info['name']
+        )
 
         # Track entity types for diagnostics
         if entity_type not in self.entity_types:
@@ -627,7 +679,7 @@ class OVMSMQTTClient:
             metric_path = original_name
             metric_parts = original_name.split('_')
 
-        # Create entity ID with proper format: sensor.ovms_{vehicle_id}_{category}_{metric_path}
+        # Create entity ID with proper format
         entity_name = f"ovms_{vehicle_id}_{entity_category}_{metric_path}".lower()
 
         # Check for existing entities with similar names
@@ -644,7 +696,10 @@ class OVMSMQTTClient:
         friendly_name = self._create_friendly_name(metric_parts, entity_category)
 
         # Use the original vehicle ID for unique IDs for consistency
-        original_vehicle_id = self.config.get(CONF_ORIGINAL_VEHICLE_ID, self.config.get(CONF_VEHICLE_ID))
+        original_vehicle_id = self.config.get(
+            CONF_ORIGINAL_VEHICLE_ID, 
+            self.config.get(CONF_VEHICLE_ID)
+        )
         unique_id = f"{original_vehicle_id}_{entity_category}_{metric_path}_{topic_hash}"
 
         # Register this entity
@@ -673,8 +728,9 @@ class OVMSMQTTClient:
             }
 
         _LOGGER.debug("Final entity info: %s", entity_info)
-        _LOGGER.debug("Parsed topic as: type=%s, name=%s, category=%s, friendly_name=%s",
-                    entity_type, entity_info['name'], entity_category, entity_info['friendly_name'])
+        log_msg = f"Parsed topic as: type={entity_type}, name={entity_info['name']}, "
+        log_msg += f"category={entity_category}, friendly_name={entity_info['friendly_name']}"
+        _LOGGER.debug(log_msg)
 
         # If platforms are loaded, send the entity to be created
         # Otherwise, queue it for later
@@ -686,7 +742,7 @@ class OVMSMQTTClient:
             )
         else:
             _LOGGER.debug("Platforms not yet loaded, queuing entity: %s", entity_info["name"])
-            self.entity_queue.append(entity_data)
+            await self.entity_queue.put(entity_data)
 
     def _create_friendly_name(self, metric_parts, entity_category):
         """Create a user-friendly name based on metric path."""
@@ -727,19 +783,20 @@ class OVMSMQTTClient:
 
     async def _async_platforms_loaded(self) -> None:
         """Handle platforms loaded signal."""
-        _LOGGER.info("All platforms loaded, processing %d queued entities", len(self.entity_queue))
+        queued_count = self.entity_queue.qsize()
+        _LOGGER.info("All platforms loaded, processing %d queued entities", queued_count)
         self.platforms_loaded = True
 
         # Process any queued entities
-        queued_entities = list(self.entity_queue)
-        for entity_data in queued_entities:
-            entity_data = self.entity_queue.popleft()
+        while not self.entity_queue.empty():
+            entity_data = await self.entity_queue.get()
             _LOGGER.debug("Processing queued entity: %s", entity_data["name"])
             async_dispatcher_send(
                 self.hass,
                 SIGNAL_ADD_ENTITIES,
                 entity_data,
             )
+            self.entity_queue.task_done()
 
         # Try to subscribe again just in case initial subscription failed
         self._subscribe_topics()
@@ -754,18 +811,19 @@ class OVMSMQTTClient:
                     structure_prefix=self.structure_prefix,
                     command_id=command_id
                 )
-                response_topic = RESPONSE_TOPIC_TEMPLATE.format(
-                    structure_prefix=self.structure_prefix,
-                    command_id=command_id
-                )
                 _LOGGER.debug("Sending test command to %s", command_topic)
-                self.client.publish(command_topic, "stat", qos=self.config.get(CONF_QOS, 1))
-            except Exception as ex:
+                self.client.publish(
+                    command_topic, 
+                    "stat", 
+                    qos=self.config.get(CONF_QOS, 1)
+                )
+            except Exception as ex:  # pylint: disable=broad-except
                 _LOGGER.warning("Error sending discovery command: %s", ex)
 
         # Start entity discovery
         await self._async_discover_entities()
 
+    # pylint: disable=too-many-return-statements
     def _parse_topic(self, topic) -> Tuple[Optional[str], Optional[Dict]]:
         """Parse a topic to determine the entity type and info."""
         _LOGGER.debug("Parsing topic: %s", topic)
@@ -859,54 +917,75 @@ class OVMSMQTTClient:
 
         # Create a default name if parts exist
         name = "_".join(parts) if parts else "unknown"
-        is_binary = False
-        if metric_info and "device_class" in metric_info:
-            from homeassistant.components.binary_sensor import BinarySensorDeviceClass
-            # Check if the device class is from binary_sensor
-            if hasattr(metric_info["device_class"], "__module__") and "binary_sensor" in metric_info["device_class"].__module__:
-                is_binary = True
-                entity_type = "binary_sensor"
 
-        # Also check if this is a known binary metric
-        if metric_path in BINARY_METRICS:
-            is_binary = True
-            entity_type = "binary_sensor"
-
-        # Check for binary patterns in name - use word boundary only for "on" to avoid false matches
-        name_lower = name.lower()
-        if (re.search(r'\bon\b', name_lower) or                  # "on" with word boundaries
-            "active" in name_lower or
-            "enabled" in name_lower or
-            "running" in name_lower or
-            "connected" in name_lower or
-            "locked" in name_lower or
-            "door" in name_lower or
-            "charging" in name_lower):
-            is_binary = True
-            entity_type = "binary_sensor"
-
-        # Ensure GPS-related metrics are never binary sensors
-        if ("latitude" in name.lower() or "longitude" in name.lower() or
-            "gps" in name.lower() or "location" in name.lower()):
-            is_binary = False
-
-        # Ensure other numeric data is never binary
-        if ("power" in name.lower() or "energy" in name.lower() or
-            "duration" in name.lower() or "consumption" in name.lower() or
-            "acceleration" in name.lower() or "direction" in name.lower() or
-            "monotonic" in name.lower()):
-            is_binary = False
-            entity_type = "sensor"
+        # Check if this should be a binary sensor
+        if self._should_be_binary_sensor(parts, name, metric_path, metric_info):
+            return "binary_sensor", {
+                "name": name,
+                "friendly_name": create_friendly_name(parts, metric_info),
+                "attributes": self._prepare_attributes(topic, category, parts, metric_info),
+            }
 
         # Check for commands/switches
-        if "command" in parts or any(switch_pattern in name.lower() for switch_pattern in
-                                ["switch", "toggle", "set", "enable", "disable"]):
-            entity_type = "switch"
+        if "command" in parts or any(
+            switch_pattern in name.lower() for switch_pattern in
+            ["switch", "toggle", "set", "enable", "disable"]
+        ):
+            return "switch", {
+                "name": name,
+                "friendly_name": create_friendly_name(parts, metric_info),
+                "attributes": self._prepare_attributes(topic, category, parts, metric_info),
+            }
 
         # Create friendly name
         friendly_name = create_friendly_name(parts, metric_info)
 
-        # Prepare attributes
+        # Create the entity info for default sensor type
+        return entity_type, {
+            "name": name,
+            "friendly_name": friendly_name,
+            "attributes": self._prepare_attributes(topic, category, parts, metric_info),
+        }
+
+    def _should_be_binary_sensor(self, parts, name, metric_path, metric_info):
+        """Determine if topic should be a binary sensor."""
+        # Check if this is a known binary metric
+        if metric_path in BINARY_METRICS:
+            return True
+
+        # Check if the metric info defines it as a binary sensor
+        if metric_info and "device_class" in metric_info:
+            # Check if the device class is from binary_sensor
+            if hasattr(metric_info["device_class"], "__module__"):
+                return "binary_sensor" in metric_info["device_class"].__module__
+
+        # Check for binary patterns in name
+        name_lower = name.lower()
+        binary_keywords = [
+            "active", "enabled", "running", "connected", 
+            "locked", "door", "charging"
+        ]
+        
+        # Special handling for "on" to avoid false matches
+        has_on_word = bool(re.search(r'\bon\b', name_lower))
+        
+        # Check for any other binary keywords
+        has_binary_keyword = any(keyword in name_lower for keyword in binary_keywords)
+        
+        if has_on_word or has_binary_keyword:
+            # Exclude certain words that might contain binary keywords but are numeric
+            exclusions = [
+                "power", "energy", "duration", "consumption",
+                "acceleration", "direction", "monotonic"
+            ]
+            # Check if name contains any exclusions
+            if not any(exclusion in name_lower for exclusion in exclusions):
+                return True
+
+        return False
+
+    def _prepare_attributes(self, topic, category, parts, metric_info):
+        """Prepare entity attributes."""
         attributes = {
             "topic": topic,
             "category": category,
@@ -916,31 +995,11 @@ class OVMSMQTTClient:
         # Add additional attributes from metric definition
         if metric_info:
             # Only add attributes that aren't already in the entity definition
-            for k, v in metric_info.items():
-                if k not in ["name", "device_class", "state_class", "unit"]:
-                    attributes[k] = v
+            for key, value in metric_info.items():
+                if key not in ["name", "device_class", "state_class", "unit"]:
+                    attributes[key] = value
 
-        # Create the entity info
-        entity_info = {
-            "name": name,
-            "friendly_name": friendly_name,
-            "attributes": attributes,
-        }
-
-        # Validate entity info before returning
-        if not entity_info or not isinstance(entity_info, dict):
-            _LOGGER.warning("Created invalid entity info: %s", entity_info)
-            # Create a minimal valid entity info as fallback
-            entity_info = {
-                "name": name or "unknown",
-                "friendly_name": friendly_name or "Unknown Sensor",
-                "attributes": attributes or {},
-            }
-
-        _LOGGER.debug("Final entity info: %s", entity_info)
-        _LOGGER.debug("Parsed topic as: type=%s, name=%s, category=%s, friendly_name=%s",
-                    entity_type, entity_info['name'], category, entity_info['friendly_name'])
-        return entity_type, entity_info
+        return attributes
 
     def _get_device_info(self) -> Dict[str, Any]:
         """Get device info for the OVMS module."""
@@ -967,8 +1026,10 @@ class OVMSMQTTClient:
 
         # Process is ongoing as we receive messages
 
-    async def async_send_command(self, command: str, parameters: str = "",
-                                 command_id: str = None, timeout: int = 10) -> Dict[str, Any]:
+    async def async_send_command(
+        self, command: str, parameters: str = "",
+        command_id: str = None, timeout: int = 10
+    ) -> Dict[str, Any]:
         """Send a command to the OVMS module and wait for a response."""
         if not self.connected:
             _LOGGER.error("Cannot send command, not connected to MQTT broker")
@@ -991,17 +1052,13 @@ class OVMSMQTTClient:
         if command_id is None:
             command_id = uuid.uuid4().hex[:8]
 
-        _LOGGER.debug("Sending command: %s, parameters: %s, command_id: %s",
-                     command, parameters, command_id)
+        _LOGGER.debug(
+            "Sending command: %s, parameters: %s, command_id: %s",
+            command, parameters, command_id
+        )
 
         # Format the command topic
         command_topic = COMMAND_TOPIC_TEMPLATE.format(
-            structure_prefix=self.structure_prefix,
-            command_id=command_id
-        )
-
-        # Format the response topic for logging
-        response_topic = RESPONSE_TOPIC_TEMPLATE.format(
             structure_prefix=self.structure_prefix,
             command_id=command_id
         )
@@ -1029,7 +1086,7 @@ class OVMSMQTTClient:
 
         try:
             # Wait for the response with timeout
-            _LOGGER.debug("Waiting for response on %s", response_topic)
+            _LOGGER.debug("Waiting for response for command_id: %s", command_id)
             response_payload = await asyncio.wait_for(future, timeout)
 
             _LOGGER.debug("Received response: %s", response_payload)
