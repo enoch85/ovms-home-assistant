@@ -91,6 +91,7 @@ class OVMSMQTTClient:
         self.entity_types = {}  # Track entity types for diagnostics
         self.structure_prefix = None  # Will be initialized in setup
         self._cleanup_task = None
+        self._last_gps_update = 0  # Track last GPS update time
 
         # Set up command response tracking
         self.pending_commands = {}
@@ -1245,7 +1246,7 @@ class OVMSMQTTClient:
             "name": f"ovms_{vehicle_id}_location",
             "friendly_name": f"{vehicle_id} Location",
             "topic": "combined_location",  # This is a virtual topic
-            "payload": json.dumps({"latitude": lat_value, "longitude": lon_value}),
+            "payload": {"latitude": 0, "longitude": 0},  # Initial values will be updated from sensors
             "device_info": device_info,
             "attributes": {
                 "category": "location",
@@ -1272,42 +1273,61 @@ class OVMSMQTTClient:
     def _watch_gps_topics(self, device_tracker_id: str) -> None:
         """Set up watchers for GPS topics to update the device tracker."""
         @callback
-        def gps_topics_updated(*args) -> None:
+        def gps_topics_updated(event_type=None, data=None) -> None:
             """Handle updates to GPS topics."""
             if not self.latitude_topic or not self.longitude_topic:
                 return
 
-            # Get current values
+            # Limit update frequency to avoid rapid firing
+            current_time = time.time()
+            last_update = getattr(self, '_last_gps_update', 0)
+            if current_time - last_update < 2:  # Minimum 2 seconds between updates
+                return
+            self._last_gps_update = current_time
+                
+            # Get current values without logging them (to avoid recursion)
             lat_value = self.topic_cache.get(self.latitude_topic, {}).get("payload", "unknown")
             lon_value = self.topic_cache.get(self.longitude_topic, {}).get("payload", "unknown")
-
+                
             # Skip if either value is unknown/unavailable
             if lat_value in ("unknown", "unavailable", "") or lon_value in ("unknown", "unavailable", ""):
-                _LOGGER.debug("Skipping GPS update with unavailable values")
                 return
-
+                    
             try:
                 # Try to parse as valid numbers
                 lat_float = float(lat_value)
                 lon_float = float(lon_value)
-
+                    
                 # Skip if not in valid range
-                if not (-90 <= lat_float <= 90 and -180 <= lon_float <= 180):
-                    _LOGGER.warning("Invalid GPS coordinates: %s, %s", lat_float, lon_float)
+                if not (-90 <= lat_float <= 90) or not (-180 <= lon_float <= 180):
                     return
-
-                # Create a combined payload
-                payload = json.dumps({"latitude": lat_float, "longitude": lon_float})
-
-                # Send update to device tracker
+                        
+                # Create a simplified payload with direct values 
+                # Pass simple dictionary, not a JSON string (critical to avoid recursion)
+                payload = {
+                    "latitude": lat_float,
+                    "longitude": lon_float,
+                    "last_updated": current_time
+                }
+                    
+                # Send update to device tracker without logging the payload
                 async_dispatcher_send(
                     self.hass,
                     f"{SIGNAL_UPDATE_ENTITY}_{device_tracker_id}",
                     payload,
                 )
-
-            except (ValueError, TypeError) as err:
-                _LOGGER.warning("Could not parse GPS values: %s", err)
-
-        # Register for state change events
+                        
+            except (ValueError, TypeError):
+                pass  # Skip error logging to avoid recursion risks
+            
+        # Register for state change events with minimal error risk
         self.hass.bus.async_listen("state_changed", gps_topics_updated)
+        
+        # Also register for message reception in case topics are updated directly
+        @callback
+        def message_received(topic, payload, qos):
+            """Handle message received."""
+            if topic in self.gps_topics:
+                gps_topics_updated()
+                
+        self.hass.bus.async_listen("mqtt_message_received", message_received)
