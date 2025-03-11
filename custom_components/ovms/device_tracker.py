@@ -1,7 +1,8 @@
 """Support for tracking OVMS vehicles."""
 import logging
 import json
-from typing import Any, Dict, Optional
+import asyncio
+from typing import Any, Dict, Optional, Tuple
 
 from homeassistant.components.device_tracker import SourceType, TrackerEntity
 from homeassistant.config_entries import ConfigEntry
@@ -13,6 +14,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    DOMAIN,
     LOGGER_NAME,
     SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY
@@ -24,6 +26,9 @@ from .metrics import (
 )
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
+# Minimum change threshold to trigger an update (in degrees)
+MIN_GPS_ACCURACY = 0.00001
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities
@@ -54,6 +59,23 @@ async def async_setup_entry(
     entry.async_on_unload(
         async_dispatcher_connect(hass, SIGNAL_ADD_ENTITIES, async_add_device_tracker)
     )
+
+    # Also create a tracker based on latitude/longitude sensors after a delay
+    # This will happen when the platform is loaded and sensors might not be available yet
+    async def create_tracker_from_sensors():
+        """Create device tracker from latitude/longitude sensors after delay."""
+        # Give sensors time to initialize
+        await asyncio.sleep(30)
+        mqtt_client = hass.data[DOMAIN][entry.entry_id]["mqtt_client"]
+        
+        # Only proceed if we haven't created a device tracker yet
+        if not mqtt_client.has_device_tracker:
+            vehicle_id = entry.data.get("vehicle_id", "")
+            if vehicle_id:
+                await mqtt_client.create_device_tracker_from_sensors(vehicle_id)
+    
+    # Start the delayed tracker creation
+    hass.async_create_task(create_tracker_from_sensors())
 
 
 # pylint: disable=too-many-instance-attributes,too-many-arguments,too-many-positional-arguments
@@ -102,6 +124,10 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
 
         # Try to determine if this should be a diagnostic entity
         self._determine_entity_category()
+
+        # Store the last valid coordinates to avoid unnecessary updates
+        self._last_lat = None
+        self._last_lon = None
 
         # Try to parse initial location
         self._parse_payload(initial_payload)
@@ -157,6 +183,10 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 if "latitude" in state.attributes and "longitude" in state.attributes:
                     self._attr_latitude = state.attributes["latitude"]
                     self._attr_longitude = state.attributes["longitude"]
+                    
+                    # Also store as last valid coordinates
+                    self._last_lat = state.attributes["latitude"]
+                    self._last_lon = state.attributes["longitude"]
 
                     # Restore optional location attributes
                     for attr in ["altitude", "heading", "speed"]:
@@ -182,9 +212,43 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
             )
         )
 
+    def _is_valid_coordinate(self, value) -> bool:
+        """Check if a value is a valid coordinate."""
+        if value is None:
+            return False
+            
+        try:
+            # Convert to float and check range
+            float_value = float(value)
+            
+            # Basic range checks for lat/lon
+            # For latitude: -90 to 90
+            # For longitude: -180 to 180
+            if -90 <= float_value <= 90 or -180 <= float_value <= 180:
+                return True
+            return False
+        except (ValueError, TypeError):
+            return False
+
+    def _has_significant_change(self, lat, lon) -> bool:
+        """Check if coordinate change is significant enough to update."""
+        if self._last_lat is None or self._last_lon is None:
+            return True
+            
+        # Check if the change exceeds minimum threshold
+        lat_diff = abs(lat - self._last_lat)
+        lon_diff = abs(lon - self._last_lon)
+        
+        return lat_diff > MIN_GPS_ACCURACY or lon_diff > MIN_GPS_ACCURACY
+
     def _parse_payload(self, payload: str) -> None:
         """Parse the location payload."""
         _LOGGER.debug("Parsing location payload: %s", payload)
+
+        # Skip if payload represents unavailable state
+        if payload in (None, "", "unavailable", "unknown"):
+            _LOGGER.debug("Skipping unavailable payload")
+            return
 
         try:
             # Try to parse as JSON
@@ -198,20 +262,32 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 # Check for various naming conventions for GPS coordinates
                 for lat_name in ["lat", "latitude", "LAT", "Latitude"]:
                     if lat_name in data:
-                        lat = float(data[lat_name])
-                        break
+                        try:
+                            lat = float(data[lat_name])
+                            break
+                        except (ValueError, TypeError):
+                            pass
 
                 for lon_name in ["lon", "lng", "longitude", "LON", "Longitude"]:
                     if lon_name in data:
-                        lon = float(data[lon_name])
-                        break
+                        try:
+                            lon = float(data[lon_name])
+                            break
+                        except (ValueError, TypeError):
+                            pass
 
-                if lat is not None and lon is not None:
-                    self._attr_latitude = lat
-                    self._attr_longitude = lon
-                    _LOGGER.debug("Parsed location: %f, %f", lat, lon)
+                if self._is_valid_coordinate(lat) and self._is_valid_coordinate(lon):
+                    # Only update if coordinates have changed significantly
+                    if self._has_significant_change(lat, lon):
+                        self._attr_latitude = lat
+                        self._attr_longitude = lon
+                        self._last_lat = lat
+                        self._last_lon = lon
+                        _LOGGER.debug("Updated location: %f, %f", lat, lon)
+                    else:
+                        _LOGGER.debug("Ignoring insignificant coordinate change")
                 else:
-                    _LOGGER.warning("Could not find lat/lon in JSON data: %s", data)
+                    _LOGGER.warning("Invalid lat/lon values: %s, %s", lat, lon)
                     return
 
                 # Check for additional attributes
@@ -250,9 +326,15 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 lon = float(parts[1].strip())
 
                 if -90 <= lat <= 90 and -180 <= lon <= 180:
-                    self._attr_latitude = lat
-                    self._attr_longitude = lon
-                    _LOGGER.debug("Parsed location from CSV: %f, %f", lat, lon)
+                    # Only update if coordinates have changed significantly
+                    if self._has_significant_change(lat, lon):
+                        self._attr_latitude = lat
+                        self._attr_longitude = lon
+                        self._last_lat = lat
+                        self._last_lon = lon
+                        _LOGGER.debug("Parsed location from CSV: %f, %f", lat, lon)
+                    else:
+                        _LOGGER.debug("Ignoring insignificant coordinate change from CSV")
 
                     # If we have more parts, they might be altitude, speed, etc.
                     if len(parts) >= 3:
@@ -273,6 +355,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                         except (ValueError, TypeError):
                             pass
                 else:
-                    _LOGGER.warning("Invalid lat/lon values: %f, %f", lat, lon)
+                    _LOGGER.warning("Invalid lat/lon values in CSV: %f, %f", lat, lon)
             except (ValueError, TypeError):
                 _LOGGER.warning("Could not parse location data as CSV: %s", payload)
