@@ -69,14 +69,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return True
     except Exception as ex:
         _LOGGER.exception("Error setting up OVMS integration: %s", ex)
-        
+
         # Clean up any partial setup
         if DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
             if "mqtt_client" in hass.data[DOMAIN][entry.entry_id]:
                 mqtt_client = hass.data[DOMAIN][entry.entry_id]["mqtt_client"]
                 await mqtt_client.async_shutdown()
             hass.data[DOMAIN].pop(entry.entry_id, None)
-            
+
         return False
 
 
@@ -144,7 +144,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return unload_ok
     except Exception as ex:
         _LOGGER.exception("Error unloading entry: %s", ex)
-        
+
         # Try to clean up as much as possible
         try:
             if DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
@@ -152,11 +152,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     mqtt_client = hass.data[DOMAIN][entry.entry_id]["mqtt_client"]
                     await mqtt_client.async_shutdown()
                 hass.data[DOMAIN].pop(entry.entry_id, None)
-                
+
                 # Unload services if this is the last config entry
                 if len(hass.data[DOMAIN]) == 0:
                     await async_unload_services(hass)
         except Exception as ex2:
             _LOGGER.exception("Error during cleanup after failed unload: %s", ex2)
-            
+
         return False

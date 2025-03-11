@@ -247,7 +247,7 @@ class OVMSMQTTClient:
         def on_disconnect(client, userdata, rc, properties=None):
             """Handle disconnection."""
             self.connected = False
-            
+
             # Only increment reconnect count and log if not shutting down
             if not self._shutting_down:
                 self.reconnect_count += 1
@@ -392,7 +392,7 @@ class OVMSMQTTClient:
         if self._shutting_down:
             _LOGGER.debug("Not reconnecting because shutdown is in progress")
             return
-            
+
         if self.reconnect_count > MAX_RECONNECTION_ATTEMPTS:
             _LOGGER.error(
                 "Maximum reconnection attempts (%d) reached, giving up",
@@ -474,7 +474,7 @@ class OVMSMQTTClient:
                 _LOGGER.exception("Error in command cleanup task: %s", ex)
                 # Wait a bit before retrying to avoid tight loop
                 await asyncio.sleep(5)
-                
+
                 # Don't restart if shutting down
                 if self._shutting_down:
                     break
@@ -1279,10 +1279,10 @@ class OVMSMQTTClient:
     async def async_shutdown(self) -> None:
         """Shutdown the MQTT client."""
         _LOGGER.info("Shutting down MQTT client")
-        
+
         # Set the shutdown flag to prevent reconnection attempts
         self._shutting_down = True
-        
+
         # Cancel the cleanup task
         if hasattr(self, '_cleanup_task') and self._cleanup_task:
             try:
@@ -1292,7 +1292,7 @@ class OVMSMQTTClient:
                 pass
             except Exception as ex:
                 _LOGGER.exception("Error cancelling cleanup task: %s", ex)
-        
+
         if self.client:
             _LOGGER.debug("Stopping MQTT client loop")
             try:
@@ -1305,7 +1305,7 @@ class OVMSMQTTClient:
                         qos=self.config.get(CONF_QOS, 1),
                         retain=True
                     )
-                
+
                 # Stop the loop and disconnect
                 self.client.loop_stop()
                 await self.hass.async_add_executor_job(self.client.disconnect)
@@ -1410,47 +1410,47 @@ class OVMSMQTTClient:
                 if current_time - last_update < 2:  # Minimum 2 seconds between updates
                     return
                 self._last_gps_update = current_time
-                
+
                 # Get current values without logging them (to avoid recursion)
                 lat_value = self.topic_cache.get(self.latitude_topic, {}).get("payload", "unknown")
                 lon_value = self.topic_cache.get(self.longitude_topic, {}).get("payload", "unknown")
-                
+
                 # Skip if either value is unknown/unavailable
                 if lat_value in ("unknown", "unavailable", "") or lon_value in ("unknown", "unavailable", ""):
                     return
-                    
+
                 try:
                     # Try to parse as valid numbers
                     lat_float = float(lat_value)
                     lon_float = float(lon_value)
-                    
+
                     # Skip if not in valid range
                     if not (-90 <= lat_float <= 90) or not (-180 <= lon_float <= 180):
                         return
-                        
-                    # Create a simplified payload with direct values 
+
+                    # Create a simplified payload with direct values
                     # Pass simple dictionary, not a JSON string (critical to avoid recursion)
                     payload = {
                         "latitude": lat_float,
                         "longitude": lon_float,
                         "last_updated": current_time
                     }
-                    
+
                     # Send update to device tracker without logging the payload
                     async_dispatcher_send(
                         self.hass,
                         f"{SIGNAL_UPDATE_ENTITY}_{device_tracker_id}",
                         payload,
                     )
-                        
+
                 except (ValueError, TypeError):
                     pass  # Skip error logging to avoid recursion risks
             except Exception as ex:
                 _LOGGER.exception("Error updating GPS topics: %s", ex)
-            
+
         # Register for state change events with minimal error risk
         self.hass.bus.async_listen("state_changed", gps_topics_updated)
-        
+
         # Also register for message reception in case topics are updated directly
         @callback
         def message_received(topic, payload, qos):
@@ -1460,5 +1460,5 @@ class OVMSMQTTClient:
                     gps_topics_updated()
             except Exception as ex:
                 _LOGGER.exception("Error in message received handler: %s", ex)
-                
+
         self.hass.bus.async_listen("mqtt_message_received", message_received)
