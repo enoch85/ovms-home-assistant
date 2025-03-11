@@ -109,7 +109,7 @@ class OVMSDeviceTracker(TrackerEntity):
                         self._latitude = float(data["latitude"])
                         self._longitude = float(data["longitude"])
                         self._connected = True
-                        _LOGGER.debug("Location updated: %s, %s", self._latitude, self._longitude)
+                        _LOGGER.debug("Location updated successfully")
                     except (ValueError, TypeError) as err:
                         _LOGGER.error("Invalid coordinates: %s", err)
                         return
