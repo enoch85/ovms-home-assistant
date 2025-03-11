@@ -91,6 +91,7 @@ class OVMSMQTTClient:
         self.entity_types = {}  # Track entity types for diagnostics
         self.structure_prefix = None  # Will be initialized in setup
         self._cleanup_task = None
+        self._last_gps_update = 0  # Track last GPS update time
 
         # Set up command response tracking
         self.pending_commands = {}
@@ -1191,55 +1192,53 @@ class OVMSMQTTClient:
             await self.hass.async_add_executor_job(self.client.disconnect)
 
     async def create_device_tracker_from_sensors(self, vehicle_id: str) -> None:
-        """Set up a device_tracker.see call for the vehicle."""
-        _LOGGER.info("Setting up device tracker service for vehicle: %s", vehicle_id)
-        
-        # Search for matching entities in the system
-        lat_pattern = f"_latitude"
-        lon_pattern = f"_longitude"
-        
-        # Find sensor entities matching our patterns
-        lat_entity_id = None
-        lon_entity_id = None
-        
-        for entity_id in self.hass.states.async_entity_ids("sensor"):
-            if vehicle_id.lower() in entity_id.lower() and lat_pattern in entity_id.lower():
-                lat_entity_id = entity_id
-            elif vehicle_id.lower() in entity_id.lower() and lon_pattern in entity_id.lower():
-                lon_entity_id = entity_id
-        
-        # Fallback to standard format if not found
-        if not lat_entity_id:
-            lat_entity_id = f"sensor.ovms_{vehicle_id.lower()}_metric_v_p_latitude"
-        if not lon_entity_id:
-            lon_entity_id = f"sensor.ovms_{vehicle_id.lower()}_metric_v_p_longitude"
-        
-        _LOGGER.info("Using GPS entities: %s, %s", lat_entity_id, lon_entity_id)
-        
+        """Create a device tracker entity based on latitude/longitude sensors."""
+        _LOGGER.info("Creating device tracker for vehicle: %s", vehicle_id)
+
+        # Search for latitude and longitude topics in discovered topics
+        lat_topic = None
+        lon_topic = None
+
+        # Patterns to search for in discovered topics
+        lat_patterns = ["latitude", "lat"]
+        lon_patterns = ["longitude", "lon", "lng"]
+
+        # Find matching topics
+        for topic in self.discovered_topics:
+            topic_lower = topic.lower()
+
+            # Check for latitude topics
+            if any(pattern in topic_lower for pattern in lat_patterns):
+                lat_topic = topic
+                self.latitude_topic = topic
+                _LOGGER.debug("Found latitude topic: %s", lat_topic)
+
+            # Check for longitude topics
+            if any(pattern in topic_lower for pattern in lon_patterns):
+                lon_topic = topic
+                self.longitude_topic = topic
+                _LOGGER.debug("Found longitude topic: %s", lon_topic)
+
+            # If we found both, we can stop searching
+            if lat_topic and lon_topic:
+                break
+
+        if not (lat_topic and lon_topic):
+            _LOGGER.warning("Could not find latitude and longitude topics. Device tracker will not be created.")
+            return
+
         # Get current values if available
-        try:
-            lat_state = self.hass.states.get(lat_entity_id)
-            lon_state = self.hass.states.get(lon_entity_id)
-            
-            if lat_state and lon_state:
-                lat_value = lat_state.state
-                lon_value = lon_state.state
-                
-                if lat_value not in ("unknown", "unavailable") and lon_value not in ("unknown", "unavailable"):
-                    _LOGGER.debug("Current GPS values: %s, %s", lat_value, lon_value)
-                else:
-                    _LOGGER.debug("GPS entities exist but values not available yet")
-            else:
-                _LOGGER.debug("GPS entities not found in state machine yet")
-        except Exception as ex:
-            _LOGGER.exception("Error getting GPS states: %s", ex)
-        
+        lat_value = self.topic_cache.get(lat_topic, {}).get("payload", "unknown")
+        lon_value = self.topic_cache.get(lon_topic, {}).get("payload", "unknown")
+
+        _LOGGER.debug("Current values - Latitude: %s, Longitude: %s", lat_value, lon_value)
+
         # Create device info
         device_info = self._get_device_info()
-        
+
         # Create a unique ID for the device tracker
         device_tracker_id = f"{vehicle_id}_location"
-        
+
         # Create entity data
         entity_data = {
             "entity_type": "device_tracker",
@@ -1251,40 +1250,47 @@ class OVMSMQTTClient:
             "device_info": device_info,
             "attributes": {
                 "category": "location",
-                "lat_entity_id": lat_entity_id,
-                "lon_entity_id": lon_entity_id,
+                "lat_topic": lat_topic,
+                "lon_topic": lon_topic,
             },
         }
-        
+
         # Add the entity using the dispatcher
         async_dispatcher_send(
             self.hass,
             SIGNAL_ADD_ENTITIES,
             entity_data,
         )
-        
+
         # Mark that we've created a device tracker
         self.has_device_tracker = True
-        
-        # Set up watchers for these entities to update the device tracker
-        _LOGGER.info("Setting up GPS entity watchers for device tracker")
-        self._watch_gps_topics(device_tracker_id, lat_entity_id, lon_entity_id)
+        self.gps_topics = [lat_topic, lon_topic]
+
+        # Set up watchers for these topics to update the device tracker
+        _LOGGER.info("Setting up GPS topic watchers for device tracker")
+        self._watch_gps_topics(device_tracker_id)
 
     def _watch_gps_topics(self, device_tracker_id: str) -> None:
         """Set up watchers for GPS topics to update the device tracker."""
         @callback
-        def gps_topics_updated(*args) -> None:
+        def gps_topics_updated(event_type=None, data=None) -> None:
             """Handle updates to GPS topics."""
             if not self.latitude_topic or not self.longitude_topic:
                 return
+
+            # Limit update frequency to avoid rapid firing
+            current_time = time.time()
+            last_update = getattr(self, '_last_gps_update', 0)
+            if current_time - last_update < 2:  # Minimum 2 seconds between updates
+                return
+            self._last_gps_update = current_time
                 
-            # Get current values
+            # Get current values without logging them (to avoid recursion)
             lat_value = self.topic_cache.get(self.latitude_topic, {}).get("payload", "unknown")
             lon_value = self.topic_cache.get(self.longitude_topic, {}).get("payload", "unknown")
                 
             # Skip if either value is unknown/unavailable
             if lat_value in ("unknown", "unavailable", "") or lon_value in ("unknown", "unavailable", ""):
-                _LOGGER.debug("Skipping GPS update with unavailable values")
                 return
                     
             try:
@@ -1294,24 +1300,34 @@ class OVMSMQTTClient:
                     
                 # Skip if not in valid range
                 if not (-90 <= lat_float <= 90) or not (-180 <= lon_float <= 180):
-                    _LOGGER.warning("Invalid GPS coordinates: %s, %s", lat_float, lon_float)
                     return
                         
-                # Create a simplified payload with direct values instead of a string
-                # This avoids the recursion issue with JSON serialization
+                # Create a simplified payload with direct values 
+                # Pass simple dictionary, not a JSON string (critical to avoid recursion)
                 payload = {
                     "latitude": lat_float,
-                    "longitude": lon_float
+                    "longitude": lon_float,
+                    "last_updated": current_time
                 }
                     
-                # Send update to device tracker
+                # Send update to device tracker without logging the payload
                 async_dispatcher_send(
                     self.hass,
                     f"{SIGNAL_UPDATE_ENTITY}_{device_tracker_id}",
                     payload,
                 )
                         
-            except (ValueError, TypeError) as err:
-                _LOGGER.warning("Could not parse GPS values: %s", err)
-        # Register for state change events
+            except (ValueError, TypeError):
+                pass  # Skip error logging to avoid recursion risks
+            
+        # Register for state change events with minimal error risk
         self.hass.bus.async_listen("state_changed", gps_topics_updated)
+        
+        # Also register for message reception in case topics are updated directly
+        @callback
+        def message_received(topic, payload, qos):
+            """Handle message received."""
+            if topic in self.gps_topics:
+                gps_topics_updated()
+                
+        self.hass.bus.async_listen("mqtt_message_received", message_received)
