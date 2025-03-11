@@ -67,7 +67,7 @@ class OVMSDeviceTracker(TrackerEntity):
         self._latitude = None
         self._longitude = None
         self._connected = False
-        
+
         # Safe store for additional attributes
         self._extra_state_attributes = {}
         for key, value in self._attributes.items():
@@ -76,7 +76,7 @@ class OVMSDeviceTracker(TrackerEntity):
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""
         _LOGGER.debug("Device tracker %s added to hass", self._name)
-        
+
         # Register update callback
         self.async_on_remove(
             async_dispatcher_connect(
@@ -90,7 +90,7 @@ class OVMSDeviceTracker(TrackerEntity):
     def update_state(self, payload) -> None:
         """Update the entity state based on payload data."""
         _LOGGER.debug("Device tracker update received")
-        
+
         try:
             # Handle both string and dictionary payloads
             if isinstance(payload, str):
@@ -101,7 +101,7 @@ class OVMSDeviceTracker(TrackerEntity):
                     return
             else:
                 data = payload
-                
+
             # Process location data
             if isinstance(data, dict):
                 if "latitude" in data and "longitude" in data:
@@ -113,15 +113,15 @@ class OVMSDeviceTracker(TrackerEntity):
                     except (ValueError, TypeError) as err:
                         _LOGGER.error("Invalid coordinates: %s", err)
                         return
-                        
+
                 # Update any extra attributes
                 for key, value in data.items():
                     if key not in ["latitude", "longitude"]:
                         self._extra_state_attributes[key] = value
-            
+
             # Write state to HA
             self.async_write_ha_state()
-                
+
         except Exception as err:
             _LOGGER.error("Error processing device tracker update: %s", err)
 
@@ -134,7 +134,7 @@ class OVMSDeviceTracker(TrackerEntity):
     def name(self) -> str:
         """Return the name of the device tracker."""
         return self._friendly_name
-        
+
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
@@ -164,7 +164,7 @@ class OVMSDeviceTracker(TrackerEntity):
     def extra_state_attributes(self) -> Dict[str, Any]:
         """Return entity specific state attributes."""
         return self._extra_state_attributes
-        
+
     @property
     def force_update(self) -> bool:
         """Disable forced updates."""

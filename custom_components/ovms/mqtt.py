@@ -1284,50 +1284,50 @@ class OVMSMQTTClient:
             if current_time - last_update < 2:  # Minimum 2 seconds between updates
                 return
             self._last_gps_update = current_time
-                
+
             # Get current values without logging them (to avoid recursion)
             lat_value = self.topic_cache.get(self.latitude_topic, {}).get("payload", "unknown")
             lon_value = self.topic_cache.get(self.longitude_topic, {}).get("payload", "unknown")
-                
+
             # Skip if either value is unknown/unavailable
             if lat_value in ("unknown", "unavailable", "") or lon_value in ("unknown", "unavailable", ""):
                 return
-                    
+
             try:
                 # Try to parse as valid numbers
                 lat_float = float(lat_value)
                 lon_float = float(lon_value)
-                    
+
                 # Skip if not in valid range
                 if not (-90 <= lat_float <= 90) or not (-180 <= lon_float <= 180):
                     return
-                        
-                # Create a simplified payload with direct values 
+
+                # Create a simplified payload with direct values
                 # Pass simple dictionary, not a JSON string (critical to avoid recursion)
                 payload = {
                     "latitude": lat_float,
                     "longitude": lon_float,
                     "last_updated": current_time
                 }
-                    
+
                 # Send update to device tracker without logging the payload
                 async_dispatcher_send(
                     self.hass,
                     f"{SIGNAL_UPDATE_ENTITY}_{device_tracker_id}",
                     payload,
                 )
-                        
+
             except (ValueError, TypeError):
                 pass  # Skip error logging to avoid recursion risks
-            
+
         # Register for state change events with minimal error risk
         self.hass.bus.async_listen("state_changed", gps_topics_updated)
-        
+
         # Also register for message reception in case topics are updated directly
         @callback
         def message_received(topic, payload, qos):
             """Handle message received."""
             if topic in self.gps_topics:
                 gps_topics_updated()
-                
+
         self.hass.bus.async_listen("mqtt_message_received", message_received)
