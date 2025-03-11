@@ -774,7 +774,7 @@ class OVMSMQTTClient:
         if topic.endswith("/status"):
             vehicle_id = self.config.get(CONF_VEHICLE_ID, "")
             attributes = {"topic": topic, "category": "diagnostic"}
-            return "binary_sensor", {
+            return "sensor", {
                 "name": f"ovms_{vehicle_id}_status",
                 "friendly_name": f"OVMS {vehicle_id} Connection",
                 "attributes": attributes,
