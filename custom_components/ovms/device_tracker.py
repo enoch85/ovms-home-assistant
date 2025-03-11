@@ -67,13 +67,13 @@ async def async_setup_entry(
         # Give sensors time to initialize
         await asyncio.sleep(30)
         mqtt_client = hass.data[DOMAIN][entry.entry_id]["mqtt_client"]
-        
+
         # Only proceed if we haven't created a device tracker yet
         if not mqtt_client.has_device_tracker:
             vehicle_id = entry.data.get("vehicle_id", "")
             if vehicle_id:
                 await mqtt_client.create_device_tracker_from_sensors(vehicle_id)
-    
+
     # Start the delayed tracker creation
     hass.async_create_task(create_tracker_from_sensors())
 
@@ -183,7 +183,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 if "latitude" in state.attributes and "longitude" in state.attributes:
                     self._attr_latitude = state.attributes["latitude"]
                     self._attr_longitude = state.attributes["longitude"]
-                    
+
                     # Also store as last valid coordinates
                     self._last_lat = state.attributes["latitude"]
                     self._last_lon = state.attributes["longitude"]
@@ -216,11 +216,11 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         """Check if a value is a valid coordinate."""
         if value is None:
             return False
-            
+
         try:
             # Convert to float and check range
             float_value = float(value)
-            
+
             # Basic range checks for lat/lon
             # For latitude: -90 to 90
             # For longitude: -180 to 180
@@ -234,11 +234,11 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         """Check if coordinate change is significant enough to update."""
         if self._last_lat is None or self._last_lon is None:
             return True
-            
+
         # Check if the change exceeds minimum threshold
         lat_diff = abs(lat - self._last_lat)
         lon_diff = abs(lon - self._last_lon)
-        
+
         return lat_diff > MIN_GPS_ACCURACY or lon_diff > MIN_GPS_ACCURACY
 
     def _parse_payload(self, payload: str) -> None:
