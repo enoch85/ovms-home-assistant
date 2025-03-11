@@ -24,18 +24,21 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     @callback
     def async_add_device_tracker(entity_data):
         """Add OVMS device tracker."""
-        if entity_data["entity_type"] != "device_tracker":
-            return
+        try:
+            if entity_data["entity_type"] != "device_tracker":
+                return
 
-        _LOGGER.debug("Adding OVMS device tracker: %s", entity_data["friendly_name"])
-        device_tracker = OVMSDeviceTracker(
-            entity_data["unique_id"],
-            entity_data["name"],
-            entity_data["friendly_name"],
-            entity_data["device_info"],
-            entity_data["attributes"],
-        )
-        async_add_entities([device_tracker])
+            _LOGGER.debug("Adding OVMS device tracker: %s", entity_data["friendly_name"])
+            device_tracker = OVMSDeviceTracker(
+                entity_data["unique_id"],
+                entity_data["name"],
+                entity_data["friendly_name"],
+                entity_data["device_info"],
+                entity_data["attributes"],
+            )
+            async_add_entities([device_tracker])
+        except Exception as ex:
+            _LOGGER.exception("Error adding device tracker: %s", ex)
 
     # Subscribe to new entities being added
     config_entry.async_on_unload(
@@ -75,23 +78,26 @@ class OVMSDeviceTracker(TrackerEntity):
 
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""
-        _LOGGER.debug("Device tracker %s added to hass", self._name)
+        try:
+            _LOGGER.debug("Device tracker %s added to hass", self._name)
 
-        # Register update callback
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                f"{SIGNAL_UPDATE_ENTITY}_{self._unique_id}",
-                self.update_state,
+            # Register update callback
+            self.async_on_remove(
+                async_dispatcher_connect(
+                    self.hass,
+                    f"{SIGNAL_UPDATE_ENTITY}_{self._unique_id}",
+                    self.update_state,
+                )
             )
-        )
+        except Exception as ex:
+            _LOGGER.exception("Error in async_added_to_hass: %s", ex)
 
     @callback
     def update_state(self, payload) -> None:
         """Update the entity state based on payload data."""
-        _LOGGER.debug("Device tracker update received")
-
         try:
+            _LOGGER.debug("Device tracker update received")
+
             # Handle both string and dictionary payloads
             if isinstance(payload, str):
                 try:
@@ -121,9 +127,8 @@ class OVMSDeviceTracker(TrackerEntity):
 
             # Write state to HA
             self.async_write_ha_state()
-
-        except Exception as err:
-            _LOGGER.error("Error processing device tracker update: %s", err)
+        except Exception as ex:
+            _LOGGER.exception("Error updating device tracker state: %s", ex)
 
     @property
     def unique_id(self) -> str:
