@@ -5,7 +5,7 @@ from typing import Dict, Any
 
 import voluptuous as vol
 
-from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.exceptions import HomeAssistantError
 
@@ -59,7 +59,6 @@ CONTROL_CHARGING_SCHEMA = vol.Schema({
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Set up OVMS services."""
 
-    @callback
     def find_mqtt_client(vehicle_id: str):
         """Find the MQTT client for a vehicle ID synchronously."""
         for entry_id, data in hass.data[DOMAIN].items():
@@ -252,7 +251,6 @@ async def async_unload_services(hass: HomeAssistant) -> None:
         SERVICE_CONTROL_CLIMATE,
         SERVICE_CONTROL_CHARGING,
     ]
-
     for service in services:
         if hass.services.has_service(DOMAIN, service):
             hass.services.async_remove(DOMAIN, service)
