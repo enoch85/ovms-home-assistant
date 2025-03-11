@@ -244,8 +244,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     )
 
 
-@callback
-def async_unload_services(hass: HomeAssistant) -> None:
+async def async_unload_services(hass: HomeAssistant) -> None:
     """Unload OVMS services."""
     services = [
         SERVICE_SEND_COMMAND,
