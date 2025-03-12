@@ -672,12 +672,21 @@ class OVMSMQTTClient:
                 # Create a new entity for this topic
                 await self._async_add_entity_for_topic(topic, payload)
             else:
-                # Update existing entity
+                # Update existing entities
                 entity_id = self.entity_registry.get(topic)
                 if entity_id:
+                    # Update the primary entity
                     async_dispatcher_send(
                         self.hass,
                         f"{SIGNAL_UPDATE_ENTITY}_{entity_id}",
+                        payload,
+                    )
+                    
+                    # Also update the sensor version
+                    sensor_entity_id = f"{entity_id}_sensor"
+                    async_dispatcher_send(
+                        self.hass,
+                        f"{SIGNAL_UPDATE_ENTITY}_{sensor_entity_id}",
                         payload,
                     )
                 elif not self._is_system_topic(topic):
@@ -845,6 +854,26 @@ class OVMSMQTTClient:
                 "attributes": entity_info["attributes"],
             }
 
+            # Create a sensor version with a different unique_id
+            sensor_unique_id = f"{unique_id}_sensor"
+            sensor_name = f"{entity_name}_sensor"
+            sensor_friendly_name = f"{friendly_name} Sensor"
+
+            sensor_entity_data = {
+                "topic": topic,
+                "payload": payload,
+                "entity_type": "sensor",
+                "unique_id": sensor_unique_id,
+                "name": sensor_name,
+                "friendly_name": sensor_friendly_name,
+                "device_info": self._get_device_info(),
+                "attributes": {
+                    **entity_info["attributes"],
+                    "original_entity": unique_id,
+                    "original_entity_type": entity_type
+                },
+            }
+
             # Validate entity info before returning
             if not entity_info or not isinstance(entity_info, dict):
                 _LOGGER.warning("Created invalid entity info: %s", entity_info)
@@ -860,17 +889,26 @@ class OVMSMQTTClient:
             log_msg += f"category={entity_category}, friendly_name={entity_info['friendly_name']}"
             _LOGGER.debug(log_msg)
 
-            # If platforms are loaded, send the entity to be created
-            # Otherwise, queue it for later
+            # If platforms are loaded, send the entities to be created
+            # Otherwise, queue them for later
             if self.platforms_loaded:
+                # Add the primary entity
                 async_dispatcher_send(
                     self.hass,
                     SIGNAL_ADD_ENTITIES,
                     entity_data,
                 )
+                
+                # Add the sensor version
+                async_dispatcher_send(
+                    self.hass,
+                    SIGNAL_ADD_ENTITIES,
+                    sensor_entity_data,
+                )
             else:
                 _LOGGER.debug("Platforms not yet loaded, queuing entity: %s", entity_info["name"])
                 await self.entity_queue.put(entity_data)
+                await self.entity_queue.put(sensor_entity_data)
 
             # Check if this is a latitude or longitude topic for device tracker
             if "latitude" in topic.lower() or "lat" in topic.lower():
