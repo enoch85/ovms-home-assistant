@@ -124,6 +124,10 @@ class OVMSMQTTClient:
         self.latitude_topic = None
         self.longitude_topic = None
         self.gps_topics = []
+        
+        # Store sensor IDs for updating individual lat/lon sensors
+        self.lat_sensor_id = None
+        self.lon_sensor_id = None
 
     async def async_setup(self) -> bool:
         """Set up the MQTT client."""
@@ -1395,6 +1399,10 @@ class OVMSMQTTClient:
             # Create a unique ID for the device tracker
             device_tracker_id = f"{vehicle_id}_location"
 
+            # Store sensor IDs for direct updates
+            self.lat_sensor_id = f"{vehicle_id}_latitude_sensor"
+            self.lon_sensor_id = f"{vehicle_id}_longitude_sensor"
+
             # Create entity data for the device tracker
             tracker_entity_data = {
                 "entity_type": "device_tracker",
@@ -1414,7 +1422,7 @@ class OVMSMQTTClient:
             # Create entity data for individual sensor versions of latitude and longitude
             lat_sensor_data = {
                 "entity_type": "sensor",
-                "unique_id": f"{vehicle_id}_latitude_sensor",
+                "unique_id": self.lat_sensor_id,
                 "name": f"ovms_{vehicle_id}_latitude",
                 "friendly_name": f"{vehicle_id} Latitude",
                 "topic": lat_topic,
@@ -1425,7 +1433,7 @@ class OVMSMQTTClient:
 
             lon_sensor_data = {
                 "entity_type": "sensor",
-                "unique_id": f"{vehicle_id}_longitude_sensor",
+                "unique_id": self.lon_sensor_id,
                 "name": f"ovms_{vehicle_id}_longitude",
                 "friendly_name": f"{vehicle_id} Longitude",
                 "topic": lon_topic,
@@ -1510,45 +1518,66 @@ class OVMSMQTTClient:
                     # Only update if:
                     # 1. Coordinates have changed, OR
                     # 2. It's been at least 30 seconds since the last update
-                    if not coordinates_changed and time_since_last_update < 30:
-                        return
+                    update_needed = coordinates_changed or time_since_last_update >= 30
+                    
+                    if update_needed:
+                        # Store new values and update timestamp
+                        self._prev_latitude = lat_float
+                        self._prev_longitude = lon_float
+                        self._last_gps_update = current_time
 
-                    # Store new values and update timestamp
-                    self._prev_latitude = lat_float
-                    self._prev_longitude = lon_float
-                    self._last_gps_update = current_time
+                        # Find and get GPS signal quality/accuracy
+                        gps_sq_topic = None
+                        for topic in self.discovered_topics:
+                            if "gpssq" in topic.lower() or "gps_sq" in topic.lower() or "gps/sq" in topic.lower():
+                                gps_sq_topic = topic
+                                break
+                                
+                        gps_accuracy = 0  # Default value
+                        if gps_sq_topic:
+                            gps_sq_value = self.topic_cache.get(gps_sq_topic, {}).get("payload", "0")
+                            try:
+                                gps_accuracy = float(gps_sq_value)
+                            except (ValueError, TypeError):
+                                pass
 
-                    # Find and get GPS signal quality/accuracy
-                    gps_sq_topic = None
-                    for topic in self.discovered_topics:
-                        if "gpssq" in topic.lower() or "gps_sq" in topic.lower() or "gps/sq" in topic.lower():
-                            gps_sq_topic = topic
-                            break
-                            
-                    gps_accuracy = 0  # Default value
-                    if gps_sq_topic:
-                        gps_sq_value = self.topic_cache.get(gps_sq_topic, {}).get("payload", "0")
-                        try:
-                            gps_accuracy = float(gps_sq_value)
-                        except (ValueError, TypeError):
-                            pass
+                        # Create payload
+                        payload = {
+                            "latitude": lat_float,
+                            "longitude": lon_float,
+                            "gps_accuracy": gps_accuracy,
+                            "last_updated": current_time
+                        }
 
-                    # Create payload
-                    payload = {
-                        "latitude": lat_float,
-                        "longitude": lon_float,
-                        "gps_accuracy": gps_accuracy,
-                        "last_updated": current_time
-                    }
+                        # Send update to device tracker
+                        async_dispatcher_send(
+                            self.hass,
+                            f"{SIGNAL_UPDATE_ENTITY}_{device_tracker_id}",
+                            payload,
+                        )
 
-                    # Send update to device tracker
-                    async_dispatcher_send(
-                        self.hass,
-                        f"{SIGNAL_UPDATE_ENTITY}_{device_tracker_id}",
-                        payload,
-                    )
+                        # Also update the individual latitude and longitude sensors
+                        # This is critical - ensure sensors get updates even if they weren't directly
+                        # updated via their topics
+                        if self.lat_sensor_id:
+                            async_dispatcher_send(
+                                self.hass,
+                                f"{SIGNAL_UPDATE_ENTITY}_{self.lat_sensor_id}",
+                                str(lat_float),  # Convert to string for consistency
+                            )
+                        
+                        if self.lon_sensor_id:
+                            async_dispatcher_send(
+                                self.hass,
+                                f"{SIGNAL_UPDATE_ENTITY}_{self.lon_sensor_id}",
+                                str(lon_float),  # Convert to string for consistency
+                            )
 
-                    _LOGGER.debug("Updated device tracker with new coordinates: %s, %s", lat_float, lon_float)
+                        _LOGGER.debug("Updated GPS coordinates: lat=%s, lon=%s (changed=%s, time_since=%d)",
+                                     lat_float, lon_float, coordinates_changed, time_since_last_update)
+                    else:
+                        _LOGGER.debug("Skipping GPS update (no change and only %d seconds since last update)",
+                                     time_since_last_update)
 
                 except (ValueError, TypeError) as ex:
                     _LOGGER.debug("Error parsing GPS values: %s, %s - %s", lat_value, lon_value, ex)
@@ -1571,5 +1600,24 @@ class OVMSMQTTClient:
 
         self.hass.bus.async_listen("mqtt_message_received", message_received)
 
-        # Do an initial update
+        # Do an initial update to populate the sensors
         gps_topics_updated()
+        
+        # Ensure regular updates even when coordinates don't change
+        # This ensures sensors don't go to "unknown" state
+        async def periodic_check():
+            """Periodically check GPS values to avoid sensors going to unknown state."""
+            try:
+                while not self._shutting_down:
+                    # Force an update every 20 seconds
+                    await asyncio.sleep(20)
+                    if self._shutting_down:
+                        break
+                    gps_topics_updated()
+            except asyncio.CancelledError:
+                pass
+            except Exception as ex:
+                _LOGGER.exception("Error in periodic GPS check: %s", ex)
+        
+        # Start the periodic updater task
+        self.hass.loop.create_task(periodic_check())
