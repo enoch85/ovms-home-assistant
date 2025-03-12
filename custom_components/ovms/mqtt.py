@@ -853,25 +853,43 @@ class OVMSMQTTClient:
                 "attributes": entity_info["attributes"],
             }
             
-            # Also create a sensor version for every entity, regardless of type
-            sensor_name = f"{entity_name}_sensor"
-            sensor_unique_id = f"{unique_id}_sensor"
-            sensor_friendly_name = f"{friendly_name} Sensor"
-            
-            sensor_entity_data = {
-                "topic": topic,
-                "payload": payload,
-                "entity_type": "sensor",
-                "unique_id": sensor_unique_id,
-                "name": sensor_name,
-                "friendly_name": sensor_friendly_name,
-                "device_info": self._get_device_info(),
-                "attributes": {
-                    **entity_info["attributes"],
-                    "original_entity": unique_id,
-                    "original_entity_type": entity_type
-                },
-            }
+            # Check if a sensor version already exists for this topic
+            sensor_entity_id = f"{unique_id}_sensor"
+            sensor_exists = False
+            # Check if this sensor entity already exists in our registry
+            for existing_topic, existing_id in self.entity_registry.items():
+                if existing_id == sensor_entity_id:
+                    sensor_exists = True
+                    break
+            # Create sensor version if it doesn't already exist
+            if not sensor_exists:
+                sensor_name = f"{entity_name}_sensor"
+                sensor_friendly_name = f"{friendly_name} Sensor"
+                
+                sensor_entity_data = {
+                    "topic": topic,
+                    "payload": payload,
+                    "entity_type": "sensor",
+                    "unique_id": sensor_entity_id,
+                    "name": sensor_name,
+                    "friendly_name": sensor_friendly_name,
+                    "device_info": self._get_device_info(),
+                    "attributes": {
+                        **entity_info["attributes"],
+                        "original_entity": unique_id,
+                        "original_entity_type": entity_type
+                    },
+                }
+                
+                # Create the sensor entity
+                if self.platforms_loaded:
+                    async_dispatcher_send(
+                        self.hass,
+                        SIGNAL_ADD_ENTITIES,
+                        sensor_entity_data,
+                    )
+                else:
+                    await self.entity_queue.put(sensor_entity_data)
 
             _LOGGER.debug("Final entity info: %s", entity_info)
             log_msg = f"Parsed topic as: type={entity_type}, name={entity_info['name']}, "
@@ -881,23 +899,15 @@ class OVMSMQTTClient:
             # If platforms are loaded, send the entities to be created
             # Otherwise, queue them for later
             if self.platforms_loaded:
-                # First create the primary entity
+                # Create the primary entity
                 async_dispatcher_send(
                     self.hass,
                     SIGNAL_ADD_ENTITIES,
                     entity_data,
                 )
-                
-                # Then create the sensor version
-                async_dispatcher_send(
-                    self.hass,
-                    SIGNAL_ADD_ENTITIES,
-                    sensor_entity_data,
-                )
             else:
                 _LOGGER.debug("Platforms not yet loaded, queuing entities: %s", entity_info["name"])
                 await self.entity_queue.put(entity_data)
-                await self.entity_queue.put(sensor_entity_data)
 
             # Check if this is a latitude or longitude topic for device tracker
             if "latitude" in topic.lower() or "lat" in topic.lower():
