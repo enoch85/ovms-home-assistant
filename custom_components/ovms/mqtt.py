@@ -1447,6 +1447,21 @@ class OVMSMQTTClient:
                 # Get current values without logging them (to avoid recursion)
                 lat_value = self.topic_cache.get(self.latitude_topic, {}).get("payload", "unknown")
                 lon_value = self.topic_cache.get(self.longitude_topic, {}).get("payload", "unknown")
+                
+                # Find and get GPS signal quality/accuracy
+                gps_sq_topic = None
+                for topic in self.discovered_topics:
+                    if "gpssq" in topic.lower() or "gps_sq" in topic.lower() or "gps/sq" in topic.lower():
+                        gps_sq_topic = topic
+                        break
+                        
+                gps_accuracy = 0  # Default value
+                if gps_sq_topic:
+                    gps_sq_value = self.topic_cache.get(gps_sq_topic, {}).get("payload", "0")
+                    try:
+                        gps_accuracy = float(gps_sq_value)
+                    except (ValueError, TypeError):
+                        pass
 
                 # Skip if either value is unknown/unavailable
                 if lat_value in ("unknown", "unavailable", "") or lon_value in ("unknown", "unavailable", ""):
@@ -1466,6 +1481,7 @@ class OVMSMQTTClient:
                     payload = {
                         "latitude": lat_float,
                         "longitude": lon_float,
+                        "gps_accuracy": gps_accuracy,  # Add GPS accuracy value from signal quality
                         "last_updated": current_time
                     }
 
@@ -1490,6 +1506,9 @@ class OVMSMQTTClient:
             """Handle message received."""
             try:
                 if topic in self.gps_topics:
+                    gps_topics_updated()
+                # Also check for GPS signal quality topics
+                elif topic.endswith("gpssq") or "gps/sq" in topic or "gps_sq" in topic:
                     gps_topics_updated()
             except Exception as ex:
                 _LOGGER.exception("Error in message received handler: %s", ex)
