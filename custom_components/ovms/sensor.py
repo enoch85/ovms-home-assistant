@@ -176,90 +176,10 @@ async def async_setup_entry(
             _LOGGER.warning("Invalid entity data received: %s", data)
             return
 
-        entity_type = data.get("entity_type")
-        if not entity_type:
-            _LOGGER.debug("Missing entity_type in data: %s", data)
-            return
-
-        # Check if this is a device_tracker entity
-        if entity_type == "device_tracker":
-            _LOGGER.info("Creating sensor versions of device tracker: %s",
-                        data.get("friendly_name", data.get("name", "unknown")))
-
-            try:
-                # Extract initial values from payload
-                payload = data.get("payload", {})
-                if isinstance(payload, dict):
-                    lat_value = payload.get("latitude", "unknown")
-                    lon_value = payload.get("longitude", "unknown")
-                else:
-                    lat_value = "unknown"
-                    lon_value = "unknown"
-
-                # Create a latitude sensor
-                lat_sensor = OVMSSensor(
-                    f"{data.get('unique_id', str(uuid.uuid4()))}_latitude_sensor",
-                    f"{data.get('name', 'unknown')}_latitude",
-                    data.get("topic", ""),
-                    lat_value,
-                    data.get("device_info", {}),
-                    {**data.get("attributes", {}), "original_entity": data.get("unique_id", "")},
-                    f"{data.get('friendly_name', data.get('name', 'unknown'))} Latitude",
-                    hass,
-                )
-
-                # Create a longitude sensor
-                lon_sensor = OVMSSensor(
-                    f"{data.get('unique_id', str(uuid.uuid4()))}_longitude_sensor",
-                    f"{data.get('name', 'unknown')}_longitude",
-                    data.get("topic", ""),
-                    lon_value,
-                    data.get("device_info", {}),
-                    {**data.get("attributes", {}), "original_entity": data.get("unique_id", "")},
-                    f"{data.get('friendly_name', data.get('name', 'unknown'))} Longitude",
-                    hass,
-                )
-
-                async_add_entities([lat_sensor, lon_sensor])
-            except Exception as ex:
-                _LOGGER.error("Error creating sensor versions of device tracker: %s", ex)
-
-            return
-
         # Skip if it's not a sensor
-        if entity_type != "sensor":
+        if data.get("entity_type") != "sensor":
             return
 
-        # Check if this is explicitly a sensor version of a GPS entity
-        unique_id = data.get("unique_id", "")
-        name = data.get("name", "").lower()
-        topic = data.get("topic", "").lower()
-
-        is_gps_sensor = (
-            "_latitude_sensor" in unique_id or
-            "_longitude_sensor" in unique_id or
-            any(keyword in name or keyword in topic for keyword in ["latitude", "lat", "longitude", "lon", "lng"])
-        )
-
-        if is_gps_sensor:
-            _LOGGER.info("Adding GPS sensor: %s", data.get("friendly_name", data.get("name", "unknown")))
-            try:
-                sensor = OVMSSensor(
-                    data.get("unique_id", str(uuid.uuid4())),
-                    data.get("name", "unknown"),
-                    data.get("topic", ""),
-                    data.get("payload", ""),
-                    data.get("device_info", {}),
-                    data.get("attributes", {}),
-                    data.get("friendly_name"),
-                    hass,
-                )
-                async_add_entities([sensor])
-            except Exception as ex:
-                _LOGGER.error("Error creating GPS sensor: %s", ex)
-            return
-
-        # Continue with normal sensor handling
         _LOGGER.info("Adding sensor: %s", data.get("name", "unknown"))
 
         # Handle cell sensors differently
