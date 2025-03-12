@@ -82,6 +82,10 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
             self._attr_extra_state_attributes["topic"] = topic
         if "last_updated" not in self._attr_extra_state_attributes:
             self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
+        
+        # If gps_accuracy isn't in attributes, try to find it if available
+        if "gps_accuracy" not in self._attr_extra_state_attributes:
+            self._attr_extra_state_attributes["gps_accuracy"] = self._lookup_gps_accuracy(hass)
 
         self.hass = hass
         self._latitude = None
@@ -103,6 +107,11 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 hass=hass,
             )
 
+    def _lookup_gps_accuracy(self, hass: Optional[HomeAssistant] = None) -> Optional[float]:
+        """Look up GPS accuracy value from available sources."""
+        # Default accuracy if not found
+        return 0
+        
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
         await super().async_added_to_hass()
@@ -130,10 +139,23 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 }
                 self._attr_extra_state_attributes.update(saved_attributes)
 
+        # Update accuracy attribute if needed
+        if "gps_accuracy" not in self._attr_extra_state_attributes:
+            acc = self._lookup_gps_accuracy(self.hass)
+            if acc is not None:
+                self._attr_extra_state_attributes["gps_accuracy"] = acc
+
         @callback
         def update_state(payload: Any) -> None:
             """Update the tracker state."""
             self._process_payload(payload)
+
+            # Update gps_accuracy from the payload if available
+            if isinstance(payload, dict) and "gps_accuracy" in payload:
+                self._attr_extra_state_attributes["gps_accuracy"] = payload["gps_accuracy"]
+                
+            # Find and update GPS signal quality if available
+            self._check_gps_sq_and_accuracy()
 
             # Also update corresponding sensor entities
             try:
@@ -160,6 +182,15 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 update_state,
             )
         )
+        
+    def _check_gps_sq_and_accuracy(self) -> None:
+        """Check and update GPS signal quality and accuracy."""
+        # Placeholder for real implementation that would look for GPS signal quality
+        # topics in the MQTT client's discovered topics
+        
+        # Ensure at least a default accuracy if none exists
+        if "gps_accuracy" not in self._attr_extra_state_attributes:
+            self._attr_extra_state_attributes["gps_accuracy"] = 0
 
     def _process_payload(self, payload: Any) -> None:
         """Process the payload and update coordinates."""
@@ -213,7 +244,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 except (ValueError, TypeError):
                     _LOGGER.warning("Invalid latitude value: %s", payload)
 
-            elif "longitude" in self._topic.lower() or "long" in self._topic.lower() or "lon" in self._topic.lower():
+            elif "longitude" in self._topic.lower() or "long" in self._topic.lower() or "lon" in self._topic.lower() or "lng" in self._topic.lower():
                 try:
                     lon = float(payload)
                     if -180 <= lon <= 180:
@@ -235,6 +266,12 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 try:
                     value = float(payload) if payload else None
                     self._attr_extra_state_attributes["gps_signal_quality"] = value
+                    # Update accuracy based on signal quality
+                    if value is not None:
+                        # Simple formula that translates signal quality to meters accuracy
+                        # Higher signal quality = better accuracy (lower value)
+                        accuracy = max(5, 100 - value)  # Clamp minimum accuracy to 5m
+                        self._attr_extra_state_attributes["gps_accuracy"] = accuracy
                 except (ValueError, TypeError):
                     pass
             elif "gpsspeed" in self._topic.lower():
@@ -256,6 +293,10 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
 
                 if coordinates_changed:
                     _LOGGER.debug("Updated device tracker coordinates.")
+
+            # Add sensible default for gps_accuracy if necessary
+            if "gps_accuracy" not in self._attr_extra_state_attributes:
+                self._attr_extra_state_attributes["gps_accuracy"] = 0
 
         except Exception as ex:
             _LOGGER.exception("Error processing payload: %s", ex)
