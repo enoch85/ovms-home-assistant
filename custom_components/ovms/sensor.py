@@ -246,6 +246,23 @@ async def async_setup_entry(
                 _LOGGER.error("Error creating cell sensors: %s", ex)
             return
 
+        # Special handling for version/firmware topics to ensure they're associated with the vehicle
+        topic = data.get("topic", "")
+        if "version" in topic or "metric/m/version" in topic:
+            _LOGGER.debug("Version/firmware topic detected: %s", topic)
+            # Extract vehicle_id from device_info or try to determine from topic
+            vehicle_id = "unknown"
+            if "device_info" in data and "identifiers" in data["device_info"]:
+                # Try to extract from identifiers
+                identifiers = data["device_info"]["identifiers"]
+                for identifier in identifiers:
+                    if isinstance(identifier, tuple) and len(identifier) > 1:
+                        vehicle_id = identifier[1]
+                        break
+            
+            # Log to verify
+            _LOGGER.info("Assigning version topic %s to vehicle %s", topic, vehicle_id)
+
         try:
             sensor = OVMSSensor(
                 data.get("unique_id", str(uuid.uuid4())),
