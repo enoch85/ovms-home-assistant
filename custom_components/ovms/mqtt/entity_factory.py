@@ -171,7 +171,7 @@ class EntityFactory:
                 "entity_type": "device_tracker",
                 "unique_id": tracker_id,
                 "name": f"ovms_{vehicle_id}_location",
-                "friendly_name": f"{vehicle_id} Location",
+                "friendly_name": "Location",
                 "topic": "combined_location",  # Virtual topic
                 "payload": {
                     "latitude": 0,
@@ -290,3 +290,29 @@ class EntityFactory:
             )
 
             self.entity_queue.task_done()
+
+    def _prepare_attributes(self, topic: str, category: str, parts: List[str], metric_info: Optional[Dict]) -> Dict[str, Any]:
+        """Prepare entity attributes."""
+        try:
+            attributes = {
+                "topic": topic,
+                "category": category,
+                "parts": parts,
+            }
+
+            # Add additional attributes from metric definition
+            if metric_info:
+                # Only add attributes that aren't already in the entity definition
+                for key, value in metric_info.items():
+                    if key not in [
+                        "name",
+                        "device_class",
+                        "state_class",
+                        "unit",
+                    ]:
+                        attributes[key] = value
+
+            return attributes
+        except Exception as ex:
+            _LOGGER.exception("Error preparing attributes: %s", ex)
+            return {"topic": topic, "category": category}
