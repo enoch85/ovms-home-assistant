@@ -905,6 +905,14 @@ class OVMSMQTTClient:
                     SIGNAL_ADD_ENTITIES,
                     entity_data,
                 )
+                
+                # Then create the sensor version if it doesn't already exist
+                if not sensor_exists:
+                    async_dispatcher_send(
+                        self.hass,
+                        SIGNAL_ADD_ENTITIES,
+                        sensor_entity_data,
+                    )
             else:
                 _LOGGER.debug("Platforms not yet loaded, queuing entities: %s", entity_info["name"])
                 await self.entity_queue.put(entity_data)
