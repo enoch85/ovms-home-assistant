@@ -9,6 +9,7 @@ from homeassistant.util import dt as dt_util
 from ..const import (
     LOGGER_NAME,
     SIGNAL_UPDATE_ENTITY,
+    DOMAIN,
 )
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -46,6 +47,10 @@ class UpdateDispatcher:
             if "version" in topic.lower() or "m.version" in topic.lower():
                 self._handle_version_update(topic, entity_id, payload)
 
+            # Special handling for GPS quality topics
+            if self._is_gps_quality_topic(topic):
+                self._handle_gps_quality_update(topic, payload)
+
             # Update related entities
             related_entities = self.entity_registry.get_related_entities(entity_id)
             for related_id in related_entities:
@@ -82,6 +87,11 @@ class UpdateDispatcher:
         location_keywords = ["latitude", "longitude", "lat", "lon", "lng", "gps"]
         return any(keyword in topic.lower() for keyword in location_keywords)
 
+    def _is_gps_quality_topic(self, topic: str) -> bool:
+        """Check if a topic is related to GPS quality."""
+        gps_keywords = ["gpssq", "gps_sq", "gpshdop", "gps_hdop"]
+        return any(keyword in topic.lower() for keyword in gps_keywords)
+
     def _handle_location_update(self, topic: str, entity_id: str, payload: Any) -> None:
         """Handle updates to location topics."""
         try:
@@ -105,6 +115,40 @@ class UpdateDispatcher:
         except Exception as ex:
             _LOGGER.exception("Error handling location update: %s", ex)
 
+    def _handle_gps_quality_update(self, topic: str, payload: Any) -> None:
+        """Handle updates to GPS quality topics and update device trackers."""
+        try:
+            # Process GPS quality information
+            quality_value = self._parse_numeric_value(payload)
+            
+            if quality_value is not None:
+                # Check what type of GPS quality metric this is
+                is_hdop = any(keyword in topic.lower() for keyword in ["gpshdop", "gps_hdop"])
+                is_signal_quality = any(keyword in topic.lower() for keyword in ["gpssq", "gps_sq"])
+                
+                # Calculate accuracy
+                accuracy = None
+                if is_signal_quality:
+                    # Signal quality (0-100) - higher is better
+                    accuracy = max(5, 100 - quality_value)  # Minimum 5m accuracy
+                elif is_hdop:
+                    # HDOP - lower is better
+                    accuracy = max(5, quality_value * 5)  # Each HDOP unit is ~5m of accuracy
+                
+                if accuracy is not None:
+                    # Update all device trackers with this GPS accuracy
+                    device_trackers = self.entity_registry.get_entities_by_type("device_tracker")
+                    for tracker_id in device_trackers:
+                        # Create update payload with accuracy
+                        quality_payload = {
+                            "gps_accuracy": accuracy,
+                            "last_updated": dt_util.utcnow().isoformat()
+                        }
+                        self._update_entity(tracker_id, quality_payload)
+        
+        except Exception as ex:
+            _LOGGER.exception("Error handling GPS quality update: %s", ex)
+
     def _parse_coordinate(self, value: Any) -> Optional[float]:
         """Parse a coordinate value from various formats."""
         if value is None:
@@ -124,6 +168,25 @@ class UpdateDispatcher:
 
         except (ValueError, TypeError):
             return None
+            
+    def _parse_numeric_value(self, value: Any) -> Optional[float]:
+        """Parse a numeric value from various formats."""
+        if value is None:
+            return None
+
+        try:
+            # If it's already a float or int, return it
+            if isinstance(value, (float, int)):
+                return float(value)
+
+            # Try to convert string to float
+            if isinstance(value, str):
+                return float(value.strip())
+
+            return None
+
+        except (ValueError, TypeError):
+            return None
 
     def _update_all_device_trackers(self) -> None:
         """Update all device trackers with current location data."""
@@ -131,12 +194,29 @@ class UpdateDispatcher:
             # Find all device trackers
             device_trackers = self.entity_registry.get_entities_by_type("device_tracker")
 
+            # Get GPS accuracy if available
+            accuracy = None
+            mqtt_client = None
+            
+            # Try to get the MQTT client from hass.data
+            for entry_id, data in self.hass.data.get(DOMAIN, {}).items():
+                if "mqtt_client" in data:
+                    mqtt_client = data["mqtt_client"]
+                    break
+                    
+            if mqtt_client and hasattr(mqtt_client, "get_gps_accuracy"):
+                accuracy = mqtt_client.get_gps_accuracy()
+
             # Create payload with current location data
             payload = {
                 "latitude": self.location_values.get("latitude"),
                 "longitude": self.location_values.get("longitude"),
                 "last_updated": dt_util.utcnow().isoformat(),
             }
+            
+            # Add accuracy if available
+            if accuracy is not None:
+                payload["gps_accuracy"] = accuracy
 
             for tracker_id in device_trackers:
                 # Skip if it's a specific lat/lon entity
@@ -153,12 +233,29 @@ class UpdateDispatcher:
     def _update_combined_tracker(self, tracker_id: str) -> None:
         """Update a combined device tracker with current location data."""
         try:
+            # Get GPS accuracy if available
+            accuracy = None
+            mqtt_client = None
+            
+            # Try to get the MQTT client from hass.data
+            for entry_id, data in self.hass.data.get(DOMAIN, {}).items():
+                if "mqtt_client" in data:
+                    mqtt_client = data["mqtt_client"]
+                    break
+                    
+            if mqtt_client and hasattr(mqtt_client, "get_gps_accuracy"):
+                accuracy = mqtt_client.get_gps_accuracy()
+
             # Create payload with current location data
             payload = {
                 "latitude": self.location_values.get("latitude"),
                 "longitude": self.location_values.get("longitude"),
                 "last_updated": dt_util.utcnow().isoformat(),
             }
+            
+            # Add accuracy if available
+            if accuracy is not None:
+                payload["gps_accuracy"] = accuracy
 
             # Update the tracker
             self._update_entity(tracker_id, payload)
