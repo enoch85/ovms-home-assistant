@@ -158,8 +158,8 @@ class UpdateDispatcher:
                 _LOGGER.info("Detected firmware version update: %s", payload)
                 
                 # Find the device registry entry for this entity
-                device_registry = self.hass.helpers.device_registry.async_get(self.hass)
-                entity_registry = self.hass.helpers.entity_registry.async_get(self.hass)
+                device_registry = self.hass.helpers.device_registry.async_get()
+                entity_registry = self.hass.helpers.entity_registry.async_get()
                 
                 # Get the entity from the entity registry
                 entity_entry = entity_registry.async_get(entity_id)
