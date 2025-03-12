@@ -81,12 +81,12 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
             self._attr_extra_state_attributes["topic"] = topic
         if not "last_updated" in self._attr_extra_state_attributes:
             self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
-
+        
         self.hass = hass
         self._latitude = None
         self._longitude = None
         self._source_type = SourceType.GPS
-
+        
         # Process initial payload
         if initial_payload:
             self._process_payload(initial_payload)
@@ -111,7 +111,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 for attr in ["latitude", "longitude", "source_type", "gps_accuracy"]:
                     if attr in state.attributes:
                         setattr(self, f"_{attr}", state.attributes[attr])
-
+                
                 # Don't overwrite entity attributes
                 saved_attributes = {
                     k: v for k, v in state.attributes.items()
@@ -123,11 +123,11 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         def update_state(payload: Any) -> None:
             """Update the tracker state."""
             self._process_payload(payload)
-
+            
             # Update timestamp attribute
             now = dt_util.utcnow()
             self._attr_extra_state_attributes["last_updated"] = now.isoformat()
-
+            
             self.async_write_ha_state()
 
         self.async_on_remove(
@@ -147,14 +147,14 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                     try:
                         lat = float(payload["latitude"])
                         lon = float(payload["longitude"])
-
+                        
                         # Validate coordinates
                         if -90 <= lat <= 90 and -180 <= lon <= 180:
                             self._latitude = lat
                             self._longitude = lon
                     except (ValueError, TypeError):
                         _LOGGER.warning("Invalid coordinates in payload: %s", payload)
-
+                        
             # If topic is for a single coordinate
             elif "latitude" in self._topic.lower() or "lat" in self._topic.lower():
                 try:
@@ -163,7 +163,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                         self._latitude = lat
                 except (ValueError, TypeError):
                     _LOGGER.warning("Invalid latitude value: %s", payload)
-
+                    
             elif "longitude" in self._topic.lower() or "long" in self._topic.lower() or "lon" in self._topic.lower():
                 try:
                     lon = float(payload)
@@ -171,7 +171,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                         self._longitude = lon
                 except (ValueError, TypeError):
                     _LOGGER.warning("Invalid longitude value: %s", payload)
-
+            
             # Process specific GPS-related topics
             elif "gpshdop" in self._topic.lower():
                 try:
@@ -191,7 +191,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                     self._attr_extra_state_attributes["gps_speed"] = value
                 except (ValueError, TypeError):
                     pass
-
+                    
         except Exception as ex:
             _LOGGER.exception("Error processing payload: %s", ex)
 
