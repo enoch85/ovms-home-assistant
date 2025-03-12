@@ -136,8 +136,24 @@ class TopicParser:
             category = determine_category_from_topic(parts)
 
             # Create entity name and add extra attributes
-            name = "_".join(parts) if parts else "unknown"
-            friendly_name = create_friendly_name(parts, metric_info)
+            raw_name = "_".join(parts) if parts else "unknown"
+            
+            # Get vehicle ID for entity naming
+            vehicle_id = self.config.get("vehicle_id", "")
+            
+            # FIX 1: Include vehicle_id in entity name
+            name = f"ovms_{vehicle_id}_{raw_name}"
+            
+            # FIX 2: Create more descriptive friendly name that includes metric info
+            if metric_info and "name" in metric_info:
+                metric_name = metric_info["name"]
+            else:
+                metric_name = parts[-1].replace("_", " ").title() if parts else "Unknown"
+            
+            # Format friendly name to include all relevant information
+            category_display = category.replace("_", " ").title()
+            friendly_name = f"{vehicle_id} {category_display} {metric_name}"
+            
             attributes = self._prepare_attributes(topic, category, parts, metric_info)
 
             # Special handling for latitude/longitude
