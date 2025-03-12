@@ -1613,10 +1613,17 @@ class OVMSMQTTClient:
                     await asyncio.sleep(60)
                     if self._shutting_down:
                         break
-                    
-                    # Force an update to ensure sensors stay active
-                    gps_topics_updated()
-                    _LOGGER.debug("Periodic GPS check completed")
+                
+                    # Get current values
+                    lat_value = self.topic_cache.get(self.latitude_topic, {}).get("payload", "unknown")
+                    lon_value = self.topic_cache.get(self.longitude_topic, {}).get("payload", "unknown")
+            
+                    # Only update if either sensor is unknown
+                    if lat_value in ("unknown", "unavailable", "") or lon_value in ("unknown", "unavailable", ""):
+                        _LOGGER.debug("Sensor(s) in unknown state, forcing update")
+                        gps_topics_updated()
+                    else:
+                        _LOGGER.debug("Periodic GPS check - sensors OK, no update needed")
                     
             except asyncio.CancelledError:
                 _LOGGER.debug("Periodic GPS check cancelled")
