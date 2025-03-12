@@ -181,46 +181,43 @@ async def async_setup_entry(
             _LOGGER.debug("Missing entity_type in data: %s", data)
             return
 
-        # For device_tracker, create a sensor version too if it's a GPS coordinate
-        # This ensures we have both a device_tracker and sensors for coordinates
-        if entity_type == "device_tracker":
-            # Check if this is a latitude or longitude topic
-            name = data.get("name", "").lower()
-            topic = data.get("topic", "").lower()
-
-            if any(keyword in name or keyword in topic for keyword in ["latitude", "lat", "longitude", "lon", "lng"]):
-                # Create a sensor version of this GPS entity
-                sensor_data = data.copy()
-                sensor_data["entity_type"] = "sensor"
-
-                # Create a unique_id for the sensor version
-                sensor_data["unique_id"] = data.get("unique_id", str(uuid.uuid4())) + "_sensor"
-
-                # Create and add the sensor
-                try:
-                    sensor = OVMSSensor(
-                        sensor_data["unique_id"],
-                        sensor_data.get("name", "unknown"),
-                        sensor_data.get("topic", ""),
-                        sensor_data.get("payload", ""),
-                        sensor_data.get("device_info", {}),
-                        sensor_data.get("attributes", {}),
-                        sensor_data.get("friendly_name"),
-                        hass,
-                    )
-                    async_add_entities([sensor])
-                    _LOGGER.info("Added sensor version of GPS entity: %s", sensor_data.get("name", "unknown"))
-                except Exception as ex:
-                    _LOGGER.error("Error creating sensor for GPS entity: %s", ex)
-
-            # Don't return here, let device_tracker continue with normal handling
-
-        # Skip if it's not a sensor (but don't log for device_tracker - that's handled elsewhere)
+        # Skip if it's not a sensor and not a special case GPS entity
         if entity_type != "sensor":
-            if entity_type != "device_tracker":  # Skip device_tracker silently
-                _LOGGER.debug("Skipping non-sensor entity: %s", entity_type)
+            # Check if this is actually a coordinate topic that should be a sensor
+            unique_id = data.get("unique_id", "")
+            if not (entity_type == "device_tracker" and ("_latitude_sensor" in unique_id or "_longitude_sensor" in unique_id)):
+                return
+
+        # Check if this is explicitly a sensor version of a GPS entity
+        unique_id = data.get("unique_id", "")
+        name = data.get("name", "").lower()
+        topic = data.get("topic", "").lower()
+        
+        is_gps_sensor = (
+            "_latitude_sensor" in unique_id or 
+            "_longitude_sensor" in unique_id or
+            any(keyword in name or keyword in topic for keyword in ["latitude", "lat", "longitude", "lon", "lng"])
+        )
+        
+        if is_gps_sensor:
+            _LOGGER.info("Adding GPS sensor: %s", data.get("friendly_name", data.get("name", "unknown")))
+            try:
+                sensor = OVMSSensor(
+                    data.get("unique_id", str(uuid.uuid4())),
+                    data.get("name", "unknown"),
+                    data.get("topic", ""),
+                    data.get("payload", ""),
+                    data.get("device_info", {}),
+                    data.get("attributes", {}),
+                    data.get("friendly_name"),
+                    hass,
+                )
+                async_add_entities([sensor])
+            except Exception as ex:
+                _LOGGER.error("Error creating GPS sensor: %s", ex)
             return
 
+        # Continue with normal sensor handling
         _LOGGER.info("Adding sensor: %s", data.get("name", "unknown"))
 
         # Handle cell sensors differently
@@ -245,23 +242,6 @@ async def async_setup_entry(
             except Exception as ex:  # pylint: disable=broad-except
                 _LOGGER.error("Error creating cell sensors: %s", ex)
             return
-
-        # Special handling for version/firmware topics to ensure they're associated with the vehicle
-        topic = data.get("topic", "")
-        if "version" in topic or "metric/m/version" in topic:
-            _LOGGER.debug("Version/firmware topic detected: %s", topic)
-            # Extract vehicle_id from device_info or try to determine from topic
-            vehicle_id = "unknown"
-            if "device_info" in data and "identifiers" in data["device_info"]:
-                # Try to extract from identifiers
-                identifiers = data["device_info"]["identifiers"]
-                for identifier in identifiers:
-                    if isinstance(identifier, tuple) and len(identifier) > 1:
-                        vehicle_id = identifier[1]
-                        break
-            
-            # Log to verify
-            _LOGGER.info("Assigning version topic %s to vehicle %s", topic, vehicle_id)
 
         try:
             sensor = OVMSSensor(
