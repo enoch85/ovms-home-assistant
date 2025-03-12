@@ -56,7 +56,7 @@ class TopicParser:
                 vehicle_id = self.config.get("vehicle_id", "")
                 attributes = {"topic": topic, "category": "diagnostic"}
                 # Ensure proper friendly name for status sensor (fixing issue #1)
-                friendly_name = f"OVMS {vehicle_id} Connection"
+                friendly_name = f"{vehicle_id} Connection"
                 return {
                     "entity_type": "binary_sensor",
                     "name": f"ovms_{vehicle_id}_status",
@@ -141,31 +141,48 @@ class TopicParser:
             # Get vehicle ID for entity naming
             vehicle_id = self.config.get("vehicle_id", "")
             
-            # FIX 1: Include vehicle_id in entity name
+            # Include vehicle_id in entity name
             name = f"ovms_{vehicle_id}_{raw_name}"
             
-            # FIX 2: Create more descriptive friendly name that includes metric info
+            # Create more descriptive friendly name that includes metric info
             if metric_info and "name" in metric_info:
                 metric_name = metric_info["name"]
             else:
                 metric_name = parts[-1].replace("_", " ").title() if parts else "Unknown"
             
-            # Format friendly name to include all relevant information
-            category_display = category.replace("_", " ").title()
-            friendly_name = f"{vehicle_id} {category_display} {metric_name}"
+            # Check for specific vehicle subsystem data (like VW eUP)
+            vehicle_type = ""
+            if "xvu" in raw_name.lower() or "eup" in raw_name.lower():
+                vehicle_type = "VW eUP! "
+            elif "eu3" in raw_name.lower() or "e.up3" in raw_name.lower():
+                vehicle_type = "VW e-Up3 "
+            elif "id3" in raw_name.lower() or "id.3" in raw_name.lower():
+                vehicle_type = "VW ID.3 "
+            elif "id4" in raw_name.lower() or "id.4" in raw_name.lower():
+                vehicle_type = "VW ID.4 "
+                
+            # Format friendly name to be descriptive without category for brevity
+            friendly_name = f"{vehicle_id} {vehicle_type}{metric_name}"
             
             attributes = self._prepare_attributes(topic, category, parts, metric_info)
 
             # Special handling for latitude/longitude
             if self._is_location_topic(parts, name, topic):
                 # Give it higher priority as this is for the device tracker
-                return {
+                location_data = {
                     "entity_type": "device_tracker",
                     "name": name,
                     "friendly_name": friendly_name,
                     "attributes": attributes,
                     "priority": 10,  # Higher priority for location data
                 }
+                
+                # Look for GPS signal quality if this is a location topic
+                gps_sq = self._find_gps_signal_quality(topic)
+                if gps_sq is not None:
+                    attributes["gps_accuracy"] = gps_sq
+                
+                return location_data
 
             return {
                 "entity_type": entity_type,
@@ -178,6 +195,12 @@ class TopicParser:
         except Exception as ex:
             _LOGGER.exception("Error parsing topic: %s", ex)
             return None
+
+    def _find_gps_signal_quality(self, topic: str) -> Optional[float]:
+        """Find GPS signal quality value for location accuracy."""
+        # This is a placeholder - in a real implementation, you would need access to the
+        # discovered topics and their values to look up GPS signal quality
+        return None
 
     def _is_location_topic(self, parts: List[str], name: str, topic: str) -> bool:
         """Check if topic is a location topic."""
