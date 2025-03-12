@@ -42,16 +42,16 @@ async def async_get_config_entry_diagnostics(
             "structure_prefix": mqtt_client.structure_prefix,
             "message_count": mqtt_client.message_count,
             "reconnect_count": mqtt_client.reconnect_count,
-            "pending_commands": len(mqtt_client.pending_commands),
+            "pending_commands": len(mqtt_client.command_handler.pending_commands),
             "rate_limiter": {
-                "calls_remaining": mqtt_client.command_limiter.calls_remaining(),
-                "max_calls": mqtt_client.command_limiter.max_calls,
-                "period": mqtt_client.command_limiter.period,
+                "calls_remaining": mqtt_client.command_handler.command_limiter.calls_remaining(),
+                "max_calls": mqtt_client.command_handler.command_limiter.max_calls,
+                "period": mqtt_client.command_handler.command_limiter.period,
             }
         },
         "entities": {
-            "total": len(mqtt_client.entity_registry),
-            "by_type": mqtt_client.entity_types,
+            "total": len(mqtt_client.entity_registry.get_all_entities()),
+            "by_type": mqtt_client.entity_registry.get_entity_stats(),
         },
     }
 
@@ -69,12 +69,12 @@ async def async_get_config_entry_diagnostics(
     # Include parsed topic information
     topic_parsing_examples = {}
     for topic in sample_topics[:3]:  # Take first 3 for parsing examples
-        entity_type, entity_info = mqtt_client._parse_topic(topic)
-        if entity_type and entity_info:
+        parsed_data = mqtt_client.topic_parser.parse_topic(topic, "")
+        if parsed_data:
             topic_parsing_examples[topic] = {
-                "entity_type": entity_type,
-                "name": entity_info.get("name", "unknown"),
-                "category": entity_info.get("attributes", {}).get("category", "unknown"),
+                "entity_type": parsed_data.get("entity_type", "unknown"),
+                "name": parsed_data.get("name", "unknown"),
+                "category": parsed_data.get("attributes", {}).get("category", "unknown"),
             }
 
     diagnostics_data["topic_parsing_examples"] = topic_parsing_examples
