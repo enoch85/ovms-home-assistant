@@ -89,6 +89,7 @@ class EntityFactory:
         try:
             unique_id = entity_data.get("unique_id")
             name = entity_data.get("name")
+            vehicle_id = self.config.get("vehicle_id", "")
 
             # Determine if this is latitude or longitude
             is_latitude = any(keyword in topic.lower() for keyword in ["latitude", "lat"])
@@ -101,7 +102,10 @@ class EntityFactory:
             # Create a corresponding sensor entity
             sensor_unique_id = f"{unique_id}_sensor"
             sensor_name = f"{name}_sensor"
-            sensor_friendly_name = f"{entity_data.get('friendly_name', name)} Sensor"
+            
+            # Make sure friendly name is also descriptive
+            friendly_name = entity_data.get('friendly_name', name)
+            sensor_friendly_name = f"{friendly_name} Sensor"
 
             sensor_data = {
                 "entity_type": "sensor",
