@@ -238,8 +238,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                     self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
                     
                 if coordinates_changed:
-                    _LOGGER.debug("Updated device tracker coordinates.", 
-                                 self._latitude, self._longitude)
+                    _LOGGER.debug("Updated device tracker coordinates.")
                     
         except Exception as ex:
             _LOGGER.exception("Error processing payload: %s", ex)
