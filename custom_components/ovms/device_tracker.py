@@ -1,181 +1,216 @@
-"""Device tracker for OVMS Integration."""
+"""Support for OVMS location tracking."""
 import logging
-import json
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, List
 
 from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
-from homeassistant.core import callback
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity import async_generate_entity_id
+from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
     LOGGER_NAME,
-    SIGNAL_UPDATE_ENTITY,
+    SIGNAL_ADD_ENTITIES,
+    SIGNAL_UPDATE_ENTITY
 )
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 
-async def async_setup_entry(hass, config_entry, async_add_entities):
-    """Set up device tracker for OVMS component."""
-    _LOGGER.debug("Setting up OVMS device trackers")
-
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities
+) -> None:
+    """Set up OVMS device tracker based on a config entry."""
     @callback
-    def async_add_device_tracker(entity_data):
-        """Add OVMS device tracker."""
+    def async_add_device_tracker(data: Dict[str, Any]) -> None:
+        """Add device tracker based on discovery data."""
         try:
-            if entity_data["entity_type"] != "device_tracker":
+            if data["entity_type"] != "device_tracker":
                 return
 
-            _LOGGER.debug("Adding OVMS device tracker: %s", entity_data["friendly_name"])
-            device_tracker = OVMSDeviceTracker(
-                entity_data["unique_id"],
-                entity_data["name"],
-                entity_data["friendly_name"],
-                entity_data["device_info"],
-                entity_data["attributes"],
+            _LOGGER.info("Adding device tracker: %s", data.get("friendly_name", data.get("name", "unknown")))
+
+            tracker = OVMSDeviceTracker(
+                data.get("unique_id", ""),
+                data.get("name", ""),
+                data.get("topic", ""),
+                data.get("payload", {}),
+                data.get("device_info", {}),
+                data.get("attributes", {}),
+                hass,
+                data.get("friendly_name"),
             )
-            async_add_entities([device_tracker])
+
+            async_add_entities([tracker])
         except Exception as ex:
             _LOGGER.exception("Error adding device tracker: %s", ex)
 
-    # Subscribe to new entities being added
-    config_entry.async_on_unload(
-        async_dispatcher_connect(
-            hass,
-            "ovms_add_entities",
-            async_add_device_tracker,
-        )
+    # Subscribe to discovery events
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, SIGNAL_ADD_ENTITIES, async_add_device_tracker)
     )
 
 
-class OVMSDeviceTracker(TrackerEntity):
-    """Represent an OVMS Device Tracker."""
+class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
+    """OVMS Device Tracker Entity."""
 
     def __init__(
         self,
         unique_id: str,
         name: str,
-        friendly_name: str,
-        device_info: Dict[str, Any],
+        topic: str,
+        initial_payload: Any,
+        device_info: DeviceInfo,
         attributes: Dict[str, Any],
+        hass: Optional[HomeAssistant] = None,
+        friendly_name: Optional[str] = None,
     ) -> None:
         """Initialize the device tracker."""
-        self._unique_id = unique_id
-        self._name = name
-        self._friendly_name = friendly_name
-        self._device_info = device_info
-        self._attributes = attributes or {}
+        self._attr_unique_id = unique_id
+        self._internal_name = name
+        self._attr_name = friendly_name or name.replace("_", " ").title()
+        self._topic = topic
+        self._attr_device_info = device_info
+        self._attr_extra_state_attributes = attributes.copy() if attributes else {}
+        if topic:
+            self._attr_extra_state_attributes["topic"] = topic
+        if not "last_updated" in self._attr_extra_state_attributes:
+            self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
+
+        self.hass = hass
         self._latitude = None
         self._longitude = None
-        self._connected = False
+        self._source_type = SourceType.GPS
 
-        # Safe store for additional attributes
-        self._extra_state_attributes = {}
-        for key, value in self._attributes.items():
-            self._extra_state_attributes[key] = value
+        # Process initial payload
+        if initial_payload:
+            self._process_payload(initial_payload)
+
+        # Explicitly set entity_id if needed
+        if hass:
+            self.entity_id = async_generate_entity_id(
+                "device_tracker.{}",
+                name.lower(),
+                hass=hass,
+            )
 
     async def async_added_to_hass(self) -> None:
-        """Register callbacks."""
-        try:
-            _LOGGER.debug("Device tracker %s added to hass", self._name)
+        """Subscribe to updates."""
+        await super().async_added_to_hass()
 
-            # Register update callback
-            self.async_on_remove(
-                async_dispatcher_connect(
-                    self.hass,
-                    f"{SIGNAL_UPDATE_ENTITY}_{self._unique_id}",
-                    self.update_state,
-                )
-            )
-        except Exception as ex:
-            _LOGGER.exception("Error in async_added_to_hass: %s", ex)
+        # Restore previous state if available
+        if (state := await self.async_get_last_state()) is not None:
+            # Restore attributes if available
+            if state.attributes:
+                # Keep specific attributes that are relevant
+                for attr in ["latitude", "longitude", "source_type", "gps_accuracy"]:
+                    if attr in state.attributes:
+                        setattr(self, f"_{attr}", state.attributes[attr])
 
-    @callback
-    def update_state(self, payload) -> None:
-        """Update the entity state based on payload data."""
-        try:
-            _LOGGER.debug("Device tracker update received")
+                # Don't overwrite entity attributes
+                saved_attributes = {
+                    k: v for k, v in state.attributes.items()
+                    if k not in ["latitude", "longitude", "source_type", "gps_accuracy"]
+                }
+                self._attr_extra_state_attributes.update(saved_attributes)
 
-            # Handle both string and dictionary payloads
-            if isinstance(payload, str):
-                try:
-                    data = json.loads(payload)
-                except json.JSONDecodeError:
-                    _LOGGER.error("Invalid JSON payload: %s", payload)
-                    return
-            else:
-                data = payload
+        @callback
+        def update_state(payload: Any) -> None:
+            """Update the tracker state."""
+            self._process_payload(payload)
 
-            # Process location data
-            if isinstance(data, dict):
-                if "latitude" in data and "longitude" in data:
-                    try:
-                        self._latitude = float(data["latitude"])
-                        self._longitude = float(data["longitude"])
-                        self._connected = True
-                        _LOGGER.debug("Location updated successfully")
-                    except (ValueError, TypeError) as err:
-                        _LOGGER.error("Invalid coordinates: %s", err)
-                        return
+            # Update timestamp attribute
+            now = dt_util.utcnow()
+            self._attr_extra_state_attributes["last_updated"] = now.isoformat()
 
-                # Update any extra attributes
-                for key, value in data.items():
-                    if key not in ["latitude", "longitude"]:
-                        self._extra_state_attributes[key] = value
-
-            # Write state to HA
             self.async_write_ha_state()
+
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
+                update_state,
+            )
+        )
+
+    def _process_payload(self, payload: Any) -> None:
+        """Process the payload and update coordinates."""
+        try:
+            # If payload is a dictionary, extract coordinates directly
+            if isinstance(payload, dict):
+                if "latitude" in payload and "longitude" in payload:
+                    try:
+                        lat = float(payload["latitude"])
+                        lon = float(payload["longitude"])
+
+                        # Validate coordinates
+                        if -90 <= lat <= 90 and -180 <= lon <= 180:
+                            self._latitude = lat
+                            self._longitude = lon
+                    except (ValueError, TypeError):
+                        _LOGGER.warning("Invalid coordinates in payload: %s", payload)
+
+            # If topic is for a single coordinate
+            elif "latitude" in self._topic.lower() or "lat" in self._topic.lower():
+                try:
+                    lat = float(payload)
+                    if -90 <= lat <= 90:
+                        self._latitude = lat
+                except (ValueError, TypeError):
+                    _LOGGER.warning("Invalid latitude value: %s", payload)
+
+            elif "longitude" in self._topic.lower() or "long" in self._topic.lower() or "lon" in self._topic.lower():
+                try:
+                    lon = float(payload)
+                    if -180 <= lon <= 180:
+                        self._longitude = lon
+                except (ValueError, TypeError):
+                    _LOGGER.warning("Invalid longitude value: %s", payload)
+
+            # Process specific GPS-related topics
+            elif "gpshdop" in self._topic.lower():
+                try:
+                    value = float(payload) if payload else None
+                    self._attr_extra_state_attributes["gps_hdop"] = value
+                except (ValueError, TypeError):
+                    pass
+            elif "gpssq" in self._topic.lower():
+                try:
+                    value = float(payload) if payload else None
+                    self._attr_extra_state_attributes["gps_signal_quality"] = value
+                except (ValueError, TypeError):
+                    pass
+            elif "gpsspeed" in self._topic.lower():
+                try:
+                    value = float(payload) if payload else None
+                    self._attr_extra_state_attributes["gps_speed"] = value
+                except (ValueError, TypeError):
+                    pass
+
         except Exception as ex:
-            _LOGGER.exception("Error updating device tracker state: %s", ex)
-
-    @property
-    def unique_id(self) -> str:
-        """Return a unique identifier for this device tracker."""
-        return self._unique_id
-
-    @property
-    def name(self) -> str:
-        """Return the name of the device tracker."""
-        return self._friendly_name
-
-    @property
-    def device_info(self) -> Dict[str, Any]:
-        """Return device information."""
-        return self._device_info
-
-    @property
-    def source_type(self) -> str:
-        """Return the source type of the device tracker."""
-        return SourceType.GPS
+            _LOGGER.exception("Error processing payload: %s", ex)
 
     @property
     def latitude(self) -> Optional[float]:
-        """Return latitude value of the device."""
+        """Return latitude value."""
         return self._latitude
 
     @property
     def longitude(self) -> Optional[float]:
-        """Return longitude value of the device."""
+        """Return longitude value."""
         return self._longitude
 
     @property
+    def source_type(self) -> SourceType:
+        """Return the source type of the device tracker."""
+        return self._source_type
+
+    @property
     def icon(self) -> str:
-        """Return the icon to use in the frontend, if any."""
-        return "mdi:car-electric"
-
-    @property
-    def extra_state_attributes(self) -> Dict[str, Any]:
-        """Return entity specific state attributes."""
-        return self._extra_state_attributes
-
-    @property
-    def force_update(self) -> bool:
-        """Disable forced updates."""
-        return False
-
-    @property
-    def should_poll(self) -> bool:
-        """No polling needed."""
-        return False
+        """Return the icon."""
+        return "mdi:car-connected"

@@ -177,8 +177,48 @@ async def async_setup_entry(
             return
 
         entity_type = data.get("entity_type")
-        if not entity_type or entity_type != "sensor":
-            _LOGGER.debug("Skipping non-sensor entity: %s", entity_type)
+        if not entity_type:
+            _LOGGER.debug("Missing entity_type in data: %s", data)
+            return
+
+        # For device_tracker, create a sensor version too if it's a GPS coordinate
+        # This ensures we have both a device_tracker and sensors for coordinates
+        if entity_type == "device_tracker":
+            # Check if this is a latitude or longitude topic
+            name = data.get("name", "").lower()
+            topic = data.get("topic", "").lower()
+
+            if any(keyword in name or keyword in topic for keyword in ["latitude", "lat", "longitude", "lon", "lng"]):
+                # Create a sensor version of this GPS entity
+                sensor_data = data.copy()
+                sensor_data["entity_type"] = "sensor"
+
+                # Create a unique_id for the sensor version
+                sensor_data["unique_id"] = data.get("unique_id", str(uuid.uuid4())) + "_sensor"
+
+                # Create and add the sensor
+                try:
+                    sensor = OVMSSensor(
+                        sensor_data["unique_id"],
+                        sensor_data.get("name", "unknown"),
+                        sensor_data.get("topic", ""),
+                        sensor_data.get("payload", ""),
+                        sensor_data.get("device_info", {}),
+                        sensor_data.get("attributes", {}),
+                        sensor_data.get("friendly_name"),
+                        hass,
+                    )
+                    async_add_entities([sensor])
+                    _LOGGER.info("Added sensor version of GPS entity: %s", sensor_data.get("name", "unknown"))
+                except Exception as ex:
+                    _LOGGER.error("Error creating sensor for GPS entity: %s", ex)
+
+            # Don't return here, let device_tracker continue with normal handling
+
+        # Skip if it's not a sensor (but don't log for device_tracker - that's handled elsewhere)
+        if entity_type != "sensor":
+            if entity_type != "device_tracker":  # Skip device_tracker silently
+                _LOGGER.debug("Skipping non-sensor entity: %s", entity_type)
             return
 
         _LOGGER.info("Adding sensor: %s", data.get("name", "unknown"))
@@ -473,6 +513,17 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_device_class = None
             self._attr_state_class = None
             self._attr_icon = "mdi:timer-outline"
+            return
+
+        # Special handling for GPS coordinates
+        name_lower = self._internal_name.lower()
+        if "latitude" in name_lower or "lat" in name_lower:
+            self._attr_icon = "mdi:latitude"
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            return
+        elif "longitude" in name_lower or "lon" in name_lower or "lng" in name_lower:
+            self._attr_icon = "mdi:longitude"
+            self._attr_state_class = SensorStateClass.MEASUREMENT
             return
 
         # Try to find matching metric by converting topic to dot notation
