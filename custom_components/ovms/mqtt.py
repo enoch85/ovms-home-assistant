@@ -548,6 +548,74 @@ class OVMSMQTTClient:
             # Fallback to a simple default
             return f"{prefix}/{vehicle_id}"
 
+    def _update_firmware_version(self, device_id: str, version: str) -> None:
+        """Update the firmware version in the device registry."""
+        try:
+            device_registry = dr.async_get(self.hass)
+
+            # Create identifier tuple
+            identifier = (DOMAIN, device_id)
+
+            # Get device and update firmware version
+            device_entry = device_registry.async_get_device({identifier})
+
+            if device_entry:
+                _LOGGER.info("Updating device %s firmware version to %s", device_id, version)
+                device_registry.async_update_device(
+                    device_entry.id, sw_version=version
+                )
+            else:
+                # Log that device wasn't found
+                _LOGGER.debug("Device not found for ID %s, will retry later", device_id)
+                self.hass.async_create_task(self._retry_firmware_update(device_id, version))
+        except Exception as ex:
+            _LOGGER.exception("Error updating firmware version: %s", ex)
+
+    async def _retry_firmware_update(self, device_id, version, attempts=3):
+        """Retry firmware update after a delay."""
+        for attempt in range(attempts):
+            await asyncio.sleep(5 * (attempt + 1))  # Increasing delay
+            try:
+                device_registry = dr.async_get(self.hass)
+                device_entry = device_registry.async_get_device({(DOMAIN, device_id)})
+                if device_entry:
+                    device_registry.async_update_device(
+                        device_entry.id, sw_version=version
+                    )
+                    _LOGGER.info("Successfully updated firmware version to %s on retry", version)
+                    return
+            except Exception as ex:  # pylint: disable=broad-except
+                _LOGGER.error("Error during firmware update retry: %s", ex)
+
+        _LOGGER.warning("Failed to update firmware version after %d attempts", attempts)
+
+    @callback
+    def _process_version_message(self, topic: str, payload: str) -> None:
+        """Process firmware version from MQTT message."""
+        try:
+            # Check if this is a firmware version message
+            if not payload or not isinstance(payload, str):
+                return
+
+            # Skip if not a version topic
+            if not any(version_key in topic.lower() for version_key in [
+                "/version", "m.version", "m/version", "firmware"
+            ]):
+                return
+
+            # Get vehicle ID from config
+            vehicle_id = self.config.get("vehicle_id", "")
+            if not vehicle_id:
+                return
+
+            # Update firmware version
+            _LOGGER.debug("Detected firmware version topic: %s with value: %s",
+                         topic, payload)
+            self._update_firmware_version(vehicle_id, payload)
+
+        except Exception as ex:
+            _LOGGER.exception("Error processing version message: %s", ex)
+
     async def _async_process_message(self, msg) -> None:
         """Process an incoming MQTT message."""
         try:
@@ -571,10 +639,9 @@ class OVMSMQTTClient:
                 return
 
             # Check if this is the firmware version topic and update device info
-            if "metric/m/version" in topic:
-                _LOGGER.debug("Firmware version received: %s", payload)
-                device_id = self.config.get(CONF_VEHICLE_ID)
-                self._update_firmware_version(device_id, payload)
+            if "m/version" in topic or "metric/m/version" in topic:
+                vehicle_id = self.config.get("vehicle_id")
+                self._process_version_message(topic, payload)
 
             # Store in cache
             self.topic_cache[topic] = {
@@ -621,41 +688,6 @@ class OVMSMQTTClient:
             "client/rr/command" in topic or
             "client/rr/response" in topic
         )
-
-    def _update_firmware_version(self, device_id: str, version: str) -> None:
-        """Update the firmware version in the device registry."""
-        try:
-            device_registry = dr.async_get(self.hass)
-            device_entry = device_registry.async_get_device({(DOMAIN, device_id)})
-            if device_entry:
-                device_registry.async_update_device(
-                    device_entry.id, sw_version=version
-                )
-                _LOGGER.info("Updated firmware version to %s", version)
-            else:
-                # Device not registered yet, retry later
-                _LOGGER.debug("Device not registered yet, will try again later")
-                asyncio.create_task(self._retry_firmware_update(device_id, version))
-        except Exception as ex:  # pylint: disable=broad-except
-            _LOGGER.error("Error updating firmware version: %s", ex)
-
-    async def _retry_firmware_update(self, device_id, version, attempts=3):
-        """Retry firmware update after a delay."""
-        for attempt in range(attempts):
-            await asyncio.sleep(5 * (attempt + 1))  # Increasing delay
-            try:
-                device_registry = dr.async_get(self.hass)
-                device_entry = device_registry.async_get_device({(DOMAIN, device_id)})
-                if device_entry:
-                    device_registry.async_update_device(
-                        device_entry.id, sw_version=version
-                    )
-                    _LOGGER.info("Successfully updated firmware version to %s on retry", version)
-                    return
-            except Exception as ex:  # pylint: disable=broad-except
-                _LOGGER.error("Error during firmware update retry: %s", ex)
-
-        _LOGGER.warning("Failed to update firmware version after %d attempts", attempts)
 
     def _is_response_topic(self, topic: str) -> bool:
         """Check if the topic is a response topic."""
@@ -753,6 +785,7 @@ class OVMSMQTTClient:
                         entity_category = part.lower()
                         break
 
+            # Extract the actual metric path
             # Extract the actual metric path (everything after the category)
             metric_path = ""
             metric_parts = []
