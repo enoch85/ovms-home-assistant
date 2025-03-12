@@ -1626,5 +1626,5 @@ class OVMSMQTTClient:
                 pass
             except Exception as ex:
                 _LOGGER.exception("Error in periodic GPS check: %s", ex)
-      # Start the periodic updater task
-      self.hass.loop.create_task(periodic_check())
+        # Start the periodic updater task
+        self.hass.loop.create_task(periodic_check())
