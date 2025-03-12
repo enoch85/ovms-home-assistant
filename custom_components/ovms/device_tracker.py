@@ -134,7 +134,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         def update_state(payload: Any) -> None:
             """Update the tracker state."""
             self._process_payload(payload)
-            
+
             # Also update corresponding sensor entities
             try:
                 # Signal sensor entities to update
@@ -150,7 +150,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 )
             except Exception as ex:
                 _LOGGER.exception("Error updating sensor entities: %s", ex)
-                
+
             self.async_write_ha_state()
 
         self.async_on_remove(

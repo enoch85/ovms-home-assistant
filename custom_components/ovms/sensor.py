@@ -183,9 +183,9 @@ async def async_setup_entry(
 
         # Check if this is a device_tracker entity
         if entity_type == "device_tracker":
-            _LOGGER.info("Creating sensor versions of device tracker: %s", 
+            _LOGGER.info("Creating sensor versions of device tracker: %s",
                         data.get("friendly_name", data.get("name", "unknown")))
-            
+
             try:
                 # Extract initial values from payload
                 payload = data.get("payload", {})
@@ -195,7 +195,7 @@ async def async_setup_entry(
                 else:
                     lat_value = "unknown"
                     lon_value = "unknown"
-                
+
                 # Create a latitude sensor
                 lat_sensor = OVMSSensor(
                     f"{data.get('unique_id', str(uuid.uuid4()))}_latitude_sensor",
@@ -207,7 +207,7 @@ async def async_setup_entry(
                     f"{data.get('friendly_name', data.get('name', 'unknown'))} Latitude",
                     hass,
                 )
-                
+
                 # Create a longitude sensor
                 lon_sensor = OVMSSensor(
                     f"{data.get('unique_id', str(uuid.uuid4()))}_longitude_sensor",
@@ -219,11 +219,11 @@ async def async_setup_entry(
                     f"{data.get('friendly_name', data.get('name', 'unknown'))} Longitude",
                     hass,
                 )
-                
+
                 async_add_entities([lat_sensor, lon_sensor])
             except Exception as ex:
                 _LOGGER.error("Error creating sensor versions of device tracker: %s", ex)
-            
+
             return
 
         # Skip if it's not a sensor
