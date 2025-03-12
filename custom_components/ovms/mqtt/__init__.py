@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Any, Optional, Set
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 
 from ..const import (
     DOMAIN,
@@ -69,10 +69,12 @@ class OVMSMQTTClient:
         if not await self.connection_manager.async_setup():
             return False
 
-        # Subscribe to platforms loaded event
-        self.hass.helpers.dispatcher.async_dispatcher_connect(
-            SIGNAL_PLATFORMS_LOADED, self._async_platforms_loaded
-        )
+        # Subscribe to platforms loaded event - Fixed dispatcher usage
+        self._cleanup_listeners = [
+            async_dispatcher_connect(
+                self.hass, SIGNAL_PLATFORMS_LOADED, self._async_platforms_loaded
+            )
+        ]
 
         # Connection manager handles MQTT connection
         if not await self.connection_manager.async_connect():
@@ -165,6 +167,11 @@ class OVMSMQTTClient:
     async def async_shutdown(self) -> None:
         """Shutdown the MQTT client."""
         self._shutting_down = True
+        
+        # Clean up listeners
+        for listener_remove in getattr(self, "_cleanup_listeners", []):
+            listener_remove()
+            
         await self.connection_manager.async_shutdown()
         
     def get_gps_accuracy(self, vehicle_id: Optional[str] = None) -> Optional[float]:
