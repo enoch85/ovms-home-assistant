@@ -681,7 +681,7 @@ class OVMSMQTTClient:
                         f"{SIGNAL_UPDATE_ENTITY}_{entity_id}",
                         payload,
                     )
-                    
+
                     # Also update the sensor version
                     sensor_entity_id = f"{entity_id}_sensor"
                     async_dispatcher_send(
@@ -852,7 +852,7 @@ class OVMSMQTTClient:
                 "device_info": self._get_device_info(),
                 "attributes": entity_info["attributes"],
             }
-            
+
             # Check if a sensor version already exists for this topic
             sensor_entity_id = f"{unique_id}_sensor"
             sensor_exists = False
@@ -865,7 +865,7 @@ class OVMSMQTTClient:
             if not sensor_exists:
                 sensor_name = f"{entity_name}_sensor"
                 sensor_friendly_name = f"{friendly_name} Sensor"
-                
+
                 sensor_entity_data = {
                     "topic": topic,
                     "payload": payload,
@@ -880,7 +880,7 @@ class OVMSMQTTClient:
                         "original_entity_type": entity_type
                     },
                 }
-                
+
                 # Create the sensor entity
                 if self.platforms_loaded:
                     async_dispatcher_send(
@@ -905,7 +905,7 @@ class OVMSMQTTClient:
                     SIGNAL_ADD_ENTITIES,
                     entity_data,
                 )
-                
+
                 # Then create the sensor version if it doesn't already exist
                 if not sensor_exists:
                     async_dispatcher_send(
