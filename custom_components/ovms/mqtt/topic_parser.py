@@ -162,7 +162,7 @@ class TopicParser:
                 vehicle_type = "VW ID.4 "
                 
             # Format friendly name to be descriptive without category for brevity
-            friendly_name = f"{vehicle_id} {vehicle_type}{metric_name}"
+            friendly_name = f"{vehicle_type}{metric_name}"
             
             attributes = self._prepare_attributes(topic, category, parts, metric_info)
 
