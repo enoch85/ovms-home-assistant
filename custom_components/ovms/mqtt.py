@@ -856,13 +856,13 @@ class OVMSMQTTClient:
             # Check if a sensor version already exists for this topic
             sensor_entity_id = f"{unique_id}_sensor"
             sensor_exists = False
-            
+
             # Check by entity ID in registry
             for existing_id in self.entity_registry.values():
                 if existing_id == sensor_entity_id:
                     sensor_exists = True
                     break
-            
+
             # Also check by unique_id prefix (without the _sensor suffix)
             if not sensor_exists:
                 for existing_id in self.entity_registry.values():
@@ -870,7 +870,7 @@ class OVMSMQTTClient:
                     if existing_id.startswith(unique_id) and existing_id != unique_id:
                         sensor_exists = True
                         break
-            
+
             # Create sensor version if it doesn't already exist
             if not sensor_exists:
                 sensor_name = f"{entity_name}_sensor"
