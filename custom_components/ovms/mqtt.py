@@ -1,4 +1,5 @@
 """MQTT Client for OVMS Integration."""
+
 import asyncio
 import logging
 import re
@@ -17,7 +18,10 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_send, async_dispatcher_connect
+from homeassistant.helpers.dispatcher import (
+    async_dispatcher_send,
+    async_dispatcher_connect,
+)
 from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
 
@@ -69,14 +73,19 @@ def ensure_serializable(obj):
         return [ensure_serializable(item) for item in obj]
     elif isinstance(obj, tuple):
         return [ensure_serializable(item) for item in obj]
-    elif hasattr(obj, '__dict__'):  # Convert custom objects to dict
-        return {k: ensure_serializable(v) for k, v in obj.__dict__.items()
-                if not k.startswith('_')}
-    elif obj.__class__.__name__ == 'ReasonCodes':  # Handle MQTT ReasonCodes specifically
+    elif hasattr(obj, "__dict__"):  # Convert custom objects to dict
+        return {
+            k: ensure_serializable(v)
+            for k, v in obj.__dict__.items()
+            if not k.startswith("_")
+        }
+    elif (
+        obj.__class__.__name__ == "ReasonCodes"
+    ):  # Handle MQTT ReasonCodes specifically
         try:
             return [int(code) for code in obj]  # Convert to list of integers
         except (ValueError, TypeError):
-            return str(obj)   # Fall back to string representation
+            return str(obj)  # Fall back to string representation
     return obj
 
 
@@ -104,7 +113,7 @@ class OVMSMQTTClient:
         # Set up rate limiter
         self.command_limiter = CommandRateLimiter(
             max_calls=DEFAULT_COMMAND_RATE_LIMIT,
-            period=DEFAULT_COMMAND_RATE_PERIOD
+            period=DEFAULT_COMMAND_RATE_PERIOD,
         )
 
         # Debug counters
@@ -169,20 +178,20 @@ class OVMSMQTTClient:
 
         # Set up listener for when all platforms are loaded
         async_dispatcher_connect(
-            self.hass,
-            SIGNAL_PLATFORMS_LOADED,
-            self._async_platforms_loaded
+            self.hass, SIGNAL_PLATFORMS_LOADED, self._async_platforms_loaded
         )
 
         # Start the cleanup task for pending commands
-        self._cleanup_task = asyncio.create_task(self._async_cleanup_pending_commands())
+        self._cleanup_task = asyncio.create_task(
+            self._async_cleanup_pending_commands()
+        )
 
         return True
 
     async def _create_mqtt_client(self) -> mqtt.Client:
         """Create and configure the MQTT client."""
         client_id = self.config.get(CONF_CLIENT_ID)
-        protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
+        protocol = mqtt.MQTTv5 if hasattr(mqtt, "MQTTv5") else mqtt.MQTTv311
 
         _LOGGER.debug("Creating MQTT client with ID: %s", client_id)
         try:
@@ -197,7 +206,8 @@ class OVMSMQTTClient:
             password = self.config.get(CONF_PASSWORD)
             _LOGGER.debug("Setting username and password for MQTT client")
             client.username_pw_set(
-                username=username, password=password,
+                username=username,
+                password=password,
             )
 
         # Configure TLS if needed
@@ -205,10 +215,13 @@ class OVMSMQTTClient:
             _LOGGER.debug("Enabling SSL/TLS for port 8883")
             # pylint: disable=import-outside-toplevel
             import ssl
+
             verify_ssl = self.config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
 
             # Use executor to avoid blocking the event loop
-            context = await self.hass.async_add_executor_job(ssl.create_default_context)
+            context = await self.hass.async_add_executor_job(
+                ssl.create_default_context
+            )
 
             # Allow self-signed certificates if verification is disabled
             if not verify_ssl:
@@ -224,13 +237,22 @@ class OVMSMQTTClient:
         will_qos = self.config.get(CONF_QOS, 1)
         will_retain = True
 
-        client.will_set(self._status_topic, will_payload, will_qos, will_retain)
+        client.will_set(
+            self._status_topic, will_payload, will_qos, will_retain
+        )
 
         # Add MQTT v5 properties when available
-        if hasattr(mqtt, 'MQTTv5') and hasattr(mqtt, 'Properties') and hasattr(mqtt, 'PacketTypes'):
+        if (
+            hasattr(mqtt, "MQTTv5")
+            and hasattr(mqtt, "Properties")
+            and hasattr(mqtt, "PacketTypes")
+        ):
             try:
                 properties = mqtt.Properties(mqtt.PacketTypes.CONNECT)
-                properties.UserProperty = ("client_type", "home_assistant_ovms")
+                properties.UserProperty = (
+                    "client_type",
+                    "home_assistant_ovms",
+                )
                 properties.UserProperty = ("version", "1.0.0")
                 client.connect_properties = properties
             except (TypeError, AttributeError) as ex:
@@ -244,11 +266,14 @@ class OVMSMQTTClient:
         # pylint: disable=unused-argument
 
         # Handle different MQTT protocol versions
-        if hasattr(mqtt, 'MQTTv5'):
+        if hasattr(mqtt, "MQTTv5"):
+
             def on_connect(client, userdata, flags, rc, properties=None):
                 """Handle connection result."""
                 self._on_connect_callback(client, userdata, flags, rc)
+
         else:
+
             def on_connect(client, userdata, flags, rc):
                 """Handle connection result for MQTT v3."""
                 self._on_connect_callback(client, userdata, flags, rc)
@@ -273,7 +298,9 @@ class OVMSMQTTClient:
                         self.hass.loop,
                     )
             else:
-                _LOGGER.debug("Disconnected during shutdown, not attempting reconnect")
+                _LOGGER.debug(
+                    "Disconnected during shutdown, not attempting reconnect"
+                )
 
         def on_message(client, userdata, msg):
             """Handle incoming messages."""
@@ -286,7 +313,7 @@ class OVMSMQTTClient:
                 # Try to decode payload for debug logging
                 if _LOGGER.isEnabledFor(logging.DEBUG):
                     try:
-                        payload_str = msg.payload.decode('utf-8')
+                        payload_str = msg.payload.decode("utf-8")
                         if len(payload_str) > 200:
                             payload_preview = f"{payload_str[:200]}..."
                         else:
@@ -308,7 +335,11 @@ class OVMSMQTTClient:
             # Convert ReasonCodes to a serializable format
             try:
                 serialized_qos = ensure_serializable(granted_qos)
-                _LOGGER.debug("Subscription confirmed. MID: %s, QoS: %s", mid, serialized_qos)
+                _LOGGER.debug(
+                    "Subscription confirmed. MID: %s, QoS: %s",
+                    mid,
+                    serialized_qos,
+                )
             except Exception as ex:
                 _LOGGER.exception("Error in subscription handler: %s", ex)
 
@@ -318,7 +349,7 @@ class OVMSMQTTClient:
         self.client.on_message = on_message
 
         # Set the subscription callback with protocol version handling
-        if hasattr(mqtt, 'MQTTv5'):
+        if hasattr(mqtt, "MQTTv5"):
             self.client.on_subscribe = on_subscribe
         else:
             # For MQTT v3.1.1
@@ -326,19 +357,29 @@ class OVMSMQTTClient:
                 try:
                     on_subscribe(client, userdata, mid, granted_qos, None)
                 except Exception as ex:
-                    _LOGGER.exception("Error in v3.1.1 subscription handler: %s", ex)
+                    _LOGGER.exception(
+                        "Error in v3.1.1 subscription handler: %s", ex
+                    )
+
             self.client.on_subscribe = on_subscribe_v311
-def _on_connect_callback(self, client, userdata, flags, rc):
+
+    def _on_connect_callback(self, client, userdata, flags, rc):
         """Common connection callback for different MQTT versions."""
         try:
-            if hasattr(mqtt, 'ReasonCodes'):
+            if hasattr(mqtt, "ReasonCodes"):
                 try:
                     reason_code = mqtt.ReasonCodes(mqtt.CMD_CONNACK, rc)
-                    _LOGGER.info("Connected to MQTT broker with result: %s", reason_code)
+                    _LOGGER.info(
+                        "Connected to MQTT broker with result: %s", reason_code
+                    )
                 except (TypeError, AttributeError):
-                    _LOGGER.info("Connected to MQTT broker with result code: %s", rc)
+                    _LOGGER.info(
+                        "Connected to MQTT broker with result code: %s", rc
+                    )
             else:
-                _LOGGER.info("Connected to MQTT broker with result code: %s", rc)
+                _LOGGER.info(
+                    "Connected to MQTT broker with result code: %s", rc
+                )
 
             if rc == 0:
                 self.connected = True
@@ -353,7 +394,7 @@ def _on_connect_callback(self, client, userdata, flags, rc):
                         self._status_topic,
                         self._connected_payload,
                         qos=self.config.get(CONF_QOS, 1),
-                        retain=True
+                        retain=True,
                     )
             else:
                 self.connected = False
@@ -404,12 +445,14 @@ def _on_connect_callback(self, client, userdata, flags, rc):
         if self.reconnect_count > MAX_RECONNECTION_ATTEMPTS:
             _LOGGER.error(
                 "Maximum reconnection attempts (%d) reached, giving up",
-                MAX_RECONNECTION_ATTEMPTS
+                MAX_RECONNECTION_ATTEMPTS,
             )
             return
 
         # Calculate backoff time based on reconnect count
-        backoff = min(30, 2 ** min(self.reconnect_count, 5))  # Cap at 30 seconds
+        backoff = min(
+            30, 2 ** min(self.reconnect_count, 5)
+        )  # Cap at 30 seconds
         reconnect_msg = f"Reconnecting in {backoff} seconds (attempt #{self.reconnect_count})"
         _LOGGER.info(reconnect_msg)
 
@@ -421,9 +464,9 @@ def _on_connect_callback(self, client, userdata, flags, rc):
                 return
 
             # Use clean_session=False for persistent sessions
-            if hasattr(mqtt, 'MQTTv5'):
+            if hasattr(mqtt, "MQTTv5"):
                 try:
-                    client_options = {'clean_start': False}
+                    client_options = {"clean_start": False}
                     await self.hass.async_add_executor_job(
                         self.client.reconnect, **client_options
                     )
@@ -433,9 +476,7 @@ def _on_connect_callback(self, client, userdata, flags, rc):
                         self.client.reconnect
                     )
             else:
-                await self.hass.async_add_executor_job(
-                    self.client.reconnect
-                )
+                await self.hass.async_add_executor_job(self.client.reconnect)
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.exception("Failed to reconnect to MQTT broker: %s", ex)
             # Schedule another reconnect attempt
@@ -460,19 +501,25 @@ def _on_connect_callback(self, client, userdata, flags, rc):
                     # Check if command is older than 5 minutes
                     if current_time - command_data["timestamp"] > 300:
                         expired_commands.append(command_id)
-                        _LOGGER.debug("Cleaning up expired command: %s", command_id)
+                        _LOGGER.debug(
+                            "Cleaning up expired command: %s", command_id
+                        )
 
                 # Remove expired commands
                 for command_id in expired_commands:
                     future = self.pending_commands[command_id]["future"]
                     if not future.done():
                         future.set_exception(
-                            asyncio.TimeoutError("Command expired during cleanup")
+                            asyncio.TimeoutError(
+                                "Command expired during cleanup"
+                            )
                         )
                     if command_id in self.pending_commands:
                         del self.pending_commands[command_id]
 
-                _LOGGER.debug("Cleaned up %d expired commands", len(expired_commands))
+                _LOGGER.debug(
+                    "Cleaned up %d expired commands", len(expired_commands)
+                )
 
             except asyncio.CancelledError:
                 # Handle task cancellation correctly
@@ -498,7 +545,9 @@ def _on_connect_callback(self, client, userdata, flags, rc):
             qos = self.config.get(CONF_QOS)
 
             # Subscribe to all topics under the structure prefix
-            topic = TOPIC_TEMPLATE.format(structure_prefix=self.structure_prefix)
+            topic = TOPIC_TEMPLATE.format(
+                structure_prefix=self.structure_prefix
+            )
 
             _LOGGER.info("Subscribing to OVMS topic: %s", topic)
             self.client.subscribe(topic, qos=qos)
@@ -506,7 +555,7 @@ def _on_connect_callback(self, client, userdata, flags, rc):
             # Also subscribe to response topics for commands
             response_topic = RESPONSE_TOPIC_TEMPLATE.format(
                 structure_prefix=self.structure_prefix,
-                command_id="+"  # MQTT wildcard for any command ID
+                command_id="+",  # MQTT wildcard for any command ID
             )
             _LOGGER.info("Subscribing to response topic: %s", response_topic)
             self.client.subscribe(response_topic, qos=qos)
@@ -517,7 +566,10 @@ def _on_connect_callback(self, client, userdata, flags, rc):
             prefix = self.config.get(CONF_TOPIC_PREFIX, "")
             if vehicle_id and prefix:
                 alternative_topic = f"{prefix}/+/{vehicle_id}/#"
-                _LOGGER.info("Also subscribing to alternative topic pattern: %s", alternative_topic)
+                _LOGGER.info(
+                    "Also subscribing to alternative topic pattern: %s",
+                    alternative_topic,
+                )
                 self.client.subscribe(alternative_topic, qos=qos)
         except Exception as ex:
             _LOGGER.exception("Error subscribing to topics: %s", ex)
@@ -525,7 +577,9 @@ def _on_connect_callback(self, client, userdata, flags, rc):
     def _format_structure_prefix(self) -> str:
         """Format the topic structure prefix based on configuration."""
         try:
-            structure = self.config.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
+            structure = self.config.get(
+                CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE
+            )
             prefix = self.config.get(CONF_TOPIC_PREFIX)
             vehicle_id = self.config.get(CONF_VEHICLE_ID)
             mqtt_username = self.config.get(CONF_MQTT_USERNAME, "")
@@ -536,8 +590,12 @@ def _on_connect_callback(self, client, userdata, flags, rc):
                 if mqtt_username.lower() != expected_username:
                     # If username doesn't already contain vehicle ID, consider adding it
                     if vehicle_id.lower() not in mqtt_username.lower():
-                        alternative_username = f"ovms-mqtt-{vehicle_id.lower()}"
-                        log_msg = f"Username {mqtt_username} may not match pattern. "
+                        alternative_username = (
+                            f"ovms-mqtt-{vehicle_id.lower()}"
+                        )
+                        log_msg = (
+                            f"Username {mqtt_username} may not match pattern. "
+                        )
                         log_msg += f"Also trying {alternative_username}"
                         _LOGGER.debug(log_msg)
                         # Don't replace the username yet, just log the possibility
@@ -546,7 +604,7 @@ def _on_connect_callback(self, client, userdata, flags, rc):
             structure_prefix = structure.format(
                 prefix=prefix,
                 vehicle_id=vehicle_id,
-                mqtt_username=mqtt_username
+                mqtt_username=mqtt_username,
             )
 
             _LOGGER.debug("Formatted structure prefix: %s", structure_prefix)
@@ -568,14 +626,22 @@ def _on_connect_callback(self, client, userdata, flags, rc):
             device_entry = device_registry.async_get_device({identifier})
 
             if device_entry:
-                _LOGGER.info("Updating device %s firmware version to %s", device_id, version)
+                _LOGGER.info(
+                    "Updating device %s firmware version to %s",
+                    device_id,
+                    version,
+                )
                 device_registry.async_update_device(
                     device_entry.id, sw_version=version
                 )
             else:
                 # Log that device wasn't found
-                _LOGGER.debug("Device not found for ID %s, will retry later", device_id)
-                self.hass.async_create_task(self._retry_firmware_update(device_id, version))
+                _LOGGER.debug(
+                    "Device not found for ID %s, will retry later", device_id
+                )
+                self.hass.async_create_task(
+                    self._retry_firmware_update(device_id, version)
+                )
         except Exception as ex:
             _LOGGER.exception("Error updating firmware version: %s", ex)
 
@@ -585,17 +651,24 @@ def _on_connect_callback(self, client, userdata, flags, rc):
             await asyncio.sleep(5 * (attempt + 1))  # Increasing delay
             try:
                 device_registry = dr.async_get(self.hass)
-                device_entry = device_registry.async_get_device({(DOMAIN, device_id)})
+                device_entry = device_registry.async_get_device(
+                    {(DOMAIN, device_id)}
+                )
                 if device_entry:
                     device_registry.async_update_device(
                         device_entry.id, sw_version=version
                     )
-                    _LOGGER.info("Successfully updated firmware version to %s on retry", version)
+                    _LOGGER.info(
+                        "Successfully updated firmware version to %s on retry",
+                        version,
+                    )
                     return
             except Exception as ex:  # pylint: disable=broad-except
                 _LOGGER.error("Error during firmware update retry: %s", ex)
 
-        _LOGGER.warning("Failed to update firmware version after %d attempts", attempts)
+        _LOGGER.warning(
+            "Failed to update firmware version after %d attempts", attempts
+        )
 
     @callback
     def _process_version_message(self, topic: str, payload: str) -> None:
@@ -606,9 +679,15 @@ def _on_connect_callback(self, client, userdata, flags, rc):
                 return
 
             # Skip if not a version topic
-            if not any(version_key in topic.lower() for version_key in [
-                "/version", "m.version", "m/version", "firmware"
-            ]):
+            if not any(
+                version_key in topic.lower()
+                for version_key in [
+                    "/version",
+                    "m.version",
+                    "m/version",
+                    "firmware",
+                ]
+            ):
                 return
 
             # Get vehicle ID from config
@@ -617,13 +696,17 @@ def _on_connect_callback(self, client, userdata, flags, rc):
                 return
 
             # Update firmware version
-            _LOGGER.debug("Detected firmware version topic: %s with value: %s",
-                         topic, payload)
+            _LOGGER.debug(
+                "Detected firmware version topic: %s with value: %s",
+                topic,
+                payload,
+            )
             self._update_firmware_version(vehicle_id, payload)
 
         except Exception as ex:
             _LOGGER.exception("Error processing version message: %s", ex)
-async def _async_process_message(self, msg) -> None:
+
+    async def _async_process_message(self, msg) -> None:
         """Process an incoming MQTT message."""
         try:
             topic = msg.topic
@@ -692,7 +775,7 @@ async def _async_process_message(self, msg) -> None:
                     # Skip logging warning for system topics
                     _LOGGER.warning(
                         "Topic %s in discovered_topics but no entity_id found in registry",
-                        topic
+                        topic,
                     )
         except Exception as ex:
             _LOGGER.exception("Error processing message: %s", ex)
@@ -700,9 +783,9 @@ async def _async_process_message(self, msg) -> None:
     def _is_system_topic(self, topic: str) -> bool:
         """Check if topic is a system topic that doesn't need an entity."""
         return (
-            topic.endswith("/event") or
-            "client/rr/command" in topic or
-            "client/rr/response" in topic
+            topic.endswith("/event")
+            or "client/rr/command" in topic
+            or "client/rr/response" in topic
         )
 
     def _is_response_topic(self, topic: str) -> bool:
@@ -710,15 +793,18 @@ async def _async_process_message(self, msg) -> None:
         # Extract command ID from response topic pattern
         try:
             pattern = RESPONSE_TOPIC_TEMPLATE.format(
-                structure_prefix=self.structure_prefix,
-                command_id="(.*)"
+                structure_prefix=self.structure_prefix, command_id="(.*)"
             )
-            pattern = pattern.replace("+", "[^/]+")  # Replace MQTT wildcard with regex pattern
+            pattern = pattern.replace(
+                "+", "[^/]+"
+            )  # Replace MQTT wildcard with regex pattern
 
             match = re.match(pattern, topic)
             return bool(match)
         except Exception as ex:
-            _LOGGER.exception("Error checking if topic is response topic: %s", ex)
+            _LOGGER.exception(
+                "Error checking if topic is response topic: %s", ex
+            )
             return False
 
     async def _handle_command_response(self, topic: str, payload: str) -> None:
@@ -726,14 +812,18 @@ async def _async_process_message(self, msg) -> None:
         try:
             # Extract command ID from response topic
             pattern = RESPONSE_TOPIC_TEMPLATE.format(
-                structure_prefix=self.structure_prefix,
-                command_id="(.*)"
+                structure_prefix=self.structure_prefix, command_id="(.*)"
             )
-            pattern = pattern.replace("+", "[^/]+")  # Replace MQTT wildcard with regex pattern
+            pattern = pattern.replace(
+                "+", "[^/]+"
+            )  # Replace MQTT wildcard with regex pattern
 
             match = re.match(pattern, topic)
             if not match:
-                _LOGGER.warning("Failed to extract command ID from response topic: %s", topic)
+                _LOGGER.warning(
+                    "Failed to extract command ID from response topic: %s",
+                    topic,
+                )
                 return
 
             command_id = match.group(1)
@@ -750,7 +840,9 @@ async def _async_process_message(self, msg) -> None:
                 if command_id in self.pending_commands:
                     del self.pending_commands[command_id]
             else:
-                _LOGGER.debug("No pending command found for ID: %s", command_id)
+                _LOGGER.debug(
+                    "No pending command found for ID: %s", command_id
+                )
         except Exception as ex:
             _LOGGER.exception("Error handling command response: %s", ex)
 
@@ -759,10 +851,16 @@ async def _async_process_message(self, msg) -> None:
         try:
             # Extract the entity type and name from the topic
             entity_type, entity_info = self._parse_topic(topic)
-            _LOGGER.debug("Parse topic result: entity_type=%s, entity_info=%s", entity_type, entity_info)
+            _LOGGER.debug(
+                "Parse topic result: entity_type=%s, entity_info=%s",
+                entity_type,
+                entity_info,
+            )
 
             if not entity_type:
-                _LOGGER.debug("Could not determine entity type for topic: %s", topic)
+                _LOGGER.debug(
+                    "Could not determine entity type for topic: %s", topic
+                )
                 return
 
             if not entity_info or not isinstance(entity_info, dict):
@@ -771,7 +869,9 @@ async def _async_process_message(self, msg) -> None:
 
             _LOGGER.info(
                 "Adding new entity for topic: %s (type: %s, name: %s)",
-                topic, entity_type, entity_info['name']
+                topic,
+                entity_type,
+                entity_info["name"],
             )
 
             # Track entity types for diagnostics
@@ -785,7 +885,7 @@ async def _async_process_message(self, msg) -> None:
             topic_hash = hashlib.md5(topic.encode()).hexdigest()[:8]
 
             # Extract topic components for better naming
-            topic_parts = topic.split('/')
+            topic_parts = topic.split("/")
 
             # Get vehicle ID for entity naming
             vehicle_id = self.config.get(CONF_VEHICLE_ID).lower()
@@ -797,7 +897,13 @@ async def _async_process_message(self, msg) -> None:
             # Extract category from topic path
             if len(topic_parts) >= 4:
                 for part in topic_parts:
-                    if part.lower() in ["metric", "status", "location", "notify", "command"]:
+                    if part.lower() in [
+                        "metric",
+                        "status",
+                        "location",
+                        "notify",
+                        "command",
+                    ]:
                         entity_category = part.lower()
                         break
 
@@ -807,20 +913,26 @@ async def _async_process_message(self, msg) -> None:
             try:
                 category_index = topic_parts.index(entity_category)
                 if category_index < len(topic_parts) - 1:
-                    metric_parts = [p for p in topic_parts[category_index + 1:] if p]
+                    metric_parts = [
+                        p for p in topic_parts[category_index + 1 :] if p
+                    ]
                     metric_path = "_".join(metric_parts)
             except ValueError:
                 # If category not found in topic, use original name
                 metric_path = original_name
-                metric_parts = original_name.split('_')
+                metric_parts = original_name.split("_")
 
             # Create entity ID with proper format
-            entity_name = f"ovms_{vehicle_id}_{entity_category}_{metric_path}".lower()
+            entity_name = (
+                f"ovms_{vehicle_id}_{entity_category}_{metric_path}".lower()
+            )
 
             # Check for existing entities with similar names
             similar_name_count = 0
             for eid in self.entity_registry.values():
-                if eid.startswith(f"ovms_{vehicle_id}_{entity_category}_{metric_path}"):
+                if eid.startswith(
+                    f"ovms_{vehicle_id}_{entity_category}_{metric_path}"
+                ):
                     similar_name_count += 1
 
             # If this is a duplicate, append a number
@@ -828,12 +940,13 @@ async def _async_process_message(self, msg) -> None:
                 entity_name = f"{entity_name}_{similar_name_count}"
 
             # Create a user-friendly name based on metric path
-            friendly_name = self._create_friendly_name(metric_parts, entity_category)
+            friendly_name = self._create_friendly_name(
+                metric_parts, entity_category
+            )
 
             # Use the original vehicle ID for unique IDs for consistency
             original_vehicle_id = self.config.get(
-                CONF_ORIGINAL_VEHICLE_ID,
-                self.config.get(CONF_VEHICLE_ID)
+                CONF_ORIGINAL_VEHICLE_ID, self.config.get(CONF_VEHICLE_ID)
             )
             unique_id = f"{original_vehicle_id}_{entity_category}_{metric_path}_{topic_hash}"
 
@@ -873,7 +986,7 @@ async def _async_process_message(self, msg) -> None:
                     "attributes": {
                         **entity_info["attributes"],
                         "original_entity": unique_id,
-                        "original_entity_type": entity_type
+                        "original_entity_type": entity_type,
                     },
                 }
 
@@ -910,14 +1023,21 @@ async def _async_process_message(self, msg) -> None:
                         sensor_entity_data,
                     )
             else:
-                _LOGGER.debug("Platforms not yet loaded, queuing entities: %s", entity_info["name"])
+                _LOGGER.debug(
+                    "Platforms not yet loaded, queuing entities: %s",
+                    entity_info["name"],
+                )
                 await self.entity_queue.put(entity_data)
 
             # Check if this is a latitude or longitude topic for device tracker
             if "latitude" in topic.lower() or "lat" in topic.lower():
                 self.latitude_topic = topic
                 self.gps_topics.append(topic)
-            elif "longitude" in topic.lower() or "lon" in topic.lower() or "lng" in topic.lower():
+            elif (
+                "longitude" in topic.lower()
+                or "lon" in topic.lower()
+                or "lng" in topic.lower()
+            ):
                 self.longitude_topic = topic
                 self.gps_topics.append(topic)
         except Exception as ex:
@@ -951,7 +1071,7 @@ async def _async_process_message(self, msg) -> None:
                 metric_info = get_metric_by_pattern(metric_parts)
 
             if metric_info and "name" in metric_info:
-                return metric_info['name']
+                return metric_info["name"]
 
             # If no metric definition found, use the original method for fallback naming
             if len(metric_parts) == 0:
@@ -963,17 +1083,23 @@ async def _async_process_message(self, msg) -> None:
         except Exception as ex:
             _LOGGER.exception("Error creating friendly name: %s", ex)
             return "Unknown"
-async def _async_platforms_loaded(self) -> None:
+
+    async def _async_platforms_loaded(self) -> None:
         """Handle platforms loaded signal."""
         try:
             queued_count = self.entity_queue.qsize()
-            _LOGGER.info("All platforms loaded, processing %d queued entities", queued_count)
+            _LOGGER.info(
+                "All platforms loaded, processing %d queued entities",
+                queued_count,
+            )
             self.platforms_loaded = True
 
             # Process any queued entities
             while not self.entity_queue.empty():
                 entity_data = await self.entity_queue.get()
-                _LOGGER.debug("Processing queued entity: %s", entity_data["name"])
+                _LOGGER.debug(
+                    "Processing queued entity: %s", entity_data["name"]
+                )
                 async_dispatcher_send(
                     self.hass,
                     SIGNAL_ADD_ENTITIES,
@@ -986,19 +1112,19 @@ async def _async_platforms_loaded(self) -> None:
 
             # If we have no discovered topics, try to discover by sending a test command
             if not self.discovered_topics and self.connected:
-                _LOGGER.info("No topics discovered yet, trying to discover by sending a test command")
+                _LOGGER.info(
+                    "No topics discovered yet, trying to discover by sending a test command"
+                )
                 try:
                     # Use a generic discovery command
                     command_id = uuid.uuid4().hex[:8]
                     command_topic = COMMAND_TOPIC_TEMPLATE.format(
                         structure_prefix=self.structure_prefix,
-                        command_id=command_id
+                        command_id=command_id,
                     )
                     _LOGGER.debug("Sending test command to %s", command_topic)
                     self.client.publish(
-                        command_topic,
-                        "stat",
-                        qos=self.config.get(CONF_QOS, 1)
+                        command_topic, "stat", qos=self.config.get(CONF_QOS, 1)
                     )
                 except Exception as ex:  # pylint: disable=broad-except
                     _LOGGER.warning("Error sending discovery command: %s", ex)
@@ -1038,27 +1164,41 @@ async def _async_platforms_loaded(self) -> None:
                 # Alternative check for different username pattern but same vehicle ID
                 vehicle_id = self.config.get(CONF_VEHICLE_ID, "")
                 prefix = self.config.get(CONF_TOPIC_PREFIX, "")
-                if vehicle_id and prefix and f"/{vehicle_id}/" in topic and topic.startswith(prefix):
-                    _LOGGER.debug("Topic doesn't match structure prefix but contains vehicle ID")
+                if (
+                    vehicle_id
+                    and prefix
+                    and f"/{vehicle_id}/" in topic
+                    and topic.startswith(prefix)
+                ):
+                    _LOGGER.debug(
+                        "Topic doesn't match structure prefix but contains vehicle ID"
+                    )
                     # Extract parts after vehicle ID
                     parts = topic.split(f"/{vehicle_id}/", 1)
                     if len(parts) > 1:
                         topic_suffix = parts[1]
                     else:
-                        _LOGGER.debug("Couldn't extract topic suffix after vehicle ID")
+                        _LOGGER.debug(
+                            "Couldn't extract topic suffix after vehicle ID"
+                        )
                         return None, None
                 else:
-                    _LOGGER.debug("Topic does not match structure prefix: %s", self.structure_prefix)
+                    _LOGGER.debug(
+                        "Topic does not match structure prefix: %s",
+                        self.structure_prefix,
+                    )
                     return None, None
             else:
                 # Extract the normal way
-                topic_suffix = topic[len(self.structure_prefix):].lstrip('/')
+                topic_suffix = topic[len(self.structure_prefix) :].lstrip("/")
 
             if not topic_suffix:
                 _LOGGER.debug("Empty topic suffix after removing prefix")
                 return None, None
 
-            _LOGGER.debug("Topic suffix after removing prefix: %s", topic_suffix)
+            _LOGGER.debug(
+                "Topic suffix after removing prefix: %s", topic_suffix
+            )
 
             # Split the remaining path into parts
             parts = topic_suffix.split("/")
@@ -1071,7 +1211,10 @@ async def _async_platforms_loaded(self) -> None:
                 return None, None
 
             # Check if this is a command/response topic - don't create entities for these
-            if ('client/rr/command' in topic_suffix or 'client/rr/response' in topic_suffix):
+            if (
+                "client/rr/command" in topic_suffix
+                or "client/rr/response" in topic_suffix
+            ):
                 _LOGGER.debug("Skipping command/response topic: %s", topic)
                 return None, None
 
@@ -1083,7 +1226,10 @@ async def _async_platforms_loaded(self) -> None:
                     if len(parts) > 3:
                         # Create a modified path that might match standard metrics
                         standard_parts = ["metric", parts[2]] + parts[3:]
-                        _LOGGER.debug("Converting vendor-specific path to standard: %s", standard_parts)
+                        _LOGGER.debug(
+                            "Converting vendor-specific path to standard: %s",
+                            standard_parts,
+                        )
                         metric_path = ".".join(standard_parts[1:])
                     else:
                         metric_path = ".".join(parts[1:])
@@ -1110,31 +1256,51 @@ async def _async_platforms_loaded(self) -> None:
             name = "_".join(parts) if parts else "unknown"
 
             # Check if this should be a binary sensor
-            if self._should_be_binary_sensor(parts, name, metric_path, metric_info):
+            if self._should_be_binary_sensor(
+                parts, name, metric_path, metric_info
+            ):
                 return "binary_sensor", {
                     "name": name,
                     "friendly_name": create_friendly_name(parts, metric_info),
-                    "attributes": self._prepare_attributes(topic, category, parts, metric_info),
+                    "attributes": self._prepare_attributes(
+                        topic, category, parts, metric_info
+                    ),
                 }
 
             # Check for commands/switches
             if "command" in parts or any(
-                switch_pattern in name.lower() for switch_pattern in
-                ["switch", "toggle", "set", "enable", "disable"]
+                switch_pattern in name.lower()
+                for switch_pattern in [
+                    "switch",
+                    "toggle",
+                    "set",
+                    "enable",
+                    "disable",
+                ]
             ):
                 return "switch", {
                     "name": name,
                     "friendly_name": create_friendly_name(parts, metric_info),
-                    "attributes": self._prepare_attributes(topic, category, parts, metric_info),
+                    "attributes": self._prepare_attributes(
+                        topic, category, parts, metric_info
+                    ),
                 }
 
             # Check for location topics for device_tracker
-            location_keywords = ["latitude", "longitude", "gps", "position", "location"]
+            location_keywords = [
+                "latitude",
+                "longitude",
+                "gps",
+                "position",
+                "location",
+            ]
             if any(keyword in name.lower() for keyword in location_keywords):
                 return "device_tracker", {
                     "name": name,
                     "friendly_name": create_friendly_name(parts, metric_info),
-                    "attributes": self._prepare_attributes(topic, category, parts, metric_info),
+                    "attributes": self._prepare_attributes(
+                        topic, category, parts, metric_info
+                    ),
                 }
 
             # Create friendly name
@@ -1144,7 +1310,9 @@ async def _async_platforms_loaded(self) -> None:
             return entity_type, {
                 "name": name,
                 "friendly_name": friendly_name,
-                "attributes": self._prepare_attributes(topic, category, parts, metric_info),
+                "attributes": self._prepare_attributes(
+                    topic, category, parts, metric_info
+                ),
             }
         except Exception as ex:
             _LOGGER.exception("Error parsing topic: %s", ex)
@@ -1161,34 +1329,53 @@ async def _async_platforms_loaded(self) -> None:
             if metric_info and "device_class" in metric_info:
                 # Check if the device class is from binary_sensor
                 if hasattr(metric_info["device_class"], "__module__"):
-                    return "binary_sensor" in metric_info["device_class"].__module__
+                    return (
+                        "binary_sensor"
+                        in metric_info["device_class"].__module__
+                    )
 
             # Check for binary patterns in name
             name_lower = name.lower()
             binary_keywords = [
-                "active", "enabled", "running", "connected",
-                "locked", "door", "charging"
+                "active",
+                "enabled",
+                "running",
+                "connected",
+                "locked",
+                "door",
+                "charging",
             ]
 
             # Special handling for "on" to avoid false matches
-            has_on_word = bool(re.search(r'\bon\b', name_lower))
+            has_on_word = bool(re.search(r"\bon\b", name_lower))
 
             # Check for any other binary keywords
-            has_binary_keyword = any(keyword in name_lower for keyword in binary_keywords)
+            has_binary_keyword = any(
+                keyword in name_lower for keyword in binary_keywords
+            )
 
             if has_on_word or has_binary_keyword:
                 # Exclude certain words that might contain binary keywords but are numeric
                 exclusions = [
-                    "power", "energy", "duration", "consumption",
-                    "acceleration", "direction", "monotonic"
+                    "power",
+                    "energy",
+                    "duration",
+                    "consumption",
+                    "acceleration",
+                    "direction",
+                    "monotonic",
                 ]
                 # Check if name contains any exclusions
-                if not any(exclusion in name_lower for exclusion in exclusions):
+                if not any(
+                    exclusion in name_lower for exclusion in exclusions
+                ):
                     return True
 
             return False
         except Exception as ex:
-            _LOGGER.exception("Error determining if should be binary sensor: %s", ex)
+            _LOGGER.exception(
+                "Error determining if should be binary sensor: %s", ex
+            )
             return False
 
     def _prepare_attributes(self, topic, category, parts, metric_info):
@@ -1204,7 +1391,12 @@ async def _async_platforms_loaded(self) -> None:
             if metric_info:
                 # Only add attributes that aren't already in the entity definition
                 for key, value in metric_info.items():
-                    if key not in ["name", "device_class", "state_class", "unit"]:
+                    if key not in [
+                        "name",
+                        "device_class",
+                        "state_class",
+                        "unit",
+                    ]:
                         attributes[key] = value
 
             return attributes
@@ -1228,7 +1420,9 @@ async def _async_platforms_loaded(self) -> None:
             _LOGGER.exception("Error getting device info: %s", ex)
             # Return minimal device info
             return {
-                "identifiers": {(DOMAIN, self.config.get(CONF_VEHICLE_ID, "unknown"))},
+                "identifiers": {
+                    (DOMAIN, self.config.get(CONF_VEHICLE_ID, "unknown"))
+                },
                 "name": f"OVMS - {self.config.get(CONF_VEHICLE_ID, 'unknown')}",
             }
 
@@ -1246,8 +1440,11 @@ async def _async_platforms_loaded(self) -> None:
         # Process is ongoing as we receive messages
 
     async def async_send_command(
-        self, command: str, parameters: str = "",
-        command_id: str = None, timeout: int = 10
+        self,
+        command: str,
+        parameters: str = "",
+        command_id: str = None,
+        timeout: int = 10,
     ) -> Dict[str, Any]:
         """Send a command to the OVMS module and wait for a response."""
         if not self.connected:
@@ -1259,7 +1456,7 @@ async def _async_platforms_loaded(self) -> None:
             time_to_next = self.command_limiter.time_to_next_call()
             _LOGGER.warning(
                 "Command rate limit exceeded. Try again in %.1f seconds",
-                time_to_next
+                time_to_next,
             )
             return {
                 "success": False,
@@ -1273,14 +1470,15 @@ async def _async_platforms_loaded(self) -> None:
 
         _LOGGER.debug(
             "Sending command: %s, parameters: %s, command_id: %s",
-            command, parameters, command_id
+            command,
+            parameters,
+            command_id,
         )
 
         try:
             # Format the command topic
             command_topic = COMMAND_TOPIC_TEMPLATE.format(
-                structure_prefix=self.structure_prefix,
-                command_id=command_id
+                structure_prefix=self.structure_prefix, command_id=command_id
             )
 
             # Prepare the payload
@@ -1301,11 +1499,17 @@ async def _async_platforms_loaded(self) -> None:
             }
 
             # Send the command
-            _LOGGER.debug("Publishing command to %s: %s", command_topic, payload)
-            self.client.publish(command_topic, payload, qos=self.config.get(CONF_QOS))
+            _LOGGER.debug(
+                "Publishing command to %s: %s", command_topic, payload
+            )
+            self.client.publish(
+                command_topic, payload, qos=self.config.get(CONF_QOS)
+            )
 
             # Wait for the response with timeout
-            _LOGGER.debug("Waiting for response for command_id: %s", command_id)
+            _LOGGER.debug(
+                "Waiting for response for command_id: %s", command_id
+            )
             response_payload = await asyncio.wait_for(future, timeout)
 
             _LOGGER.debug("Received response: %s", response_payload)
@@ -1330,7 +1534,9 @@ async def _async_platforms_loaded(self) -> None:
             }
 
         except asyncio.TimeoutError:
-            _LOGGER.warning("Command timed out: %s (ID: %s)", command, command_id)
+            _LOGGER.warning(
+                "Command timed out: %s (ID: %s)", command, command_id
+            )
             # Clean up
             if command_id in self.pending_commands:
                 del self.pending_commands[command_id]
@@ -1356,7 +1562,8 @@ async def _async_platforms_loaded(self) -> None:
                 "command": command,
                 "parameters": parameters,
             }
-async def async_shutdown(self) -> None:
+
+    async def async_shutdown(self) -> None:
         """Shutdown the MQTT client."""
         _LOGGER.info("Shutting down MQTT client")
 
@@ -1364,10 +1571,12 @@ async def async_shutdown(self) -> None:
         self._shutting_down = True
 
         # Cancel the cleanup task
-        if hasattr(self, '_cleanup_task') and self._cleanup_task:
+        if hasattr(self, "_cleanup_task") and self._cleanup_task:
             try:
                 self._cleanup_task.cancel()
-                await asyncio.wait_for(asyncio.shield(self._cleanup_task), timeout=2)
+                await asyncio.wait_for(
+                    asyncio.shield(self._cleanup_task), timeout=2
+                )
             except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
             except Exception as ex:
@@ -1383,7 +1592,7 @@ async def async_shutdown(self) -> None:
                         self._status_topic,
                         "offline",
                         qos=self.config.get(CONF_QOS, 1),
-                        retain=True
+                        retain=True,
                     )
 
                 # Stop the loop and disconnect
@@ -1393,7 +1602,9 @@ async def async_shutdown(self) -> None:
             except Exception as ex:
                 _LOGGER.exception("Error stopping MQTT client: %s", ex)
 
-    async def create_device_tracker_from_sensors(self, vehicle_id: str) -> None:
+    async def create_device_tracker_from_sensors(
+        self, vehicle_id: str
+    ) -> None:
         """Create a device tracker entity based on latitude/longitude sensors."""
         try:
             _LOGGER.info("Creating device tracker for vehicle: %s", vehicle_id)
@@ -1427,14 +1638,24 @@ async def async_shutdown(self) -> None:
                     break
 
             if not (lat_topic and lon_topic):
-                _LOGGER.warning("Could not find latitude and longitude topics. Device tracker will not be created.")
+                _LOGGER.warning(
+                    "Could not find latitude and longitude topics. Device tracker will not be created."
+                )
                 return
 
             # Get current values if available
-            lat_value = self.topic_cache.get(lat_topic, {}).get("payload", "unknown")
-            lon_value = self.topic_cache.get(lon_topic, {}).get("payload", "unknown")
+            lat_value = self.topic_cache.get(lat_topic, {}).get(
+                "payload", "unknown"
+            )
+            lon_value = self.topic_cache.get(lon_topic, {}).get(
+                "payload", "unknown"
+            )
 
-            _LOGGER.debug("Current values - Latitude: %s, Longitude: %s", lat_value, lon_value)
+            _LOGGER.debug(
+                "Current values - Latitude: %s, Longitude: %s",
+                lat_value,
+                lon_value,
+            )
 
             # Create device info
             device_info = self._get_device_info()
@@ -1453,7 +1674,10 @@ async def async_shutdown(self) -> None:
                 "name": f"ovms_{vehicle_id}_location",
                 "friendly_name": f"{vehicle_id} Location",
                 "topic": "combined_location",  # This is a virtual topic
-                "payload": {"latitude": 0, "longitude": 0},  # Initial values will be updated from sensors
+                "payload": {
+                    "latitude": 0,
+                    "longitude": 0,
+                },  # Initial values will be updated from sensors
                 "device_info": device_info,
                 "attributes": {
                     "category": "location",
@@ -1499,11 +1723,19 @@ async def async_shutdown(self) -> None:
                     return
 
                 # Get current values
-                lat_value = self.topic_cache.get(self.latitude_topic, {}).get("payload", "unknown")
-                lon_value = self.topic_cache.get(self.longitude_topic, {}).get("payload", "unknown")
+                lat_value = self.topic_cache.get(self.latitude_topic, {}).get(
+                    "payload", "unknown"
+                )
+                lon_value = self.topic_cache.get(self.longitude_topic, {}).get(
+                    "payload", "unknown"
+                )
 
                 # Skip if either value is unknown/unavailable
-                if lat_value in ("unknown", "unavailable", "") or lon_value in ("unknown", "unavailable", ""):
+                if lat_value in (
+                    "unknown",
+                    "unavailable",
+                    "",
+                ) or lon_value in ("unknown", "unavailable", ""):
                     return
 
                 try:
@@ -1512,24 +1744,30 @@ async def async_shutdown(self) -> None:
                     lon_float = float(lon_value)
 
                     # Skip if not in valid range
-                    if not (-90 <= lat_float <= 90) or not (-180 <= lon_float <= 180):
+                    if not (-90 <= lat_float <= 90) or not (
+                        -180 <= lon_float <= 180
+                    ):
                         return
 
                     # Check if coordinates have changed
                     coordinates_changed = (
-                        self._prev_latitude is None or
-                        self._prev_longitude is None or
-                        abs(lat_float - self._prev_latitude) > 0.00001 or
-                        abs(lon_float - self._prev_longitude) > 0.00001
+                        self._prev_latitude is None
+                        or self._prev_longitude is None
+                        or abs(lat_float - self._prev_latitude) > 0.00001
+                        or abs(lon_float - self._prev_longitude) > 0.00001
                     )
 
                     current_time = time.time()
-                    time_since_last_update = current_time - self._last_gps_update
+                    time_since_last_update = (
+                        current_time - self._last_gps_update
+                    )
 
                     # Only update if:
                     # 1. Coordinates have changed, OR
                     # 2. It's been at least 30 seconds since the last update
-                    update_needed = coordinates_changed or time_since_last_update >= 30
+                    update_needed = (
+                        coordinates_changed or time_since_last_update >= 30
+                    )
 
                     if update_needed:
                         # Store new values and update timestamp
@@ -1540,13 +1778,19 @@ async def async_shutdown(self) -> None:
                         # Find and get GPS signal quality/accuracy
                         gps_sq_topic = None
                         for topic in self.discovered_topics:
-                            if "gpssq" in topic.lower() or "gps_sq" in topic.lower() or "gps/sq" in topic.lower():
+                            if (
+                                "gpssq" in topic.lower()
+                                or "gps_sq" in topic.lower()
+                                or "gps/sq" in topic.lower()
+                            ):
                                 gps_sq_topic = topic
                                 break
 
                         gps_accuracy = 0  # Default value
                         if gps_sq_topic:
-                            gps_sq_value = self.topic_cache.get(gps_sq_topic, {}).get("payload", "0")
+                            gps_sq_value = self.topic_cache.get(
+                                gps_sq_topic, {}
+                            ).get("payload", "0")
                             try:
                                 gps_accuracy = float(gps_sq_value)
                             except (ValueError, TypeError):
@@ -1557,7 +1801,7 @@ async def async_shutdown(self) -> None:
                             "latitude": lat_float,
                             "longitude": lon_float,
                             "gps_accuracy": gps_accuracy,
-                            "last_updated": dt_util.utcnow().isoformat()
+                            "last_updated": dt_util.utcnow().isoformat(),
                         }
 
                         # Update the device tracker
@@ -1567,10 +1811,19 @@ async def async_shutdown(self) -> None:
                             payload,
                         )
 
-                        _LOGGER.debug("Updated GPS entities with coordinates: %s, %s", lat_float, lon_float)
+                        _LOGGER.debug(
+                            "Updated GPS entities with coordinates: %s, %s",
+                            lat_float,
+                            lon_float,
+                        )
 
                 except (ValueError, TypeError) as ex:
-                    _LOGGER.debug("Error parsing GPS values: %s, %s - %s", lat_value, lon_value, ex)
+                    _LOGGER.debug(
+                        "Error parsing GPS values: %s, %s - %s",
+                        lat_value,
+                        lon_value,
+                        ex,
+                    )
 
             except Exception as ex:
                 _LOGGER.exception("Error updating GPS topics: %s", ex)
@@ -1583,7 +1836,11 @@ async def async_shutdown(self) -> None:
                 if topic in self.gps_topics:
                     gps_topics_updated()
                 # Also check for GPS signal quality topics
-                elif "gpssq" in topic.lower() or "gps/sq" in topic.lower() or "gps_sq" in topic.lower():
+                elif (
+                    "gpssq" in topic.lower()
+                    or "gps/sq" in topic.lower()
+                    or "gps_sq" in topic.lower()
+                ):
                     gps_topics_updated()
             except Exception as ex:
                 _LOGGER.exception("Error in message received handler: %s", ex)
@@ -1604,15 +1861,27 @@ async def async_shutdown(self) -> None:
                         break
 
                     # Get current values
-                    lat_value = self.topic_cache.get(self.latitude_topic, {}).get("payload", "unknown")
-                    lon_value = self.topic_cache.get(self.longitude_topic, {}).get("payload", "unknown")
+                    lat_value = self.topic_cache.get(
+                        self.latitude_topic, {}
+                    ).get("payload", "unknown")
+                    lon_value = self.topic_cache.get(
+                        self.longitude_topic, {}
+                    ).get("payload", "unknown")
 
                     # Only update if either sensor is unknown
-                    if lat_value in ("unknown", "unavailable", "") or lon_value in ("unknown", "unavailable", ""):
-                        _LOGGER.debug("Sensor(s) in unknown state, forcing update")
+                    if lat_value in (
+                        "unknown",
+                        "unavailable",
+                        "",
+                    ) or lon_value in ("unknown", "unavailable", ""):
+                        _LOGGER.debug(
+                            "Sensor(s) in unknown state, forcing update"
+                        )
                         gps_topics_updated()
                     else:
-                        _LOGGER.debug("Periodic GPS check - sensors OK, no update needed")
+                        _LOGGER.debug(
+                            "Periodic GPS check - sensors OK, no update needed"
+                        )
 
             except asyncio.CancelledError:
                 _LOGGER.debug("Periodic GPS check cancelled")
