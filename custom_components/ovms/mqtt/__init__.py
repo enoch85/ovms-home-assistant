@@ -1,7 +1,7 @@
 """MQTT Client for OVMS Integration."""
 import asyncio
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Set
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -57,6 +57,9 @@ class OVMSMQTTClient:
         self.message_count = 0
         self.reconnect_count = 0
         self.entity_types = {}  # For diagnostics
+        
+        # For GPS topic tracking
+        self.gps_quality_topics = {}
 
     async def async_setup(self) -> bool:
         """Set up the MQTT client."""
@@ -104,6 +107,10 @@ class OVMSMQTTClient:
 
         # Add to discovered topics
         self.discovered_topics.add(topic)
+        
+        # Track GPS quality topics for location accuracy
+        if any(kw in topic.lower() for kw in ["gpssq", "gps_sq", "gps/sq", "gpshdop", "gps_hdop"]):
+            self._track_gps_quality_topic(topic, payload)
 
         # Process message and create/update entities
         if topic not in self.entity_registry.topics:
@@ -114,6 +121,31 @@ class OVMSMQTTClient:
         else:
             # Existing topic, update entity
             self.update_dispatcher.dispatch_update(topic, payload)
+
+    def _track_gps_quality_topic(self, topic: str, payload: str) -> None:
+        """Track GPS quality topics for location accuracy."""
+        try:
+            value = float(payload)
+            vehicle_id = self.config.get("vehicle_id", "")
+            
+            # Store by vehicle ID
+            if vehicle_id not in self.gps_quality_topics:
+                self.gps_quality_topics[vehicle_id] = {}
+                
+            # Determine type of GPS quality metric
+            if "gpssq" in topic.lower():
+                self.gps_quality_topics[vehicle_id]["signal_quality"] = {
+                    "topic": topic,
+                    "value": value
+                }
+            elif "gpshdop" in topic.lower():
+                self.gps_quality_topics[vehicle_id]["hdop"] = {
+                    "topic": topic,
+                    "value": value
+                }
+        except (ValueError, TypeError):
+            # Not a numeric value
+            pass
 
     def _on_connection_change(self, connected: bool) -> None:
         """Handle connection state changes."""
@@ -134,3 +166,28 @@ class OVMSMQTTClient:
         """Shutdown the MQTT client."""
         self._shutting_down = True
         await self.connection_manager.async_shutdown()
+        
+    def get_gps_accuracy(self, vehicle_id: Optional[str] = None) -> Optional[float]:
+        """Get GPS accuracy from stored GPS quality data."""
+        if not vehicle_id:
+            vehicle_id = self.config.get("vehicle_id", "")
+            
+        if not vehicle_id or vehicle_id not in self.gps_quality_topics:
+            return None
+            
+        gps_data = self.gps_quality_topics[vehicle_id]
+        
+        # Calculate accuracy based on available data
+        if "signal_quality" in gps_data:
+            sq = gps_data["signal_quality"]["value"]
+            # Simple formula that translates signal quality (0-100) to meters accuracy
+            # Higher signal quality = better accuracy (lower value)
+            return max(5, 100 - sq)  # Minimum 5m accuracy
+            
+        if "hdop" in gps_data:
+            hdop = gps_data["hdop"]["value"]
+            # HDOP directly relates to positional accuracy
+            # Lower HDOP = better accuracy
+            return max(5, hdop * 5)  # Each HDOP unit is ~5m of accuracy
+            
+        return None
