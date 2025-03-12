@@ -1609,15 +1609,22 @@ class OVMSMQTTClient:
             """Periodically check GPS values to avoid sensors going to unknown state."""
             try:
                 while not self._shutting_down:
-                    # Force an update every 20 seconds
-                    await asyncio.sleep(20)
+                    # Check every 60 seconds
+                    await asyncio.sleep(60)
                     if self._shutting_down:
                         break
-                    gps_topics_updated()
+                
+                    # Get current sensor states
+                    lat_value = self.topic_cache.get(self.latitude_topic, {}).get("payload", "unknown")
+                    lon_value = self.topic_cache.get(self.longitude_topic, {}).get("payload", "unknown")
+            
+                    # Only update if either sensor is unknown
+                    if lat_value in ("unknown", "unavailable", "") or lon_value in ("unknown", "unavailable", ""):
+                        _LOGGER.debug("Sensor(s) in unknown state, forcing update")
+                        gps_topics_updated()
             except asyncio.CancelledError:
                 pass
             except Exception as ex:
                 _LOGGER.exception("Error in periodic GPS check: %s", ex)
-        
-        # Start the periodic updater task
-        self.hass.loop.create_task(periodic_check())
+      # Start the periodic updater task
+      self.hass.loop.create_task(periodic_check())
