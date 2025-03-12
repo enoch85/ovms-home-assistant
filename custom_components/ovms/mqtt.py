@@ -672,12 +672,21 @@ class OVMSMQTTClient:
                 # Create a new entity for this topic
                 await self._async_add_entity_for_topic(topic, payload)
             else:
-                # Update existing entity
+                # Update existing entities
                 entity_id = self.entity_registry.get(topic)
                 if entity_id:
+                    # Update the primary entity
                     async_dispatcher_send(
                         self.hass,
                         f"{SIGNAL_UPDATE_ENTITY}_{entity_id}",
+                        payload,
+                    )
+
+                    # Also update the sensor version
+                    sensor_entity_id = f"{entity_id}_sensor"
+                    async_dispatcher_send(
+                        self.hass,
+                        f"{SIGNAL_UPDATE_ENTITY}_{sensor_entity_id}",
                         payload,
                     )
                 elif not self._is_system_topic(topic):
@@ -794,7 +803,6 @@ class OVMSMQTTClient:
                         break
 
             # Extract the actual metric path
-            # Extract the actual metric path (everything after the category)
             metric_path = ""
             metric_parts = []
             try:
@@ -833,7 +841,7 @@ class OVMSMQTTClient:
             # Register this entity
             self.entity_registry[topic] = unique_id
 
-            # Create entity data
+            # Create entity data for primary entity type (binary_sensor, device_tracker, etc)
             entity_data = {
                 "topic": topic,
                 "payload": payload,
@@ -845,31 +853,68 @@ class OVMSMQTTClient:
                 "attributes": entity_info["attributes"],
             }
 
-            # Validate entity info before returning
-            if not entity_info or not isinstance(entity_info, dict):
-                _LOGGER.warning("Created invalid entity info: %s", entity_info)
-                # Create a minimal valid entity info as fallback
-                entity_info = {
-                    "name": entity_name or "unknown",
-                    "friendly_name": friendly_name or "Unknown Sensor",
-                    "attributes": entity_info["attributes"] or {},
+            # Check if a sensor version already exists for this topic
+            sensor_entity_id = f"{unique_id}_sensor"
+            sensor_exists = False
+            # Check if this sensor entity already exists in our registry
+            for existing_topic, existing_id in self.entity_registry.items():
+                if existing_id == sensor_entity_id:
+                    sensor_exists = True
+                    break
+            # Create sensor version if it doesn't already exist
+            if not sensor_exists:
+                sensor_name = f"{entity_name}_sensor"
+                sensor_friendly_name = f"{friendly_name} Sensor"
+
+                sensor_entity_data = {
+                    "topic": topic,
+                    "payload": payload,
+                    "entity_type": "sensor",
+                    "unique_id": sensor_entity_id,
+                    "name": sensor_name,
+                    "friendly_name": sensor_friendly_name,
+                    "device_info": self._get_device_info(),
+                    "attributes": {
+                        **entity_info["attributes"],
+                        "original_entity": unique_id,
+                        "original_entity_type": entity_type
+                    },
                 }
+
+                # Create the sensor entity
+                if self.platforms_loaded:
+                    async_dispatcher_send(
+                        self.hass,
+                        SIGNAL_ADD_ENTITIES,
+                        sensor_entity_data,
+                    )
+                else:
+                    await self.entity_queue.put(sensor_entity_data)
 
             _LOGGER.debug("Final entity info: %s", entity_info)
             log_msg = f"Parsed topic as: type={entity_type}, name={entity_info['name']}, "
             log_msg += f"category={entity_category}, friendly_name={entity_info['friendly_name']}"
             _LOGGER.debug(log_msg)
 
-            # If platforms are loaded, send the entity to be created
-            # Otherwise, queue it for later
+            # If platforms are loaded, send the entities to be created
+            # Otherwise, queue them for later
             if self.platforms_loaded:
+                # Create the primary entity
                 async_dispatcher_send(
                     self.hass,
                     SIGNAL_ADD_ENTITIES,
                     entity_data,
                 )
+
+                # Then create the sensor version if it doesn't already exist
+                if not sensor_exists:
+                    async_dispatcher_send(
+                        self.hass,
+                        SIGNAL_ADD_ENTITIES,
+                        sensor_entity_data,
+                    )
             else:
-                _LOGGER.debug("Platforms not yet loaded, queuing entity: %s", entity_info["name"])
+                _LOGGER.debug("Platforms not yet loaded, queuing entities: %s", entity_info["name"])
                 await self.entity_queue.put(entity_data)
 
             # Check if this is a latitude or longitude topic for device tracker
@@ -1423,48 +1468,11 @@ class OVMSMQTTClient:
                 },
             }
 
-            # Create entity data for individual sensor versions of latitude and longitude
-            lat_sensor_data = {
-                "entity_type": "sensor",
-                "unique_id": self.lat_sensor_id,
-                "name": f"ovms_{vehicle_id}_latitude",
-                "friendly_name": f"{vehicle_id} Latitude",
-                "topic": lat_topic,
-                "payload": lat_value,
-                "device_info": device_info,
-                "attributes": {"category": "location"},
-            }
-
-            lon_sensor_data = {
-                "entity_type": "sensor",
-                "unique_id": self.lon_sensor_id,
-                "name": f"ovms_{vehicle_id}_longitude",
-                "friendly_name": f"{vehicle_id} Longitude",
-                "topic": lon_topic,
-                "payload": lon_value,
-                "device_info": device_info,
-                "attributes": {"category": "location"},
-            }
-
-            # Add the entities using the dispatcher
+            # Add the device tracker using the dispatcher
             async_dispatcher_send(
                 self.hass,
                 SIGNAL_ADD_ENTITIES,
                 tracker_entity_data,
-            )
-
-            # Also create standalone sensor versions of latitude and longitude
-            _LOGGER.info("Creating standalone sensor versions of GPS coordinates")
-            async_dispatcher_send(
-                self.hass,
-                SIGNAL_ADD_ENTITIES,
-                lat_sensor_data,
-            )
-
-            async_dispatcher_send(
-                self.hass,
-                SIGNAL_ADD_ENTITIES,
-                lon_sensor_data,
             )
 
             # Mark that we've created a device tracker
@@ -1558,24 +1566,11 @@ class OVMSMQTTClient:
                             "last_updated": current_time
                         }
 
-                        # 1. Update the device tracker
+                        # Update the device tracker
                         async_dispatcher_send(
                             self.hass,
                             f"{SIGNAL_UPDATE_ENTITY}_{device_tracker_id}",
                             payload,
-                        )
-
-                        # 2. Also update the individual latitude and longitude sensors
-                        async_dispatcher_send(
-                            self.hass,
-                            f"{SIGNAL_UPDATE_ENTITY}_{lat_sensor_id}",
-                            lat_value,  # Send original string value
-                        )
-
-                        async_dispatcher_send(
-                            self.hass,
-                            f"{SIGNAL_UPDATE_ENTITY}_{lon_sensor_id}",
-                            lon_value,  # Send original string value
                         )
 
                         _LOGGER.debug("Updated GPS entities with coordinates: %s, %s", lat_float, lon_float)
