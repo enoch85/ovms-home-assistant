@@ -856,11 +856,21 @@ class OVMSMQTTClient:
             # Check if a sensor version already exists for this topic
             sensor_entity_id = f"{unique_id}_sensor"
             sensor_exists = False
-            # Check if this sensor entity already exists in our registry
-            for existing_topic, existing_id in self.entity_registry.items():
+            
+            # Check by entity ID in registry
+            for existing_id in self.entity_registry.values():
                 if existing_id == sensor_entity_id:
                     sensor_exists = True
                     break
+            
+            # Also check by unique_id prefix (without the _sensor suffix)
+            if not sensor_exists:
+                for existing_id in self.entity_registry.values():
+                    # Check if this is a sensor version of the current entity
+                    if existing_id.startswith(unique_id) and existing_id != unique_id:
+                        sensor_exists = True
+                        break
+            
             # Create sensor version if it doesn't already exist
             if not sensor_exists:
                 sensor_name = f"{entity_name}_sensor"
@@ -1558,12 +1568,12 @@ class OVMSMQTTClient:
                             except (ValueError, TypeError):
                                 pass
 
-                        # Create payload for device tracker
+                        # Create payload for device tracker with proper timestamp format
                         payload = {
                             "latitude": lat_float,
                             "longitude": lon_float,
                             "gps_accuracy": gps_accuracy,
-                            "last_updated": current_time
+                            "last_updated": dt_util.utcnow().isoformat()
                         }
 
                         # Update the device tracker
