@@ -19,6 +19,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send, async_dispatcher_connect
 from homeassistant.helpers import device_registry as dr
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_CLIENT_ID,
@@ -327,8 +328,7 @@ class OVMSMQTTClient:
                 except Exception as ex:
                     _LOGGER.exception("Error in v3.1.1 subscription handler: %s", ex)
             self.client.on_subscribe = on_subscribe_v311
-
-    def _on_connect_callback(self, client, userdata, flags, rc):
+def _on_connect_callback(self, client, userdata, flags, rc):
         """Common connection callback for different MQTT versions."""
         try:
             if hasattr(mqtt, 'ReasonCodes'):
@@ -623,8 +623,7 @@ class OVMSMQTTClient:
 
         except Exception as ex:
             _LOGGER.exception("Error processing version message: %s", ex)
-
-    async def _async_process_message(self, msg) -> None:
+async def _async_process_message(self, msg) -> None:
         """Process an incoming MQTT message."""
         try:
             topic = msg.topic
@@ -853,26 +852,13 @@ class OVMSMQTTClient:
                 "attributes": entity_info["attributes"],
             }
 
-            # Check if a sensor version already exists for this topic
-            sensor_entity_id = f"{unique_id}_sensor"
-            sensor_exists = False
-
-            # Check by entity ID in registry
-            for existing_id in self.entity_registry.values():
-                if existing_id == sensor_entity_id:
-                    sensor_exists = True
-                    break
-
-            # Also check by unique_id prefix (without the _sensor suffix)
-            if not sensor_exists:
-                for existing_id in self.entity_registry.values():
-                    # Check if this is a sensor version of the current entity
-                    if existing_id.startswith(unique_id) and existing_id != unique_id:
-                        sensor_exists = True
-                        break
+            # Check if we should create a sensor version
+            # Check if this topic is already registered - if it is, don't create a sensor version
+            sensor_exists = topic in self.entity_registry
 
             # Create sensor version if it doesn't already exist
             if not sensor_exists:
+                sensor_entity_id = f"{unique_id}_sensor"
                 sensor_name = f"{entity_name}_sensor"
                 sensor_friendly_name = f"{friendly_name} Sensor"
 
@@ -977,8 +963,7 @@ class OVMSMQTTClient:
         except Exception as ex:
             _LOGGER.exception("Error creating friendly name: %s", ex)
             return "Unknown"
-
-    async def _async_platforms_loaded(self) -> None:
+async def _async_platforms_loaded(self) -> None:
         """Handle platforms loaded signal."""
         try:
             queued_count = self.entity_queue.qsize()
@@ -1371,8 +1356,7 @@ class OVMSMQTTClient:
                 "command": command,
                 "parameters": parameters,
             }
-
-    async def async_shutdown(self) -> None:
+async def async_shutdown(self) -> None:
         """Shutdown the MQTT client."""
         _LOGGER.info("Shutting down MQTT client")
 
