@@ -192,13 +192,13 @@ async def async_setup_entry(
         unique_id = data.get("unique_id", "")
         name = data.get("name", "").lower()
         topic = data.get("topic", "").lower()
-        
+
         is_gps_sensor = (
-            "_latitude_sensor" in unique_id or 
+            "_latitude_sensor" in unique_id or
             "_longitude_sensor" in unique_id or
             any(keyword in name or keyword in topic for keyword in ["latitude", "lat", "longitude", "lon", "lng"])
         )
-        
+
         if is_gps_sensor:
             _LOGGER.info("Adding GPS sensor: %s", data.get("friendly_name", data.get("name", "unknown")))
             try:

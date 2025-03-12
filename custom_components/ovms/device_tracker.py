@@ -82,7 +82,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
             self._attr_extra_state_attributes["topic"] = topic
         if "last_updated" not in self._attr_extra_state_attributes:
             self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
-        
+
         self.hass = hass
         self._latitude = None
         self._longitude = None
@@ -90,7 +90,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         self._last_update_time = 0
         self._prev_latitude = None
         self._prev_longitude = None
-        
+
         # Process initial payload
         if initial_payload:
             self._process_payload(initial_payload)
@@ -122,7 +122,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                             self._prev_longitude = state.attributes[attr]
                         else:
                             setattr(self, f"_{attr}", state.attributes[attr])
-                
+
                 # Don't overwrite entity attributes like unit, etc.
                 saved_attributes = {
                     k: v for k, v in state.attributes.items()
@@ -149,32 +149,32 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         try:
             current_time = time.time()
             coordinates_changed = False
-            
+
             # If payload is a dictionary, extract coordinates directly
             if isinstance(payload, dict):
                 if "latitude" in payload and "longitude" in payload:
                     try:
                         lat = float(payload["latitude"])
                         lon = float(payload["longitude"])
-                        
+
                         # Validate coordinates
                         if -90 <= lat <= 90 and -180 <= lon <= 180:
                             # Check if coordinates have changed significantly
-                            if (self._prev_latitude is None or 
+                            if (self._prev_latitude is None or
                                 self._prev_longitude is None or
                                 abs(lat - self._prev_latitude) > 0.00001 or
                                 abs(lon - self._prev_longitude) > 0.00001):
-                                
+
                                 coordinates_changed = True
                                 self._latitude = lat
                                 self._longitude = lon
                                 self._prev_latitude = lat
                                 self._prev_longitude = lon
-                            
+
                             # Add accuracy if available
                             if "gps_accuracy" in payload:
                                 self._attr_extra_state_attributes["gps_accuracy"] = payload["gps_accuracy"]
-                                
+
                             # Also update last_updated even if coordinates haven't changed
                             if "last_updated" in payload:
                                 self._attr_extra_state_attributes["last_updated"] = payload["last_updated"]
@@ -182,7 +182,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                                 self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
                     except (ValueError, TypeError):
                         _LOGGER.warning("Invalid coordinates in payload: %s", payload)
-                        
+
             # If topic is for a single coordinate - we should never get in here,
             # but keeping for backward compatibility
             elif "latitude" in self._topic.lower() or "lat" in self._topic.lower():
@@ -195,7 +195,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                             self._prev_latitude = lat
                 except (ValueError, TypeError):
                     _LOGGER.warning("Invalid latitude value: %s", payload)
-                    
+
             elif "longitude" in self._topic.lower() or "long" in self._topic.lower() or "lon" in self._topic.lower():
                 try:
                     lon = float(payload)
@@ -206,7 +206,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                             self._prev_longitude = lon
                 except (ValueError, TypeError):
                     _LOGGER.warning("Invalid longitude value: %s", payload)
-            
+
             # Process specific GPS-related topics
             elif "gpshdop" in self._topic.lower():
                 try:
@@ -226,20 +226,20 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                     self._attr_extra_state_attributes["gps_speed"] = value
                 except (ValueError, TypeError):
                     pass
-                    
-            # Only update the timestamp if coordinates have changed or 
+
+            # Only update the timestamp if coordinates have changed or
             # sufficient time has passed (to avoid unnecessary state updates)
             time_since_last_update = current_time - self._last_update_time
-            
+
             if coordinates_changed or time_since_last_update > 30:
                 self._last_update_time = current_time
                 # Update timestamp attribute if not already done
                 if "last_updated" not in payload:
                     self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
-                    
+
                 if coordinates_changed:
                     _LOGGER.debug("Updated device tracker coordinates.")
-                    
+
         except Exception as ex:
             _LOGGER.exception("Error processing payload: %s", ex)
 
