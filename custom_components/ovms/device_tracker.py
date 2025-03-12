@@ -7,7 +7,7 @@ from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -134,6 +134,23 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         def update_state(payload: Any) -> None:
             """Update the tracker state."""
             self._process_payload(payload)
+
+            # Also update corresponding sensor entities
+            try:
+                # Signal sensor entities to update
+                async_dispatcher_send(
+                    self.hass,
+                    f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}_latitude_sensor",
+                    self.latitude,
+                )
+                async_dispatcher_send(
+                    self.hass,
+                    f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}_longitude_sensor",
+                    self.longitude,
+                )
+            except Exception as ex:
+                _LOGGER.exception("Error updating sensor entities: %s", ex)
+
             self.async_write_ha_state()
 
         self.async_on_remove(
