@@ -803,7 +803,6 @@ class OVMSMQTTClient:
                         break
 
             # Extract the actual metric path
-            # Extract the actual metric path (everything after the category)
             metric_path = ""
             metric_parts = []
             try:
@@ -842,7 +841,7 @@ class OVMSMQTTClient:
             # Register this entity
             self.entity_registry[topic] = unique_id
 
-            # Create entity data
+            # Create entity data for primary entity type (binary_sensor, device_tracker, etc)
             entity_data = {
                 "topic": topic,
                 "payload": payload,
@@ -853,12 +852,12 @@ class OVMSMQTTClient:
                 "device_info": self._get_device_info(),
                 "attributes": entity_info["attributes"],
             }
-
-            # Create a sensor version with a different unique_id
-            sensor_unique_id = f"{unique_id}_sensor"
+            
+            # Also create a sensor version for every entity, regardless of type
             sensor_name = f"{entity_name}_sensor"
+            sensor_unique_id = f"{unique_id}_sensor"
             sensor_friendly_name = f"{friendly_name} Sensor"
-
+            
             sensor_entity_data = {
                 "topic": topic,
                 "payload": payload,
@@ -874,16 +873,6 @@ class OVMSMQTTClient:
                 },
             }
 
-            # Validate entity info before returning
-            if not entity_info or not isinstance(entity_info, dict):
-                _LOGGER.warning("Created invalid entity info: %s", entity_info)
-                # Create a minimal valid entity info as fallback
-                entity_info = {
-                    "name": entity_name or "unknown",
-                    "friendly_name": friendly_name or "Unknown Sensor",
-                    "attributes": entity_info["attributes"] or {},
-                }
-
             _LOGGER.debug("Final entity info: %s", entity_info)
             log_msg = f"Parsed topic as: type={entity_type}, name={entity_info['name']}, "
             log_msg += f"category={entity_category}, friendly_name={entity_info['friendly_name']}"
@@ -892,21 +881,21 @@ class OVMSMQTTClient:
             # If platforms are loaded, send the entities to be created
             # Otherwise, queue them for later
             if self.platforms_loaded:
-                # Add the primary entity
+                # First create the primary entity
                 async_dispatcher_send(
                     self.hass,
                     SIGNAL_ADD_ENTITIES,
                     entity_data,
                 )
                 
-                # Add the sensor version
+                # Then create the sensor version
                 async_dispatcher_send(
                     self.hass,
                     SIGNAL_ADD_ENTITIES,
                     sensor_entity_data,
                 )
             else:
-                _LOGGER.debug("Platforms not yet loaded, queuing entity: %s", entity_info["name"])
+                _LOGGER.debug("Platforms not yet loaded, queuing entities: %s", entity_info["name"])
                 await self.entity_queue.put(entity_data)
                 await self.entity_queue.put(sensor_entity_data)
 
@@ -1461,48 +1450,11 @@ class OVMSMQTTClient:
                 },
             }
 
-            # Create entity data for individual sensor versions of latitude and longitude
-            lat_sensor_data = {
-                "entity_type": "sensor",
-                "unique_id": self.lat_sensor_id,
-                "name": f"ovms_{vehicle_id}_latitude",
-                "friendly_name": f"{vehicle_id} Latitude",
-                "topic": lat_topic,
-                "payload": lat_value,
-                "device_info": device_info,
-                "attributes": {"category": "location"},
-            }
-
-            lon_sensor_data = {
-                "entity_type": "sensor",
-                "unique_id": self.lon_sensor_id,
-                "name": f"ovms_{vehicle_id}_longitude",
-                "friendly_name": f"{vehicle_id} Longitude",
-                "topic": lon_topic,
-                "payload": lon_value,
-                "device_info": device_info,
-                "attributes": {"category": "location"},
-            }
-
-            # Add the entities using the dispatcher
+            # Add the device tracker using the dispatcher
             async_dispatcher_send(
                 self.hass,
                 SIGNAL_ADD_ENTITIES,
                 tracker_entity_data,
-            )
-
-            # Also create standalone sensor versions of latitude and longitude
-            _LOGGER.info("Creating standalone sensor versions of GPS coordinates")
-            async_dispatcher_send(
-                self.hass,
-                SIGNAL_ADD_ENTITIES,
-                lat_sensor_data,
-            )
-
-            async_dispatcher_send(
-                self.hass,
-                SIGNAL_ADD_ENTITIES,
-                lon_sensor_data,
             )
 
             # Mark that we've created a device tracker
@@ -1596,24 +1548,11 @@ class OVMSMQTTClient:
                             "last_updated": current_time
                         }
 
-                        # 1. Update the device tracker
+                        # Update the device tracker
                         async_dispatcher_send(
                             self.hass,
                             f"{SIGNAL_UPDATE_ENTITY}_{device_tracker_id}",
                             payload,
-                        )
-
-                        # 2. Also update the individual latitude and longitude sensors
-                        async_dispatcher_send(
-                            self.hass,
-                            f"{SIGNAL_UPDATE_ENTITY}_{lat_sensor_id}",
-                            lat_value,  # Send original string value
-                        )
-
-                        async_dispatcher_send(
-                            self.hass,
-                            f"{SIGNAL_UPDATE_ENTITY}_{lon_sensor_id}",
-                            lon_value,  # Send original string value
                         )
 
                         _LOGGER.debug("Updated GPS entities with coordinates: %s, %s", lat_float, lon_float)
