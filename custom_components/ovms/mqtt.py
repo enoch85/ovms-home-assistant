@@ -128,6 +128,10 @@ class OVMSMQTTClient:
         # Store sensor IDs for updating individual lat/lon sensors
         self.lat_sensor_id = None
         self.lon_sensor_id = None
+        
+        # For GPS tracking
+        self._prev_latitude = None
+        self._prev_longitude = None
 
     async def async_setup(self) -> bool:
         """Set up the MQTT client."""
@@ -1480,6 +1484,11 @@ class OVMSMQTTClient:
         self._prev_longitude = None
         self._last_gps_update = 0
         
+        # Store sensor entity IDs for direct updates
+        vehicle_id = self.config.get(CONF_VEHICLE_ID, "")
+        lat_sensor_id = f"{vehicle_id}_latitude_sensor"
+        lon_sensor_id = f"{vehicle_id}_longitude_sensor"
+        
         @callback
         def gps_topics_updated(event_type=None, data=None) -> None:
             """Handle updates to GPS topics."""
@@ -1541,7 +1550,7 @@ class OVMSMQTTClient:
                             except (ValueError, TypeError):
                                 pass
 
-                        # Create payload
+                        # Create payload for device tracker
                         payload = {
                             "latitude": lat_float,
                             "longitude": lon_float,
@@ -1549,35 +1558,27 @@ class OVMSMQTTClient:
                             "last_updated": current_time
                         }
 
-                        # Send update to device tracker
+                        # 1. Update the device tracker
                         async_dispatcher_send(
                             self.hass,
                             f"{SIGNAL_UPDATE_ENTITY}_{device_tracker_id}",
                             payload,
                         )
-
-                        # Also update the individual latitude and longitude sensors
-                        # This is critical - ensure sensors get updates even if they weren't directly
-                        # updated via their topics
-                        if self.lat_sensor_id:
-                            async_dispatcher_send(
-                                self.hass,
-                                f"{SIGNAL_UPDATE_ENTITY}_{self.lat_sensor_id}",
-                                str(lat_float),  # Convert to string for consistency
-                            )
                         
-                        if self.lon_sensor_id:
-                            async_dispatcher_send(
-                                self.hass,
-                                f"{SIGNAL_UPDATE_ENTITY}_{self.lon_sensor_id}",
-                                str(lon_float),  # Convert to string for consistency
-                            )
+                        # 2. Also update the individual latitude and longitude sensors
+                        async_dispatcher_send(
+                            self.hass,
+                            f"{SIGNAL_UPDATE_ENTITY}_{lat_sensor_id}",
+                            lat_value,  # Send original string value
+                        )
+                        
+                        async_dispatcher_send(
+                            self.hass,
+                            f"{SIGNAL_UPDATE_ENTITY}_{lon_sensor_id}",
+                            lon_value,  # Send original string value
+                        )
 
-                        _LOGGER.debug("Updated GPS coordinates: lat=%s, lon=%s (changed=%s, time_since=%d)",
-                                     lat_float, lon_float, coordinates_changed, time_since_last_update)
-                    else:
-                        _LOGGER.debug("Skipping GPS update (no change and only %d seconds since last update)",
-                                     time_since_last_update)
+                        _LOGGER.debug("Updated GPS entities with coordinates: %s, %s", lat_float, lon_float)
 
                 except (ValueError, TypeError) as ex:
                     _LOGGER.debug("Error parsing GPS values: %s, %s - %s", lat_value, lon_value, ex)
@@ -1600,11 +1601,10 @@ class OVMSMQTTClient:
 
         self.hass.bus.async_listen("mqtt_message_received", message_received)
 
-        # Do an initial update to populate the sensors
+        # Do an initial update
         gps_topics_updated()
         
-        # Ensure regular updates even when coordinates don't change
-        # This ensures sensors don't go to "unknown" state
+        # Set up periodic check to ensure sensors don't go to unknown state
         async def periodic_check():
             """Periodically check GPS values to avoid sensors going to unknown state."""
             try:
@@ -1613,18 +1613,15 @@ class OVMSMQTTClient:
                     await asyncio.sleep(60)
                     if self._shutting_down:
                         break
-                
-                    # Get current sensor states
-                    lat_value = self.topic_cache.get(self.latitude_topic, {}).get("payload", "unknown")
-                    lon_value = self.topic_cache.get(self.longitude_topic, {}).get("payload", "unknown")
-            
-                    # Only update if either sensor is unknown
-                    if lat_value in ("unknown", "unavailable", "") or lon_value in ("unknown", "unavailable", ""):
-                        _LOGGER.debug("Sensor(s) in unknown state, forcing update")
-                        gps_topics_updated()
+                    
+                    # Force an update to ensure sensors stay active
+                    gps_topics_updated()
+                    _LOGGER.debug("Periodic GPS check completed")
+                    
             except asyncio.CancelledError:
-                pass
+                _LOGGER.debug("Periodic GPS check cancelled")
             except Exception as ex:
                 _LOGGER.exception("Error in periodic GPS check: %s", ex)
+                
         # Start the periodic updater task
         self.hass.loop.create_task(periodic_check())
