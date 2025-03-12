@@ -39,7 +39,7 @@ class EntityFactory:
 
             # Generate unique IDs
             entity_data = self._generate_unique_ids(topic, entity_data)
-            
+
             # Check if we already processed this entity
             unique_id = entity_data.get("unique_id")
             if unique_id in self.created_entities:
@@ -47,14 +47,14 @@ class EntityFactory:
                 return
 
             _LOGGER.info("Creating %s: %s", entity_type, entity_data.get("friendly_name", entity_data.get("name")))
-            
+
             # Record that we've processed this entity
             self.created_entities.add(unique_id)
-            
+
             # Store in entity registry
             priority = entity_data.get("priority", 0)
             self.entity_registry.register_entity(topic, unique_id, entity_type, priority)
-            
+
             # Create entity data for dispatcher
             dispatcher_data = {
                 "entity_type": entity_type,
@@ -66,11 +66,11 @@ class EntityFactory:
                 "device_info": self._get_device_info(),
                 "attributes": entity_data.get("attributes", {}),
             }
-            
+
             # For device trackers, also create a sensor version
             if entity_type == "device_tracker":
                 await self._create_location_entities(topic, payload, entity_data)
-            
+
             # Send to platform or queue for later
             if self.platforms_loaded:
                 async_dispatcher_send(
@@ -80,7 +80,7 @@ class EntityFactory:
                 )
             else:
                 await self.entity_queue.put(dispatcher_data)
-        
+
         except Exception as ex:
             _LOGGER.exception("Error creating entity: %s", ex)
 
@@ -89,20 +89,20 @@ class EntityFactory:
         try:
             unique_id = entity_data.get("unique_id")
             name = entity_data.get("name")
-            
+
             # Determine if this is latitude or longitude
             is_latitude = any(keyword in topic.lower() for keyword in ["latitude", "lat"])
             is_longitude = any(keyword in topic.lower() for keyword in ["longitude", "long", "lon", "lng"])
-            
+
             # Track for the device tracker coordination
             location_type = "latitude" if is_latitude else "longitude" if is_longitude else "location"
             self.location_entities[location_type] = unique_id
-            
+
             # Create a corresponding sensor entity
             sensor_unique_id = f"{unique_id}_sensor"
             sensor_name = f"{name}_sensor"
             sensor_friendly_name = f"{entity_data.get('friendly_name', name)} Sensor"
-            
+
             sensor_data = {
                 "entity_type": "sensor",
                 "unique_id": sensor_unique_id,
@@ -118,17 +118,17 @@ class EntityFactory:
                     "location_type": location_type,
                 },
             }
-            
+
             # Register the relationship for update coordination
             self.entity_registry.register_relationship(
-                unique_id, 
-                sensor_unique_id, 
+                unique_id,
+                sensor_unique_id,
                 "location_sensor"
             )
-            
+
             # Add to entity registry
             self.entity_registry.register_entity(topic, sensor_unique_id, "sensor", priority=5)
-            
+
             # Send to platform or queue for later
             if self.platforms_loaded:
                 async_dispatcher_send(
@@ -138,11 +138,11 @@ class EntityFactory:
                 )
             else:
                 await self.entity_queue.put(sensor_data)
-            
+
             # If we have both latitude and longitude, create a combined device tracker
             if "latitude" in self.location_entities and "longitude" in self.location_entities:
                 await self._create_combined_device_tracker()
-        
+
         except Exception as ex:
             _LOGGER.exception("Error creating location entities: %s", ex)
 
@@ -152,16 +152,16 @@ class EntityFactory:
             vehicle_id = self.config.get("vehicle_id", "")
             if not vehicle_id:
                 return
-                
+
             # Create a unique ID for the combined device tracker
             tracker_id = f"{vehicle_id}_location"
-            
+
             # Skip if already created
             if tracker_id in self.created_entities:
                 return
-                
+
             self.created_entities.add(tracker_id)
-            
+
             # Create device tracker data
             tracker_data = {
                 "entity_type": "device_tracker",
@@ -180,7 +180,7 @@ class EntityFactory:
                     "lon_entity_id": self.location_entities.get("longitude"),
                 },
             }
-            
+
             # Register relationships with individual lat/lon entities
             if "latitude" in self.location_entities:
                 self.entity_registry.register_relationship(
@@ -188,17 +188,17 @@ class EntityFactory:
                     tracker_id,
                     "combined_tracker"
                 )
-                
+
             if "longitude" in self.location_entities:
                 self.entity_registry.register_relationship(
                     self.location_entities["longitude"],
                     tracker_id,
                     "combined_tracker"
                 )
-            
+
             # Add to entity registry
             self.entity_registry.register_entity("combined_location", tracker_id, "device_tracker", priority=10)
-            
+
             # Send to platform or queue for later
             if self.platforms_loaded:
                 async_dispatcher_send(
@@ -208,9 +208,9 @@ class EntityFactory:
                 )
             else:
                 await self.entity_queue.put(tracker_data)
-                
+
             _LOGGER.info("Created combined device tracker: %s", tracker_id)
-            
+
         except Exception as ex:
             _LOGGER.exception("Error creating combined device tracker: %s", ex)
 
@@ -221,22 +221,22 @@ class EntityFactory:
             entity_type = entity_data.get("entity_type")
             name = entity_data.get("name", "")
             vehicle_id = self.config.get("vehicle_id", "").lower()
-            
+
             # Create a hash of the topic for uniqueness
             topic_hash = hashlib.md5(topic.encode()).hexdigest()[:8]
-            
+
             # Extract category from attributes
             category = entity_data.get("attributes", {}).get("category", "unknown")
-            
+
             # Create a unique ID
             unique_id = f"{vehicle_id}_{category}_{name}_{topic_hash}"
-            
+
             # Update entity data
             updated_data = entity_data.copy()
             updated_data["unique_id"] = unique_id
-            
+
             return updated_data
-        
+
         except Exception as ex:
             _LOGGER.exception("Error generating unique IDs: %s", ex)
             # Fallback to a simple unique ID
@@ -270,19 +270,19 @@ class EntityFactory:
     async def async_process_queued_entities(self) -> None:
         """Process any queued entities."""
         self.platforms_loaded = True
-        
+
         queued_count = self.entity_queue.qsize()
         _LOGGER.info("Processing %d queued entities", queued_count)
-        
+
         # Process all queued entities
         while not self.entity_queue.empty():
             entity_data = await self.entity_queue.get()
             _LOGGER.debug("Processing queued entity: %s", entity_data.get("name"))
-            
+
             async_dispatcher_send(
                 self.hass,
                 SIGNAL_ADD_ENTITIES,
                 entity_data,
             )
-            
+
             self.entity_queue.task_done()

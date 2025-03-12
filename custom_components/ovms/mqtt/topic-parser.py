@@ -166,19 +166,19 @@ class TopicParser:
     def _is_location_topic(self, parts: List[str], name: str, topic: str) -> bool:
         """Check if topic is a location topic."""
         location_keywords = ["latitude", "longitude", "lat", "lon", "lng", "gps"]
-        
+
         # Check in name
         if any(keyword in name.lower() for keyword in location_keywords):
             return True
-            
+
         # Check in topic
         if any(keyword in topic.lower() for keyword in location_keywords):
             return True
-            
+
         # Check in parts
         if any(keyword in part.lower() for part in parts for keyword in location_keywords):
             return True
-            
+
         return False
 
     def _determine_entity_type(self, parts: List[str], metric_path: str, metric_info: Optional[Dict]) -> str:

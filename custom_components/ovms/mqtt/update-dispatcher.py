@@ -34,14 +34,14 @@ class UpdateDispatcher:
 
             # Get the entity type
             entity_type = self.entity_registry.get_entity_type(entity_id)
-            
+
             # Update the primary entity
             self._update_entity(entity_id, payload)
 
             # Special handling for location topics
             if self._is_location_topic(topic):
                 self._handle_location_update(topic, entity_id, payload)
-                
+
             # Special handling for version topics
             if "version" in topic.lower() or "m.version" in topic.lower():
                 self._handle_version_update(topic, entity_id, payload)
@@ -51,7 +51,7 @@ class UpdateDispatcher:
             for related_id in related_entities:
                 # Get relationship type to determine how to handle the update
                 relationship_type = self.entity_registry.relationship_types.get((entity_id, related_id))
-                
+
                 if relationship_type == "location_sensor":
                     # Direct pass-through for location sensor pairs
                     self._update_entity(related_id, payload)
@@ -70,10 +70,10 @@ class UpdateDispatcher:
         try:
             # Dispatch the update signal
             signal = f"{SIGNAL_UPDATE_ENTITY}_{entity_id}"
-            
+
             _LOGGER.debug("Dispatching update for %s", entity_id)
             async_dispatcher_send(self.hass, signal, payload)
-            
+
         except Exception as ex:
             _LOGGER.exception("Error updating entity %s: %s", entity_id, ex)
 
@@ -86,22 +86,22 @@ class UpdateDispatcher:
         """Handle updates to location topics."""
         try:
             now = dt_util.utcnow().timestamp()
-            
+
             # Determine if this is latitude or longitude
             is_latitude = any(keyword in topic.lower() for keyword in ["latitude", "lat"])
             is_longitude = any(keyword in topic.lower() for keyword in ["longitude", "long", "lon", "lng"])
-            
+
             if is_latitude:
                 self.location_values["latitude"] = self._parse_coordinate(payload)
                 self.last_location_update["latitude"] = now
             elif is_longitude:
                 self.location_values["longitude"] = self._parse_coordinate(payload)
                 self.last_location_update["longitude"] = now
-                
+
             # Check if we have both coordinates and update combined tracker
             if "latitude" in self.location_values and "longitude" in self.location_values:
                 self._update_all_device_trackers()
-                
+
         except Exception as ex:
             _LOGGER.exception("Error handling location update: %s", ex)
 
@@ -109,19 +109,19 @@ class UpdateDispatcher:
         """Parse a coordinate value from various formats."""
         if value is None:
             return None
-            
+
         try:
             # If it's already a float or int, return it
             if isinstance(value, (float, int)):
                 return float(value)
-                
+
             # Try to convert string to float
             if isinstance(value, str):
                 return float(value.strip())
-                
+
             # Other cases
             return None
-            
+
         except (ValueError, TypeError):
             return None
 
@@ -130,23 +130,23 @@ class UpdateDispatcher:
         try:
             # Find all device trackers
             device_trackers = self.entity_registry.get_entities_by_type("device_tracker")
-            
+
             # Create payload with current location data
             payload = {
                 "latitude": self.location_values.get("latitude"),
                 "longitude": self.location_values.get("longitude"),
                 "last_updated": dt_util.utcnow().isoformat(),
             }
-            
+
             for tracker_id in device_trackers:
                 # Skip if it's a specific lat/lon entity
                 topic = self.entity_registry.get_topic_for_entity(tracker_id)
                 if topic != "combined_location" and self._is_location_topic(topic):
                     continue
-                    
+
                 # Update the combined tracker
                 self._update_entity(tracker_id, payload)
-                
+
         except Exception as ex:
             _LOGGER.exception("Error updating device trackers: %s", ex)
 
@@ -159,10 +159,10 @@ class UpdateDispatcher:
                 "longitude": self.location_values.get("longitude"),
                 "last_updated": dt_util.utcnow().isoformat(),
             }
-            
+
             # Update the tracker
             self._update_entity(tracker_id, payload)
-            
+
         except Exception as ex:
             _LOGGER.exception("Error updating combined tracker: %s", ex)
 
@@ -173,13 +173,13 @@ class UpdateDispatcher:
             if "m.version" in topic and not "xvu" in topic:
                 # Update device info in Home Assistant with the version
                 _LOGGER.info("Detected firmware version update: %s", payload)
-                
+
                 # Device registry will be updated by the entity class
                 # Here we just ensure it has higher priority
                 current_priority = self.entity_registry.priorities.get(topic, 0)
                 if current_priority < 15:
                     self.entity_registry.priorities[topic] = 15
                     _LOGGER.debug("Increased priority for version topic: %s", topic)
-                
+
         except Exception as ex:
             _LOGGER.exception("Error handling version update: %s", ex)

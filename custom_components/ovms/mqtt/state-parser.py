@@ -201,7 +201,7 @@ class StateParser:
         """Calculate statistics for a list of values."""
         if not values:
             return {}
-            
+
         try:
             # Calculate basic statistics
             stats = {
@@ -210,7 +210,7 @@ class StateParser:
                 "max": max(values),
                 "count": len(values),
             }
-            
+
             # Calculate median
             sorted_values = sorted(values)
             n = len(sorted_values)
@@ -218,9 +218,9 @@ class StateParser:
                 stats["median"] = (sorted_values[n//2 - 1] + sorted_values[n//2]) / 2
             else:
                 stats["median"] = sorted_values[n//2]
-                
+
             return stats
-            
+
         except Exception as ex:
             _LOGGER.exception("Error calculating statistics: %s", ex)
             return {}
@@ -232,7 +232,7 @@ class StateParser:
             # Check for direct float values
             if isinstance(payload, (int, float)):
                 return {"value": float(payload)}
-                
+
             # Try JSON parsing
             try:
                 data = json.loads(payload) if isinstance(payload, str) else payload
@@ -250,16 +250,16 @@ class StateParser:
                                 return {"value": float(value)}
             except (ValueError, json.JSONDecodeError):
                 pass
-                
+
             # Try direct string conversion
             if isinstance(payload, str):
                 try:
                     return {"value": float(payload.strip())}
                 except (ValueError, TypeError):
                     pass
-                    
+
             return {}
-            
+
         except Exception as ex:
             _LOGGER.exception("Error parsing GPS coordinates: %s", ex)
             return {}

@@ -25,7 +25,7 @@ class EntityRegistry:
             # Check if the topic already has a registered entity
             if topic in self.topics:
                 existing_priority = self.priorities.get(topic, 0)
-                
+
                 # If the new entity has lower priority, don't register it
                 if existing_priority >= priority:
                     _LOGGER.debug(
@@ -33,31 +33,31 @@ class EntityRegistry:
                         topic, existing_priority, priority
                     )
                     return False
-                    
+
                 # Otherwise, unregister the old entity
                 old_entity_id = self.topics[topic]
                 _LOGGER.debug(
                     "Replacing entity %s with %s for topic %s (priority %d vs %d)",
                     old_entity_id, entity_id, topic, existing_priority, priority
                 )
-                
+
                 # Remove from reverse lookup
                 if old_entity_id in self.reverse_lookup:
                     if self.reverse_lookup[old_entity_id] == topic:
                         self.reverse_lookup.pop(old_entity_id)
-            
+
             # Register the entity
             self.topics[topic] = entity_id
             self.entity_types[entity_id] = entity_type
             self.priorities[topic] = priority
             self.reverse_lookup[entity_id] = topic
-            
+
             # Initialize relationships
             if entity_id not in self.relationships:
                 self.relationships[entity_id] = set()
-                
+
             return True
-            
+
         except Exception as ex:
             _LOGGER.exception("Error registering entity: %s", ex)
             return False
@@ -68,23 +68,23 @@ class EntityRegistry:
             # Ensure both entities have relationship entries
             if entity_id not in self.relationships:
                 self.relationships[entity_id] = set()
-            
+
             if related_id not in self.relationships:
                 self.relationships[related_id] = set()
-            
+
             # Add the relationship
             self.relationships[entity_id].add(related_id)
             self.relationships[related_id].add(entity_id)
-            
+
             # Store the relationship type
             self.relationship_types[(entity_id, related_id)] = relationship_type
             self.relationship_types[(related_id, entity_id)] = relationship_type
-            
+
             _LOGGER.debug(
                 "Registered %s relationship between %s and %s",
                 relationship_type, entity_id, related_id
             )
-        
+
         except Exception as ex:
             _LOGGER.exception("Error registering relationship: %s", ex)
 
@@ -104,7 +104,7 @@ class EntityRegistry:
         """Get entities related to the specified entity with the given relationship type."""
         related_entities = self.relationships.get(entity_id, set())
         return [
-            related_id for related_id in related_entities 
+            related_id for related_id in related_entities
             if self.relationship_types.get((entity_id, related_id)) == relationship_type
         ]
 
@@ -116,7 +116,7 @@ class EntityRegistry:
         """Update metadata for an entity."""
         if entity_id not in self.entities:
             self.entities[entity_id] = {}
-            
+
         self.entities[entity_id].update(metadata)
 
     def get_entity_metadata(self, entity_id: str) -> Dict[str, Any]:

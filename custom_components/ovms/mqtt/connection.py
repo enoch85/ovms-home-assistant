@@ -52,10 +52,10 @@ class MQTTConnectionManager:
         self.reconnect_count = 0
         self.message_callback = message_callback
         self.connection_callback = connection_callback
-        
+
         # Format the structure prefix
         self.structure_prefix = self._format_structure_prefix()
-        
+
         # Status tracking
         self._status_topic = None
         self._connected_payload = "online"
@@ -87,10 +87,10 @@ class MQTTConnectionManager:
     async def async_setup(self) -> bool:
         """Set up the MQTT client."""
         _LOGGER.debug("Setting up MQTT connection manager")
-        
+
         # Initialize empty tracking sets/dictionaries
         self._shutting_down = False
-        
+
         # Create the MQTT client
         self.client = await self._create_mqtt_client()
         if not self.client:
@@ -99,7 +99,7 @@ class MQTTConnectionManager:
 
         # Set up the callbacks
         self._setup_callbacks()
-        
+
         return True
 
     async def _create_mqtt_client(self) -> mqtt.Client:
@@ -195,7 +195,7 @@ class MQTTConnectionManager:
         def on_disconnect(client, userdata, rc, properties=None):
             """Handle disconnection."""
             self.connected = False
-            
+
             # Notify the client
             if self.connection_callback:
                 self.connection_callback(False)
@@ -227,7 +227,7 @@ class MQTTConnectionManager:
                     payload = msg.payload.decode("utf-8")
                 except UnicodeDecodeError:
                     payload = "<binary data>"
-                
+
                 # Process the message
                 if self.message_callback:
                     asyncio.run_coroutine_threadsafe(
@@ -262,14 +262,14 @@ class MQTTConnectionManager:
 
             if rc == 0:
                 self.connected = True
-                
+
                 # Notify the client
                 if self.connection_callback:
                     self.connection_callback(True)
-                    
+
                 # Reset reconnect count on successful connection
                 self.reconnect_count = 0
-                
+
                 # Re-subscribe if we get disconnected
                 asyncio.run_coroutine_threadsafe(
                     self.async_subscribe_topics(),
@@ -286,11 +286,11 @@ class MQTTConnectionManager:
                     )
             else:
                 self.connected = False
-                
+
                 # Notify the client
                 if self.connection_callback:
                     self.connection_callback(False)
-                    
+
                 _LOGGER.error("Failed to connect to MQTT broker: %s", rc)
         except Exception as ex:
             _LOGGER.exception("Error in connect callback: %s", ex)
@@ -421,7 +421,7 @@ class MQTTConnectionManager:
         try:
             if qos is None:
                 qos = self.config.get(CONF_QOS, 1)
-                
+
             await self.hass.async_add_executor_job(
                 self.client.publish, topic, payload, qos, retain
             )

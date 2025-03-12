@@ -35,7 +35,7 @@ class CommandHandler:
         )
         self._cleanup_task = None
         self.structure_prefix = self._format_structure_prefix()
-        
+
         # Start cleanup task
         self._cleanup_task = asyncio.create_task(self._async_cleanup_pending_commands())
 
@@ -124,7 +124,7 @@ class CommandHandler:
                 if current_vehicle_id == self.config.get(CONF_VEHICLE_ID):
                     mqtt_client = data["mqtt_client"].connection_manager
                     break
-                    
+
         if not mqtt_client or not mqtt_client.connected:
             _LOGGER.error("Cannot send command, not connected to MQTT broker")
             return {"success": False, "error": "Not connected to MQTT broker"}
@@ -251,16 +251,16 @@ class CommandHandler:
         try:
             # Extract command ID from response topic
             command_id = topic.split("/")[-1]
-            
+
             # Look up pending command
             if command_id in self.pending_commands:
                 future = self.pending_commands[command_id]["future"]
                 if not future.done():
                     future.set_result(payload)
-                    
+
                 # Clean up
                 del self.pending_commands[command_id]
-                
+
         except Exception as ex:
             _LOGGER.exception("Error processing command response: %s", ex)
 
