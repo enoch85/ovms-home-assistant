@@ -1,5 +1,6 @@
 """Support for OVMS location tracking."""
 import logging
+import re
 import time
 from typing import Any, Dict, Optional, List
 
@@ -74,7 +75,29 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         """Initialize the device tracker."""
         self._attr_unique_id = unique_id
         self._internal_name = name
-        self._attr_name = friendly_name or name.replace("_", " ").title()
+        
+        # Extract vehicle ID from name or device info
+        vehicle_id = None
+        
+        # Try to extract from device info identifiers
+        if isinstance(device_info, dict) and "identifiers" in device_info:
+            for identifier in device_info["identifiers"]:
+                if isinstance(identifier, tuple) and len(identifier) > 1 and identifier[0] == DOMAIN:
+                    vehicle_id = identifier[1]
+                    break
+        
+        # If not found in device info, try extracting from name
+        if not vehicle_id:
+            match = re.search(r'ovms_([a-zA-Z0-9]+)_', name)
+            if match:
+                vehicle_id = match.group(1)
+        
+        # Set the device tracker friendly name per requirements
+        if vehicle_id:
+            self._attr_name = f"({vehicle_id}) Location"
+        else:
+            self._attr_name = friendly_name or name.replace("_", " ").title()
+            
         self._topic = topic
         self._attr_device_info = device_info or {}
         self._attr_extra_state_attributes = attributes.copy() if attributes else {}
