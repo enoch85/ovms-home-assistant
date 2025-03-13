@@ -681,25 +681,118 @@ class OVMSSensor(SensorEntity, RestoreEntity):
     def _process_json_payload(self, payload: str) -> None:
         """Process JSON payload to extract additional attributes."""
         try:
-            json_data = json.loads(payload)
-            if isinstance(json_data, dict):
-                # Add useful attributes from the data
-                for key, value in json_data.items():
-                    if key not in ["value", "state", "data"] and key not in self._attr_extra_state_attributes:
-                        self._attr_extra_state_attributes[key] = value
+            # First check if payload is a comma-separated list of values (cell data)
+            if isinstance(payload, str) and "," in payload:
+                try:
+                    values = [float(val.strip()) for val in payload.split(",") if val.strip()]
+                    if values:
+                        # Add statistical attributes
+                        self._attr_extra_state_attributes["min_value"] = min(values)
+                        self._attr_extra_state_attributes["max_value"] = max(values)
+                        self._attr_extra_state_attributes["mean_value"] = sum(values) / len(values)
+                        self._attr_extra_state_attributes["median_value"] = self._calculate_median(values)
+                        self._attr_extra_state_attributes["count"] = len(values)
+                        self._attr_extra_state_attributes["values"] = values
 
-                # If there's a timestamp in the JSON, use it
-                if "timestamp" in json_data:
-                    self._attr_extra_state_attributes["device_timestamp"] = json_data["timestamp"]
+                        # Add cell-specific attributes
+                        for i, val in enumerate(values):
+                            self._attr_extra_state_attributes[f"cell_{i+1}"] = val
+                except (ValueError, TypeError):
+                    # Not a list of numbers, continue with JSON parsing
+                    pass
 
-                # If there's a unit in the JSON, use it for native unit
-                if "unit" in json_data and not self._attr_native_unit_of_measurement:
-                    unit = json_data["unit"]
-                    self._attr_native_unit_of_measurement = unit
+            # Try to parse as JSON
+            try:
+                json_data = json.loads(payload) if isinstance(payload, str) else payload
+                if isinstance(json_data, dict):
+                    # Add all fields as attributes
+                    for key, value in json_data.items():
+                        if key not in ["value", "state", "data"] and key not in self._attr_extra_state_attributes:
+                            self._attr_extra_state_attributes[key] = value
 
-        except (ValueError, json.JSONDecodeError):
-            # Not JSON, that's fine
-            pass
+                    # If there's a timestamp in the JSON, use it
+                    if "timestamp" in json_data:
+                        self._attr_extra_state_attributes["device_timestamp"] = json_data["timestamp"]
+
+                    # If there's a unit in the JSON, use it for native unit
+                    if "unit" in json_data and not self._attr_native_unit_of_measurement:
+                        unit = json_data["unit"]
+                        self._attr_native_unit_of_measurement = unit
+
+                    # Extract and add any nested attributes
+                    for key, value in json_data.items():
+                        if isinstance(value, dict):
+                            for subkey, subvalue in value.items():
+                                attr_key = f"{key}_{subkey}"
+                                if attr_key not in self._attr_extra_state_attributes:
+                                    self._attr_extra_state_attributes[attr_key] = subvalue
+
+                # If JSON is an array, add array attributes
+                elif isinstance(json_data, list):
+                    self._attr_extra_state_attributes["list_values"] = json_data
+                    self._attr_extra_state_attributes["list_length"] = len(json_data)
+
+                    # Try to convert to numbers and add statistics
+                    try:
+                        numeric_values = [float(val) for val in json_data]
+                        self._attr_extra_state_attributes["min_value"] = min(numeric_values)
+                        self._attr_extra_state_attributes["max_value"] = max(numeric_values)
+                        self._attr_extra_state_attributes["mean_value"] = sum(numeric_values) / len(numeric_values)
+                        self._attr_extra_state_attributes["median_value"] = self._calculate_median(numeric_values)
+                    except (ValueError, TypeError):
+                        # Not all elements are numeric
+                        pass
+
+            except (ValueError, json.JSONDecodeError):
+                # Not JSON, that's fine
+                pass
+
+            # Add derived attributes based on entity type
+            if hasattr(self, "_attr_device_class"):
+                # Add specific attributes for different device classes
+                if self._attr_device_class == SensorDeviceClass.BATTERY:
+                    # Add battery-specific attributes
+                    if hasattr(self, "_attr_native_value") and self._attr_native_value is not None:
+                        try:
+                            value = float(self._attr_native_value)
+                            if value <= 20:
+                                self._attr_extra_state_attributes["battery_level"] = "low"
+                            elif value <= 50:
+                                self._attr_extra_state_attributes["battery_level"] = "medium"
+                            else:
+                                self._attr_extra_state_attributes["battery_level"] = "high"
+                        except (ValueError, TypeError):
+                            pass
+
+                elif self._attr_device_class == SensorDeviceClass.TEMPERATURE:
+                    # Add temperature-specific attributes
+                    if hasattr(self, "_attr_native_value") and self._attr_native_value is not None:
+                        try:
+                            temp = float(self._attr_native_value)
+                            if "ambient" in self._internal_name.lower() or "cabin" in self._internal_name.lower():
+                                if temp < 0:
+                                    self._attr_extra_state_attributes["temperature_level"] = "freezing"
+                                elif temp < 10:
+                                    self._attr_extra_state_attributes["temperature_level"] = "cold"
+                                elif temp < 20:
+                                    self._attr_extra_state_attributes["temperature_level"] = "cool"
+                                elif temp < 25:
+                                    self._attr_extra_state_attributes["temperature_level"] = "comfortable"
+                                elif temp < 30:
+                                    self._attr_extra_state_attributes["temperature_level"] = "warm"
+                                else:
+                                    self._attr_extra_state_attributes["temperature_level"] = "hot"
+                        except (ValueError, TypeError):
+                            pass
+
+            # Add full topic path for debugging
+            self._attr_extra_state_attributes["full_topic"] = self._topic
+
+            # Last update timestamp
+            self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
+
+        except Exception as ex:
+            _LOGGER.exception("Error processing attributes: %s", ex)
 
     def _update_cell_sensor_values(self, cell_values):
         """Update the values of existing cell sensors."""

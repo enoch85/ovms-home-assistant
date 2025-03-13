@@ -115,17 +115,102 @@ class UpdateDispatcher:
         except Exception as ex:
             _LOGGER.exception("Error handling location update: %s", ex)
 
+    def _handle_version_update(self, topic: str, entity_id: str, payload: str) -> None:
+        """Handle updates to version topics with special priority."""
+        try:
+            # If this is a version topic, update the device info
+            if any(ver_keyword in topic.lower() for ver_keyword in ["version", "m.version"]):
+                # Update device info in Home Assistant with the version
+                _LOGGER.info("Detected firmware version update: %s", payload)
+
+                # Check if we have a topic_prefix
+                topic_parts = topic.split('/')
+                if len(topic_parts) < 3:
+                    return
+
+                # Extract vehicle_id from topic path or config
+                vehicle_id = None
+                try:
+                    for idx, part in enumerate(topic_parts):
+                        if part.lower() in ["ovms", "client"]:
+                            if idx + 1 < len(topic_parts):
+                                vehicle_id = topic_parts[idx + 1]
+                                break
+                except (IndexError, ValueError):
+                    pass
+
+                # If we couldn't extract from topic, use config
+                if not vehicle_id:
+                    for entry_id, data in self.hass.data[DOMAIN].items():
+                        if "mqtt_client" in data:
+                            config = data["mqtt_client"].config
+                            if "vehicle_id" in config:
+                                vehicle_id = config["vehicle_id"]
+                                break
+
+                if not vehicle_id:
+                    _LOGGER.warning("Could not determine vehicle_id for version update")
+                    return
+
+                # Find the device in the registry directly by identifiers
+                from homeassistant.helpers import device_registry as dr
+                device_registry = dr.async_get(self.hass)
+
+                # Try to find the device by its identifier
+                device = None
+                for dev in device_registry.devices.values():
+                    for identifier in dev.identifiers:
+                        if identifier[0] == DOMAIN and identifier[1] == vehicle_id:
+                            device = dev
+                            break
+                    if device:
+                        break
+
+                if device:
+                    # Update the firmware version
+                    device_registry.async_update_device(
+                        device.id,
+                        sw_version=payload
+                    )
+                    _LOGGER.debug("Updated device %s firmware version to %s", device.id, payload)
+                else:
+                    _LOGGER.warning("Could not find device for vehicle_id: %s", vehicle_id)
+
+                # Also update via entity registry as a fallback
+                from homeassistant.helpers import entity_registry as er
+                entity_registry = er.async_get(self.hass)
+                entity_entry = entity_registry.async_get(entity_id)
+                if entity_entry and entity_entry.device_id:
+                    # Find the device
+                    device = device_registry.async_get(entity_entry.device_id)
+                    if device:
+                        # Update the firmware version
+                        device_registry.async_update_device(
+                            device.id,
+                            sw_version=payload
+                        )
+                        _LOGGER.debug("Updated device %s firmware version via entity", device.id)
+
+                # Ensure version topics have higher priority
+                current_priority = self.entity_registry.priorities.get(topic, 0)
+                if current_priority < 15:
+                    self.entity_registry.priorities[topic] = 15
+                    _LOGGER.debug("Increased priority for version topic: %s", topic)
+
+        except Exception as ex:
+            _LOGGER.exception("Error handling version update: %s", ex)
+
     def _handle_gps_quality_update(self, topic: str, payload: Any) -> None:
         """Handle updates to GPS quality topics and update device trackers."""
         try:
             # Process GPS quality information
             quality_value = self._parse_numeric_value(payload)
-            
+
             if quality_value is not None:
                 # Check what type of GPS quality metric this is
                 is_hdop = any(keyword in topic.lower() for keyword in ["gpshdop", "gps_hdop"])
                 is_signal_quality = any(keyword in topic.lower() for keyword in ["gpssq", "gps_sq"])
-                
+
                 # Calculate accuracy
                 accuracy = None
                 if is_signal_quality:
@@ -134,7 +219,7 @@ class UpdateDispatcher:
                 elif is_hdop:
                     # HDOP - lower is better
                     accuracy = max(5, quality_value * 5)  # Each HDOP unit is ~5m of accuracy
-                
+
                 if accuracy is not None:
                     # Update all device trackers with this GPS accuracy
                     device_trackers = self.entity_registry.get_entities_by_type("device_tracker")
@@ -145,46 +230,9 @@ class UpdateDispatcher:
                             "last_updated": dt_util.utcnow().isoformat()
                         }
                         self._update_entity(tracker_id, quality_payload)
-        
+
         except Exception as ex:
             _LOGGER.exception("Error handling GPS quality update: %s", ex)
-
-    def _handle_version_update(self, topic: str, entity_id: str, payload: str) -> None:
-        """Handle updates to version topics with special priority."""
-        try:
-            # If this is a version topic, update the device info
-            if any(ver_keyword in topic.lower() for ver_keyword in ["version", "m.version"]):
-                # Update device info in Home Assistant with the version
-                _LOGGER.info("Detected firmware version update: %s", payload)
-                
-                # Find the device registry entry for this entity
-                from homeassistant.helpers import device_registry as dr
-                from homeassistant.helpers import entity_registry as er
-                
-                device_registry = dr.async_get(self.hass)
-                entity_registry = er.async_get(self.hass)
-                
-                # Get the entity from the entity registry
-                entity_entry = entity_registry.async_get(entity_id)
-                if entity_entry and entity_entry.device_id:
-                    # Find the device
-                    device = device_registry.async_get(entity_entry.device_id)
-                    if device:
-                        # Update the firmware version
-                        device_registry.async_update_device(
-                            device.id, 
-                            sw_version=payload
-                        )
-                        _LOGGER.debug("Updated device %s firmware version to %s", device.id, payload)
-
-                # Here we just ensure it has higher priority
-                current_priority = self.entity_registry.priorities.get(topic, 0)
-                if current_priority < 15:
-                    self.entity_registry.priorities[topic] = 15
-                    _LOGGER.debug("Increased priority for version topic: %s", topic)
-
-        except Exception as ex:
-            _LOGGER.exception("Error handling version update: %s", ex)
 
     def _parse_coordinate(self, value: Any) -> Optional[float]:
         """Parse a coordinate value from various formats."""
@@ -205,7 +253,7 @@ class UpdateDispatcher:
 
         except (ValueError, TypeError):
             return None
-            
+
     def _parse_numeric_value(self, value: Any) -> Optional[float]:
         """Parse a numeric value from various formats."""
         if value is None:
@@ -234,13 +282,13 @@ class UpdateDispatcher:
             # Get GPS accuracy if available
             accuracy = None
             mqtt_client = None
-            
+
             # Try to get the MQTT client from hass.data
             for entry_id, data in self.hass.data.get(DOMAIN, {}).items():
                 if "mqtt_client" in data:
                     mqtt_client = data["mqtt_client"]
                     break
-                    
+
             if mqtt_client and hasattr(mqtt_client, "get_gps_accuracy"):
                 accuracy = mqtt_client.get_gps_accuracy()
 
@@ -250,7 +298,7 @@ class UpdateDispatcher:
                 "longitude": self.location_values.get("longitude"),
                 "last_updated": dt_util.utcnow().isoformat(),
             }
-            
+
             # Add accuracy if available
             if accuracy is not None:
                 payload["gps_accuracy"] = accuracy
@@ -273,13 +321,13 @@ class UpdateDispatcher:
             # Get GPS accuracy if available
             accuracy = None
             mqtt_client = None
-            
+
             # Try to get the MQTT client from hass.data
             for entry_id, data in self.hass.data.get(DOMAIN, {}).items():
                 if "mqtt_client" in data:
                     mqtt_client = data["mqtt_client"]
                     break
-                    
+
             if mqtt_client and hasattr(mqtt_client, "get_gps_accuracy"):
                 accuracy = mqtt_client.get_gps_accuracy()
 
@@ -289,7 +337,7 @@ class UpdateDispatcher:
                 "longitude": self.location_values.get("longitude"),
                 "last_updated": dt_util.utcnow().isoformat(),
             }
-            
+
             # Add accuracy if available
             if accuracy is not None:
                 payload["gps_accuracy"] = accuracy
