@@ -109,7 +109,7 @@ class TopicParser:
 
             # Handle vendor-specific prefixes (like xvu)
             metric_path = self._convert_to_metric_path(parts)
-            
+
             # Determine entity type and category
             entity_type = self._determine_entity_type(parts, metric_path)
             category = determine_category_from_topic(parts)
@@ -161,7 +161,7 @@ class TopicParser:
                 metric_path = ".".join(parts[1:])
         else:
             metric_path = ".".join(parts)
-            
+
         return metric_path
 
     def _determine_entity_type(self, parts: List[str], metric_path: str) -> str:

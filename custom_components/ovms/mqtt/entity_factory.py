@@ -56,7 +56,7 @@ class EntityFactory:
             parts = entity_data.get("parts", [])
             raw_name = entity_data.get("raw_name", "")
             metric_info = entity_data.get("metric_info")
-            
+
             # Create friendly name using the naming service
             friendly_name = self.naming_service.create_friendly_name(
                 parts, metric_info, topic, raw_name

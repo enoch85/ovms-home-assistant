@@ -219,7 +219,7 @@ class UpdateDispatcher:
             if quality_value is not None:
                 # Get GPS attributes using attribute manager
                 attributes = self.attribute_manager.get_gps_attributes(topic, payload)
-                
+
                 if "gps_accuracy" in attributes:
                     # Update all device trackers with this GPS accuracy
                     device_trackers = self.entity_registry.get_entities_by_type("device_tracker")

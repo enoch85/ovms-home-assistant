@@ -86,38 +86,38 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         """Initialize the device tracker."""
         self._attr_unique_id = unique_id
         self._internal_name = name
-        
+
         # Use services if provided, otherwise create internal defaults
         self.naming_service = naming_service or EntityNamingService({})
         self.attribute_manager = attribute_manager or AttributeManager({})
-        
+
         # Extract vehicle ID
         vehicle_id = None
-        
+
         # Try to extract from device info identifiers
         vehicle_id = self.naming_service.extract_vehicle_id_from_device_info(device_info)
-        
+
         # If not found in device info, try extracting from name
         if not vehicle_id:
             vehicle_id = self.naming_service.extract_vehicle_id_from_name(name)
-        
+
         # Set the device tracker friendly name per requirements
         if vehicle_id:
             self._attr_name = self.naming_service.create_device_tracker_name(vehicle_id)
         else:
             self._attr_name = friendly_name or name.replace("_", " ").title()
-            
+
         self._topic = topic
         self._attr_device_info = device_info or {}
-        
+
         # Process attributes
         self._attr_extra_state_attributes = attributes.copy() if attributes else {}
-        
+
         # Add GPS attributes if needed
         if "gps_accuracy" not in self._attr_extra_state_attributes:
             gps_attributes = self.attribute_manager.get_gps_attributes(topic, initial_payload)
             self._attr_extra_state_attributes.update(gps_attributes)
-        
+
         # Ensure topic and last_updated are present
         if topic:
             self._attr_extra_state_attributes["topic"] = topic

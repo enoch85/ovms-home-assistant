@@ -18,7 +18,7 @@ class AttributeManager:
         """Initialize the attribute manager."""
         self.config = config
 
-    def prepare_attributes(self, topic: str, category: str, parts: List[str], 
+    def prepare_attributes(self, topic: str, category: str, parts: List[str],
                           metric_info: Optional[Dict] = None) -> Dict[str, Any]:
         """Prepare entity attributes."""
         try:
@@ -67,19 +67,19 @@ class AttributeManager:
         except (ValueError, json.JSONDecodeError):
             # Not JSON, that's fine
             pass
-        
+
         return attributes
-    
+
     def determine_entity_category(self, category: str) -> Optional[EntityCategory]:
         """Determine EntityCategory from attribute category."""
         if category in ["diagnostic", "network", "system"]:
             return EntityCategory.DIAGNOSTIC
         return None
-        
+
     def get_gps_attributes(self, topic: str, payload: Any) -> Dict[str, Any]:
         """Extract and prepare GPS-related attributes."""
         attributes = {}
-        
+
         try:
             # Handle GPS-specific attributes
             if "gpshdop" in topic.lower():
@@ -106,8 +106,8 @@ class AttributeManager:
                     attributes["gps_speed"] = value
                 except (ValueError, TypeError):
                     pass
-                    
+
         except Exception as ex:
             _LOGGER.exception("Error processing GPS attributes: %s", ex)
-            
+
         return attributes

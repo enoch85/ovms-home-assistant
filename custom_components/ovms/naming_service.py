@@ -15,7 +15,7 @@ class EntityNamingService:
         self.config = config
         self.vehicle_id = config.get("vehicle_id", "")
 
-    def create_friendly_name(self, parts: List[str], metric_info: Optional[Dict], 
+    def create_friendly_name(self, parts: List[str], metric_info: Optional[Dict],
                             topic: str, raw_name: str) -> str:
         """Create a friendly name based on topic parts and metric info."""
         # Extract base metric name from metric info
@@ -33,7 +33,7 @@ class EntityNamingService:
                 return self.create_battery_capacity_name(car_prefix, "Ah Normalized")
             elif "kwh_abs" in topic:
                 return self.create_battery_capacity_name(car_prefix, "kWh Absolute")
-        
+
         # Check if the car prefix is already in the base name
         if car_prefix and car_prefix in base_name:
             return base_name
@@ -44,17 +44,17 @@ class EntityNamingService:
 
         # For standard metrics, just use the base name
         return base_name
-    
+
     def create_device_tracker_name(self, vehicle_id: Optional[str] = None) -> str:
         """Create a friendly name for device tracker."""
         if not vehicle_id:
             vehicle_id = self.vehicle_id
         return f"({vehicle_id}) Location"
-    
+
     def create_battery_capacity_name(self, vehicle_name: str, type_suffix: str) -> str:
         """Create a friendly name for battery capacity sensors."""
         return f"{vehicle_name} Battery Capacity ({type_suffix})"
-    
+
     def _detect_car_model(self, topic: str, raw_name: str) -> Optional[str]:
         """Detect car model from topic or name."""
         if "xvu" in topic or "xvu" in raw_name:
@@ -68,7 +68,7 @@ class EntityNamingService:
         elif self.vehicle_id:
             return self.vehicle_id  # Use vehicle_id as prefix if no specific model detected
         return None
-    
+
     def extract_vehicle_id_from_device_info(self, device_info: Dict) -> Optional[str]:
         """Extract vehicle ID from device info."""
         try:
