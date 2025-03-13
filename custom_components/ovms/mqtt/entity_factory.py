@@ -121,8 +121,12 @@ class EntityFactory:
             is_latitude = any(keyword in topic.lower() for keyword in ["latitude", "lat"])
             is_longitude = any(keyword in topic.lower() for keyword in ["longitude", "long", "lon", "lng"])
 
+            # Skip if not a coordinate
+            if not is_latitude and not is_longitude:
+                return
+
             # Track for the device tracker coordination
-            location_type = "latitude" if is_latitude else "longitude" if is_longitude else "location"
+            location_type = "latitude" if is_latitude else "longitude"
             self.location_entities[location_type] = unique_id
 
             # Create a corresponding sensor entity
