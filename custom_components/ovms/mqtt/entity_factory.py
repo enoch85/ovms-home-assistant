@@ -89,10 +89,11 @@ class EntityFactory:
                 "attributes": attributes,
             }
 
-            # Check if this is a coordinate-related entity that should track location
-            if self._is_coordinate_entity(topic, entity_data):
+            # Check if this is a coordinate entity to track for the device tracker
+            is_coordinate = self._is_coordinate_entity(topic, entity_data)
+            if is_coordinate:
                 await self._track_coordinate_entity(topic, unique_id, entity_data)
-                
+
             # Send to platform or queue for later
             if self.platforms_loaded:
                 async_dispatcher_send(
@@ -103,8 +104,11 @@ class EntityFactory:
             else:
                 await self.entity_queue.put(dispatcher_data)
 
-            # If we have both latitude and longitude entities, create a combined device tracker
-            if "latitude" in self.location_entities and "longitude" in self.location_entities and not self.combined_tracker_created:
+            # If we have both latitude and longitude entities tracked, create a combined device tracker
+            if (len(self.location_entities) >= 2 and 
+                "latitude" in self.location_entities and 
+                "longitude" in self.location_entities and 
+                not self.combined_tracker_created):
                 await self._create_combined_device_tracker()
 
         except Exception as ex:
@@ -116,9 +120,18 @@ class EntityFactory:
         name = entity_data.get("name", "").lower()
         
         # Check for latitude/longitude keywords
-        coordinate_keywords = ["latitude", "lat", "longitude", "long", "lon", "lng"]
-        for keyword in coordinate_keywords:
-            if keyword in topic_lower or keyword in name:
+        if any(keyword in topic_lower or keyword in name 
+               for keyword in ["latitude", "lat", "longitude", "long", "lon", "lng"]):
+                
+            # More specific checks to avoid false positives
+            parts = topic.split('/')
+            for part in parts:
+                part_lower = part.lower()
+                if part_lower in ["latitude", "lat", "longitude", "long", "lon", "lng"]:
+                    return True
+                    
+            # Check for common patterns in topic paths
+            if any(pattern in topic_lower for pattern in ["/p/lat", "/p/lon", ".p.lat", ".p.lon"]):
                 return True
                 
         return False
@@ -161,6 +174,7 @@ class EntityFactory:
 
             # Skip if already created
             if tracker_id in self.created_entities:
+                _LOGGER.debug("Combined tracker entity already exists, skipping creation")
                 return
 
             self.created_entities.add(tracker_id)
