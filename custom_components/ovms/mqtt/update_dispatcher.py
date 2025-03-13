@@ -87,11 +87,15 @@ class UpdateDispatcher:
 
     def _is_location_topic(self, topic: str) -> bool:
         """Check if a topic is related to location data."""
+        if topic is None:
+            return False
         location_keywords = ["latitude", "longitude", "lat", "lon", "lng", "gps"]
         return any(keyword in topic.lower() for keyword in location_keywords)
 
     def _is_gps_quality_topic(self, topic: str) -> bool:
         """Check if a topic is related to GPS quality."""
+        if topic is None:
+            return False
         gps_keywords = ["gpssq", "gps_sq", "gpshdop", "gps_hdop"]
         return any(keyword in topic.lower() for keyword in gps_keywords)
 
@@ -112,8 +116,9 @@ class UpdateDispatcher:
                 self.location_values["longitude"] = self._parse_coordinate(payload)
                 self.last_location_update["longitude"] = now
 
-            # Update all device trackers with latest location data
-            self._update_all_device_trackers()
+            # Only update device trackers if we have both latitude and longitude
+            if "latitude" in self.location_values and "longitude" in self.location_values:
+                self._update_all_device_trackers()
 
         except Exception as ex:
             _LOGGER.exception("Error handling location update: %s", ex)
@@ -123,10 +128,15 @@ class UpdateDispatcher:
         try:
             # If this is a version topic, update the device info
             if any(ver_keyword in topic.lower() for ver_keyword in ["version", "m.version"]):
-                # Update device info in Home Assistant with the version
                 _LOGGER.info("Detected firmware version update: %s", payload)
 
-                # First try to get vehicle_id directly from config (most reliable method)
+                # Truncate very long version strings to avoid potential issues
+                if payload and len(payload) > 255:
+                    trimmed_payload = payload[:252] + "..."
+                    _LOGGER.warning("Version string too long, truncating: %s -> %s", payload, trimmed_payload)
+                    payload = trimmed_payload
+
+                # Get the vehicle_id from config
                 vehicle_id = None
                 for entry_id, data in self.hass.data[DOMAIN].items():
                     if "mqtt_client" in data:
@@ -136,15 +146,11 @@ class UpdateDispatcher:
                             _LOGGER.debug("Found vehicle_id '%s' in config", vehicle_id)
                             break
 
-                # Skip extraction from topic as it's unreliable - we'll use the device registry instead
-                if not vehicle_id:
-                    _LOGGER.warning("Could not find vehicle_id in config")
-
-                # Find device directly in the registry
+                # Find the device in the registry
                 from homeassistant.helpers import device_registry as dr
                 device_registry = dr.async_get(self.hass)
 
-                # First try to find any OVMS device (there's typically only one)
+                # Find OVMS device
                 device = None
                 for dev in device_registry.devices.values():
                     for identifier in dev.identifiers:
@@ -155,51 +161,27 @@ class UpdateDispatcher:
                     if device:
                         break
 
-                # If we found a device and have a vehicle ID, confirm it's the right one
-                if device and vehicle_id:
-                    # Check if this is the correct device
-                    matched = False
-                    for identifier in device.identifiers:
-                        if identifier[0] == DOMAIN and identifier[1] == vehicle_id:
-                            matched = True
-                            break
-
-                    if matched:
-                        # Update the firmware version
+                # Update device with version information
+                if device:
+                    try:
                         device_registry.async_update_device(
                             device.id,
                             sw_version=payload
                         )
                         _LOGGER.debug("Updated device %s firmware version to %s", device.id, payload)
-                    else:
-                        _LOGGER.warning("Device found but doesn't match vehicle_id: %s", vehicle_id)
-                elif device:
-                    # If we found a device but don't have a vehicle ID, update it anyway
-                    device_registry.async_update_device(
-                        device.id,
-                        sw_version=payload
-                    )
-                    _LOGGER.debug("Updated device %s firmware version without vehicle_id check", device.id)
-                else:
-                    # Fallback to entity registry
-                    _LOGGER.warning("No OVMS device found in registry, trying entity registry fallback")
-                    from homeassistant.helpers import entity_registry as er
-                    entity_registry = er.async_get(self.hass)
-                    entity_entry = entity_registry.async_get(entity_id)
-                    if entity_entry and entity_entry.device_id:
-                        # Find the device
-                        device = device_registry.async_get(entity_entry.device_id)
-                        if device:
-                            # Update the firmware version
+                    except Exception as ex:
+                        _LOGGER.error("Failed to update device with version: %s", ex)
+                        # Try an alternative approach
+                        try:
+                            # Use a simpler update call as a fallback
                             device_registry.async_update_device(
                                 device.id,
-                                sw_version=payload
+                                sw_version=payload[:100]  # Use just first 100 chars as a fallback
                             )
-                            _LOGGER.debug("Updated device %s firmware version via entity", device.id)
-                        else:
-                            _LOGGER.warning("Could not find device via entity registry")
-                    else:
-                        _LOGGER.warning("Entity not found or not connected to a device")
+                        except Exception:
+                            _LOGGER.error("Failed to update device with shortened version too")
+                else:
+                    _LOGGER.warning("No OVMS device found in registry to update version")
 
                 # Ensure version topics have higher priority
                 current_priority = self.entity_registry.priorities.get(topic, 0)
@@ -290,7 +272,9 @@ class UpdateDispatcher:
                     break
 
             if mqtt_client and hasattr(mqtt_client, "get_gps_accuracy"):
-                accuracy = mqtt_client.get_gps_accuracy()
+                # Get vehicle_id with fallback to empty string
+                vehicle_id = getattr(mqtt_client, "config", {}).get("vehicle_id", "")
+                accuracy = mqtt_client.get_gps_accuracy(vehicle_id)
 
             # Create payload with current location data
             payload = {
@@ -306,10 +290,11 @@ class UpdateDispatcher:
             for tracker_id in device_trackers:
                 # Skip if it's a specific lat/lon entity
                 topic = self.entity_registry.get_topic_for_entity(tracker_id)
-                if topic != "combined_location" and self._is_location_topic(topic):
+                # Add null check before calling is_location_topic
+                if topic is not None and topic != "combined_location" and self._is_location_topic(topic):
                     continue
 
-                # Update the combined tracker
+                # Update the device tracker
                 self._update_entity(tracker_id, payload)
 
         except Exception as ex:
