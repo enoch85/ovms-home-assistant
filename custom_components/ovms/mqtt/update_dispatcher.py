@@ -99,11 +99,12 @@ class UpdateDispatcher:
         """Handle updates to location topics."""
         try:
             now = dt_util.utcnow().timestamp()
-
-            # Determine if this is latitude or longitude
+            
+            # Extract latitude/longitude values if applicable
             is_latitude = any(keyword in topic.lower() for keyword in ["latitude", "lat"])
             is_longitude = any(keyword in topic.lower() for keyword in ["longitude", "long", "lon", "lng"])
 
+            # Update our location values cache
             if is_latitude:
                 self.location_values["latitude"] = self._parse_coordinate(payload)
                 self.last_location_update["latitude"] = now
@@ -111,9 +112,8 @@ class UpdateDispatcher:
                 self.location_values["longitude"] = self._parse_coordinate(payload)
                 self.last_location_update["longitude"] = now
 
-            # Check if we have both coordinates and update combined tracker
-            if "latitude" in self.location_values and "longitude" in self.location_values:
-                self._update_all_device_trackers()
+            # Update all device trackers with latest location data
+            self._update_all_device_trackers()
 
         except Exception as ex:
             _LOGGER.exception("Error handling location update: %s", ex)
