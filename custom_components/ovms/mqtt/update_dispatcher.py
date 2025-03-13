@@ -43,7 +43,7 @@ class UpdateDispatcher:
             self._update_entity(entity_id, payload)
 
             # Special handling for location topics
-            if self._is_location_topic(topic):
+            if self._is_coordinate_topic(topic):
                 self._handle_location_update(topic, entity_id, payload)
 
             # Special handling for version topics
@@ -85,11 +85,10 @@ class UpdateDispatcher:
         except Exception as ex:
             _LOGGER.exception("Error updating entity %s: %s", entity_id, ex)
 
-    def _is_location_topic(self, topic: str) -> bool:
-        """Check if a topic is related to location data for device tracker.
+    def _is_coordinate_topic(self, topic: str) -> bool:
+        """Check if a topic is related to location coordinates for device tracker.
         
-        Only latitude and longitude topics should be considered location topics
-        for device tracker coordination. Matching the approach in topic_parser.py.
+        Only latitude and longitude topics should be considered coordinate topics
         """
         if topic is None:
             return False
@@ -315,14 +314,10 @@ class UpdateDispatcher:
                 payload["gps_accuracy_unit"] = "m"  # Add proper unit
 
             for tracker_id in device_trackers:
-                # Skip if it's a specific lat/lon entity
+                # Only update the combined device tracker, not individual coordinate trackers
                 topic = self.entity_registry.get_topic_for_entity(tracker_id)
-                # Add null check before calling is_location_topic
-                if topic is not None and topic != "combined_location" and self._is_location_topic(topic):
-                    continue
-
-                # Update the device tracker
-                self._update_entity(tracker_id, payload)
+                if topic == "combined_location":
+                    self._update_entity(tracker_id, payload)
 
         except Exception as ex:
             _LOGGER.exception("Error updating device trackers: %s", ex)
