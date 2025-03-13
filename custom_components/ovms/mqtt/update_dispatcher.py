@@ -1,7 +1,7 @@
 """Update dispatcher for OVMS integration."""
 import logging
 import time
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional, Set, List
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -86,12 +86,36 @@ class UpdateDispatcher:
             _LOGGER.exception("Error updating entity %s: %s", entity_id, ex)
 
     def _is_location_topic(self, topic: str) -> bool:
-        """Check if a topic is related to location data."""
+        """Check if a topic is related to location data for device tracker.
+        
+        Only latitude and longitude topics should be considered location topics
+        for device tracker coordination. Matching the approach in topic_parser.py.
+        """
         if topic is None:
             return False
-        # Be very specific about which topics are considered location topics
-        coordinate_keywords = ["latitude", "/lat/", "longitude", "/lon/", "/lng/"]
-        return any(keyword in topic.lower() for keyword in coordinate_keywords)
+            
+        # Define strict coordinate keywords - only these for coordinates
+        coordinate_keywords = ["latitude", "lat", "longitude", "long", "lon", "lng"]
+        
+        # Convert topic to parts for more precise matching
+        parts = topic.split('/')
+        
+        # Only match exact coordinate keywords, not any topic containing "gps"
+        for keyword in coordinate_keywords:
+            # Check for exact match in parts
+            if any(part.lower() == keyword for part in parts):
+                return True
+            
+            # Check in full topic path for exact coordinate matches
+            if f"/p/{keyword}" in topic.lower() or f".p.{keyword}" in topic.lower():
+                return True
+        
+        # For multi-part words like "v_p_latitude", we need additional check
+        if any(part.lower().endswith("_latitude") or 
+               part.lower().endswith("_longitude") for part in parts):
+            return True
+            
+        return False
 
     def _is_gps_quality_topic(self, topic: str) -> bool:
         """Check if a topic is related to GPS quality."""
