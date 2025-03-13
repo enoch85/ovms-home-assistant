@@ -102,7 +102,7 @@ class EntityFactory:
             # Create a corresponding sensor entity
             sensor_unique_id = f"{unique_id}_sensor"
             sensor_name = f"{name}_sensor"
-            
+
             # Make sure friendly name is also descriptive
             friendly_name = entity_data.get('friendly_name', name)
             sensor_friendly_name = f"{friendly_name} Sensor"

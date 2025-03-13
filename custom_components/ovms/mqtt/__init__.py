@@ -57,7 +57,7 @@ class OVMSMQTTClient:
         self.message_count = 0
         self.reconnect_count = 0
         self.entity_types = {}  # For diagnostics
-        
+
         # For GPS topic tracking
         self.gps_quality_topics = {}
 
@@ -109,7 +109,7 @@ class OVMSMQTTClient:
 
         # Add to discovered topics
         self.discovered_topics.add(topic)
-        
+
         # Track GPS quality topics for location accuracy
         if any(kw in topic.lower() for kw in ["gpssq", "gps_sq", "gps/sq", "gpshdop", "gps_hdop"]):
             self._track_gps_quality_topic(topic, payload)
@@ -129,11 +129,11 @@ class OVMSMQTTClient:
         try:
             value = float(payload)
             vehicle_id = self.config.get("vehicle_id", "")
-            
+
             # Store by vehicle ID
             if vehicle_id not in self.gps_quality_topics:
                 self.gps_quality_topics[vehicle_id] = {}
-                
+
             # Determine type of GPS quality metric
             if "gpssq" in topic.lower():
                 self.gps_quality_topics[vehicle_id]["signal_quality"] = {
@@ -167,34 +167,34 @@ class OVMSMQTTClient:
     async def async_shutdown(self) -> None:
         """Shutdown the MQTT client."""
         self._shutting_down = True
-        
+
         # Clean up listeners
         for listener_remove in getattr(self, "_cleanup_listeners", []):
             listener_remove()
-            
+
         await self.connection_manager.async_shutdown()
-        
+
     def get_gps_accuracy(self, vehicle_id: Optional[str] = None) -> Optional[float]:
         """Get GPS accuracy from stored GPS quality data."""
         if not vehicle_id:
             vehicle_id = self.config.get("vehicle_id", "")
-            
+
         if not vehicle_id or vehicle_id not in self.gps_quality_topics:
             return None
-            
+
         gps_data = self.gps_quality_topics[vehicle_id]
-        
+
         # Calculate accuracy based on available data
         if "signal_quality" in gps_data:
             sq = gps_data["signal_quality"]["value"]
             # Simple formula that translates signal quality (0-100) to meters accuracy
             # Higher signal quality = better accuracy (lower value)
             return max(5, 100 - sq)  # Minimum 5m accuracy
-            
+
         if "hdop" in gps_data:
             hdop = gps_data["hdop"]["value"]
             # HDOP directly relates to positional accuracy
             # Lower HDOP = better accuracy
             return max(5, hdop * 5)  # Each HDOP unit is ~5m of accuracy
-            
+
         return None

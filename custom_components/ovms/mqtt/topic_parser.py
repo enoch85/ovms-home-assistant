@@ -137,16 +137,16 @@ class TopicParser:
 
             # Create entity name and add extra attributes
             raw_name = "_".join(parts) if parts else "unknown"
-            
+
             # Get vehicle ID for entity naming
             vehicle_id = self.config.get("vehicle_id", "")
-            
+
             # Include vehicle_id in entity name
             name = f"ovms_{vehicle_id}_{raw_name}"
-            
+
             # Create more descriptive friendly name using the improved function
             friendly_name = self._create_friendly_name(parts, metric_info, topic, raw_name)
-                
+
             attributes = self._prepare_attributes(topic, category, parts, metric_info)
 
             # Special handling for latitude/longitude
@@ -159,12 +159,12 @@ class TopicParser:
                     "attributes": attributes,
                     "priority": 10,  # Higher priority for location data
                 }
-                
+
                 # Look for GPS signal quality if this is a location topic
                 gps_sq = self._find_gps_signal_quality(topic)
                 if gps_sq is not None:
                     attributes["gps_accuracy"] = gps_sq
-                
+
                 return location_data
 
             return {
@@ -186,10 +186,10 @@ class TopicParser:
             base_name = metric_info["name"]
         else:
             base_name = parts[-1].replace("_", " ").title() if parts else "Unknown"
-        
+
         # Check for vehicle-specific metrics
         car_prefix = None
-        
+
         # Detect car model from parts or topic
         if "xvu" in topic or "xvu" in raw_name:
             car_prefix = "VW eUP"
@@ -199,11 +199,11 @@ class TopicParser:
             car_prefix = "VW ID.3"
         elif "id4" in topic or "id.4" in raw_name:
             car_prefix = "VW ID.4"
-        
+
         # Check if the car prefix is already in the base name
         if car_prefix and car_prefix in base_name:
             return base_name
-        
+
         # If we have a car prefix, add it to the friendly name
         if car_prefix:
             # Extract specific metric type from the parts
@@ -218,7 +218,7 @@ class TopicParser:
                     "m": "Motor",
                     "v": "Vehicle"
                 }
-                
+
                 if parts[2] in subsystem_map:
                     subsystem = subsystem_map[parts[2]]
                     # Format as "VW eUP Battery: State of Charge"
@@ -229,7 +229,7 @@ class TopicParser:
             else:
                 # For other car-specific metrics, just add the car prefix
                 return f"{car_prefix}: {base_name}"
-        
+
         # For standard metrics, just use the base name
         return base_name
 

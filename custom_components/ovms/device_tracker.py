@@ -82,7 +82,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
             self._attr_extra_state_attributes["topic"] = topic
         if "last_updated" not in self._attr_extra_state_attributes:
             self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
-        
+
         # If gps_accuracy isn't in attributes, try to find it if available
         if "gps_accuracy" not in self._attr_extra_state_attributes:
             self._attr_extra_state_attributes["gps_accuracy"] = self._lookup_gps_accuracy(hass)
@@ -111,7 +111,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         """Look up GPS accuracy value from available sources."""
         # Default accuracy if not found
         return 0
-        
+
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
         await super().async_added_to_hass()
@@ -153,7 +153,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
             # Update gps_accuracy from the payload if available
             if isinstance(payload, dict) and "gps_accuracy" in payload:
                 self._attr_extra_state_attributes["gps_accuracy"] = payload["gps_accuracy"]
-                
+
             # Find and update GPS signal quality if available
             self._check_gps_sq_and_accuracy()
 
@@ -182,12 +182,12 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 update_state,
             )
         )
-        
+
     def _check_gps_sq_and_accuracy(self) -> None:
         """Check and update GPS signal quality and accuracy."""
         # Placeholder for real implementation that would look for GPS signal quality
         # topics in the MQTT client's discovered topics
-        
+
         # Ensure at least a default accuracy if none exists
         if "gps_accuracy" not in self._attr_extra_state_attributes:
             self._attr_extra_state_attributes["gps_accuracy"] = 0

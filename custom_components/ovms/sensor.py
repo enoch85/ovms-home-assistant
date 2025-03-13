@@ -693,7 +693,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                         self._attr_extra_state_attributes["median_value"] = self._calculate_median(values)
                         self._attr_extra_state_attributes["count"] = len(values)
                         self._attr_extra_state_attributes["values"] = values
-                        
+
                         # Add cell-specific attributes
                         for i, val in enumerate(values):
                             self._attr_extra_state_attributes[f"cell_{i+1}"] = val
@@ -718,7 +718,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     if "unit" in json_data and not self._attr_native_unit_of_measurement:
                         unit = json_data["unit"]
                         self._attr_native_unit_of_measurement = unit
-                        
+
                     # Extract and add any nested attributes
                     for key, value in json_data.items():
                         if isinstance(value, dict):
@@ -726,12 +726,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                                 attr_key = f"{key}_{subkey}"
                                 if attr_key not in self._attr_extra_state_attributes:
                                     self._attr_extra_state_attributes[attr_key] = subvalue
-                
+
                 # If JSON is an array, add array attributes
                 elif isinstance(json_data, list):
                     self._attr_extra_state_attributes["list_values"] = json_data
                     self._attr_extra_state_attributes["list_length"] = len(json_data)
-                    
+
                     # Try to convert to numbers and add statistics
                     try:
                         numeric_values = [float(val) for val in json_data]
@@ -746,7 +746,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             except (ValueError, json.JSONDecodeError):
                 # Not JSON, that's fine
                 pass
-                
+
             # Add derived attributes based on entity type
             if hasattr(self, "_attr_device_class"):
                 # Add specific attributes for different device classes
@@ -763,7 +763,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                                 self._attr_extra_state_attributes["battery_level"] = "high"
                         except (ValueError, TypeError):
                             pass
-                
+
                 elif self._attr_device_class == SensorDeviceClass.TEMPERATURE:
                     # Add temperature-specific attributes
                     if hasattr(self, "_attr_native_value") and self._attr_native_value is not None:
@@ -784,13 +784,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                                     self._attr_extra_state_attributes["temperature_level"] = "hot"
                         except (ValueError, TypeError):
                             pass
-            
+
             # Add full topic path for debugging
             self._attr_extra_state_attributes["full_topic"] = self._topic
-            
+
             # Last update timestamp
             self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
-                
+
         except Exception as ex:
             _LOGGER.exception("Error processing attributes: %s", ex)
 
