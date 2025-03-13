@@ -47,7 +47,7 @@ TIRE_METRICS = {
     "v.t.diff": {
         "name": "Tire Pressure Difference",
         "description": "Difference in tire pressure values",
-        "icon": "mdi:gauge-gap",
+        "icon": "mdi:car-tire-alert",
         "state_class": SensorStateClass.MEASUREMENT,
         "category": "tire",
     },
