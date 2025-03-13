@@ -194,14 +194,14 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                         f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}_sensor",
                         self.latitude,
                     )
-                
+
                 if self.longitude is not None:
                     async_dispatcher_send(
                         self.hass,
                         f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}_sensor",
                         self.longitude,
                     )
-                
+
                 # If there are related entities we should update them too
                 related_entities_sent = False
                 if hasattr(self.hass.data.get(DOMAIN, {}), "entity_registry"):
@@ -219,7 +219,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                                         "longitude": self.longitude,
                                         "last_updated": dt_util.utcnow().isoformat()
                                     }
-                                    
+
                                     async_dispatcher_send(
                                         self.hass,
                                         f"{SIGNAL_UPDATE_ENTITY}_{related_id}",
@@ -227,7 +227,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                                     )
                                 related_entities_sent = True
                                 break
-                
+
                 # If we didn't update via entity registry, try a more direct approach
                 if not related_entities_sent and self.latitude is not None and self.longitude is not None:
                     # Create a coordinates payload
@@ -236,17 +236,17 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                         "longitude": self.longitude,
                         "last_updated": dt_util.utcnow().isoformat()
                     }
-                    
+
                     # Dispatch to latitude/longitude sensors based on their name pattern
                     lat_sensor_id = f"{self.unique_id}_latitude"
                     lon_sensor_id = f"{self.unique_id}_longitude"
-                    
+
                     async_dispatcher_send(
                         self.hass,
                         f"{SIGNAL_UPDATE_ENTITY}_{lat_sensor_id}",
                         location_payload,
                     )
-                    
+
                     async_dispatcher_send(
                         self.hass,
                         f"{SIGNAL_UPDATE_ENTITY}_{lon_sensor_id}",
@@ -284,9 +284,9 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                             return
 
                         # Validate coordinates - skip if out of valid range
-                        if (lat is not None and lon is not None and 
+                        if (lat is not None and lon is not None and
                             (-90 <= lat <= 90 and -180 <= lon <= 180)):
-                            
+
                             # Check if coordinates have changed significantly
                             if (self._prev_latitude is None or
                                 self._prev_longitude is None or
@@ -302,6 +302,11 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                             # Add accuracy if available
                             if "gps_accuracy" in payload:
                                 self._attr_extra_state_attributes["gps_accuracy"] = payload["gps_accuracy"]
+                                # Also add unit
+                                if "gps_accuracy_unit" in payload:
+                                    self._attr_extra_state_attributes["gps_accuracy_unit"] = payload["gps_accuracy_unit"]
+                                else:
+                                    self._attr_extra_state_attributes["gps_accuracy_unit"] = "m"  # Default unit
 
                             # Also update last_updated even if coordinates haven't changed
                             if "last_updated" in payload:
@@ -345,12 +350,13 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                     self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
 
                 if coordinates_changed:
-                    _LOGGER.debug("Updated device tracker coordinates: lat=%s, lon=%s", 
+                    _LOGGER.debug("Updated device tracker coordinates: lat=%s, lon=%s",
                                  self._latitude, self._longitude)
 
             # Add sensible default for gps_accuracy if necessary
             if "gps_accuracy" not in self._attr_extra_state_attributes:
                 self._attr_extra_state_attributes["gps_accuracy"] = 0
+                self._attr_extra_state_attributes["gps_accuracy_unit"] = "m"  # Add unit
 
         except Exception as ex:
             _LOGGER.exception("Error processing payload: %s", ex)

@@ -27,24 +27,24 @@ def get_metric_by_path(metric_path):
         # Import only when needed
         from . import METRIC_DEFINITIONS as MD
         METRIC_DEFINITIONS = MD
-    
+
     # First try exact match
     if metric_path in METRIC_DEFINITIONS:
         return METRIC_DEFINITIONS[metric_path]
-    
+
     # For VW eUP metrics, also try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xvu.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
-    
+
     # Try with just 'xvu.' if it exists in the path
     if 'xvu.' in metric_path and not metric_path.startswith('xvu.'):
         xvu_index = metric_path.find('xvu.')
         alt_path = metric_path[xvu_index:]
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
-            
+
     return None
 
 
@@ -67,14 +67,14 @@ def get_metric_by_pattern(topic_parts):
                     # Import only when needed
                     from . import METRIC_DEFINITIONS as MD
                     METRIC_DEFINITIONS = MD
-                
+
                 # Try several variations to handle different path formats
                 variations = [
                     metric_key,
                     f"xvu.{metric_key.split('xvu.', 1)[1]}" if 'xvu.' in metric_key else None,
                     ".".join(topic_parts[topic_parts.index("xvu"):])
                 ]
-                
+
                 for variation in variations:
                     if variation and variation in METRIC_DEFINITIONS:
                         return METRIC_DEFINITIONS[variation]

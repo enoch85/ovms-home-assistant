@@ -1,7 +1,7 @@
 """Update dispatcher for OVMS integration."""
 import logging
 import time
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional, Set, List
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -43,7 +43,7 @@ class UpdateDispatcher:
             self._update_entity(entity_id, payload)
 
             # Special handling for location topics
-            if self._is_location_topic(topic):
+            if self._is_coordinate_topic(topic):
                 self._handle_location_update(topic, entity_id, payload)
 
             # Special handling for version topics
@@ -85,12 +85,36 @@ class UpdateDispatcher:
         except Exception as ex:
             _LOGGER.exception("Error updating entity %s: %s", entity_id, ex)
 
-    def _is_location_topic(self, topic: str) -> bool:
-        """Check if a topic is related to location data."""
+    def _is_coordinate_topic(self, topic: str) -> bool:
+        """Check if a topic is related to location coordinates for device tracker.
+
+        Only latitude and longitude topics should be considered coordinate topics
+        """
         if topic is None:
             return False
-        location_keywords = ["latitude", "longitude", "lat", "lon", "lng", "gps"]
-        return any(keyword in topic.lower() for keyword in location_keywords)
+
+        # Define strict coordinate keywords - only these for coordinates
+        coordinate_keywords = ["latitude", "lat", "longitude", "long", "lon", "lng"]
+
+        # Convert topic to parts for more precise matching
+        parts = topic.split('/')
+
+        # Only match exact coordinate keywords, not any topic containing "gps"
+        for keyword in coordinate_keywords:
+            # Check for exact match in parts
+            if any(part.lower() == keyword for part in parts):
+                return True
+
+            # Check in full topic path for exact coordinate matches
+            if f"/p/{keyword}" in topic.lower() or f".p.{keyword}" in topic.lower():
+                return True
+
+        # For multi-part words like "v_p_latitude", we need additional check
+        if any(part.lower().endswith("_latitude") or
+               part.lower().endswith("_longitude") for part in parts):
+            return True
+
+        return False
 
     def _is_gps_quality_topic(self, topic: str) -> bool:
         """Check if a topic is related to GPS quality."""
@@ -103,7 +127,7 @@ class UpdateDispatcher:
         """Handle updates to location topics."""
         try:
             now = dt_util.utcnow().timestamp()
-            
+
             # Extract latitude/longitude values if applicable
             is_latitude = any(keyword in topic.lower() for keyword in ["latitude", "lat"])
             is_longitude = any(keyword in topic.lower() for keyword in ["longitude", "long", "lon", "lng"])
@@ -181,7 +205,7 @@ class UpdateDispatcher:
                         except Exception:
                             _LOGGER.error("Failed to update device with shortened version too")
                 else:
-                    _LOGGER.warning("No OVMS device found in registry to update version")
+                    _LOGGER.debug("No OVMS device found in registry to update version")
 
                 # Ensure version topics have higher priority
                 current_priority = self.entity_registry.priorities.get(topic, 0)
@@ -209,6 +233,7 @@ class UpdateDispatcher:
                         # Create update payload with accuracy
                         quality_payload = {
                             "gps_accuracy": attributes["gps_accuracy"],
+                            "gps_accuracy_unit": "m",  # Add proper unit
                             "last_updated": dt_util.utcnow().isoformat()
                         }
                         self._update_entity(tracker_id, quality_payload)
@@ -286,16 +311,13 @@ class UpdateDispatcher:
             # Add accuracy if available
             if accuracy is not None:
                 payload["gps_accuracy"] = accuracy
+                payload["gps_accuracy_unit"] = "m"  # Add proper unit
 
             for tracker_id in device_trackers:
-                # Skip if it's a specific lat/lon entity
+                # Only update the combined device tracker, not individual coordinate trackers
                 topic = self.entity_registry.get_topic_for_entity(tracker_id)
-                # Add null check before calling is_location_topic
-                if topic is not None and topic != "combined_location" and self._is_location_topic(topic):
-                    continue
-
-                # Update the device tracker
-                self._update_entity(tracker_id, payload)
+                if topic == "combined_location":
+                    self._update_entity(tracker_id, payload)
 
         except Exception as ex:
             _LOGGER.exception("Error updating device trackers: %s", ex)
@@ -326,6 +348,7 @@ class UpdateDispatcher:
             # Add accuracy if available
             if accuracy is not None:
                 payload["gps_accuracy"] = accuracy
+                payload["gps_accuracy_unit"] = "m"  # Add proper unit
 
             # Update the tracker
             self._update_entity(tracker_id, payload)

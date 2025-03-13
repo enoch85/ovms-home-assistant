@@ -35,6 +35,7 @@ class EntityFactory:
         self.platforms_loaded = False
         self.created_entities = set()
         self.location_entities = {}  # Track location-related entities
+        self.combined_tracker_created = False  # Track if the combined tracker is created
 
     async def async_create_entities(self, topic: str, payload: str, entity_data: Dict[str, Any]) -> None:
         """Create entities based on parsed topic data."""
@@ -62,11 +63,6 @@ class EntityFactory:
                 parts, metric_info, topic, raw_name
             )
 
-            # If it's a device tracker, use the special naming format
-            if entity_type == "device_tracker":
-                vehicle_id = self.config.get("vehicle_id", "")
-                friendly_name = self.naming_service.create_device_tracker_name(vehicle_id)
-
             _LOGGER.info("Creating %s: %s", entity_type, friendly_name)
 
             # Record that we've processed this entity
@@ -93,9 +89,10 @@ class EntityFactory:
                 "attributes": attributes,
             }
 
-            # For device trackers, also create a sensor version
-            if entity_type == "device_tracker":
-                await self._create_location_entities(topic, payload, entity_data)
+            # Check if this is a coordinate entity to track for the device tracker
+            is_coordinate = self._is_coordinate_entity(topic, entity_data)
+            if is_coordinate:
+                await self._track_coordinate_entity(topic, unique_id, entity_data)
 
             # Send to platform or queue for later
             if self.platforms_loaded:
@@ -107,92 +104,55 @@ class EntityFactory:
             else:
                 await self.entity_queue.put(dispatcher_data)
 
+            # If we have both latitude and longitude entities tracked, create a combined device tracker
+            if (len(self.location_entities) >= 2 and
+                "latitude" in self.location_entities and
+                "longitude" in self.location_entities and
+                not self.combined_tracker_created):
+                await self._create_combined_device_tracker()
+
         except Exception as ex:
             _LOGGER.exception("Error creating entity: %s", ex)
 
-    async def _create_location_entities(self, topic: str, payload: str, entity_data: Dict[str, Any]) -> None:
-        """Create sensor versions of location entities and coordinate their updates."""
-        try:
-            unique_id = entity_data.get("unique_id")
-            name = entity_data.get("name")
-            vehicle_id = self.config.get("vehicle_id", "")
+    def _is_coordinate_entity(self, topic: str, entity_data: Dict[str, Any]) -> bool:
+        """Check if this entity contains coordinate data (latitude/longitude)."""
+        topic_lower = topic.lower()
+        name = entity_data.get("name", "").lower()
 
+        # Check for latitude/longitude keywords
+        if any(keyword in topic_lower or keyword in name
+               for keyword in ["latitude", "lat", "longitude", "long", "lon", "lng"]):
+
+            # More specific checks to avoid false positives
+            parts = topic.split('/')
+            for part in parts:
+                part_lower = part.lower()
+                if part_lower in ["latitude", "lat", "longitude", "long", "lon", "lng"]:
+                    return True
+
+            # Check for common patterns in topic paths
+            if any(pattern in topic_lower for pattern in ["/p/lat", "/p/lon", ".p.lat", ".p.lon"]):
+                return True
+
+        return False
+
+    async def _track_coordinate_entity(self, topic: str, unique_id: str, entity_data: Dict[str, Any]) -> None:
+        """Track a coordinate entity for use in the combined device tracker."""
+        try:
             # Determine if this is latitude or longitude
             is_latitude = any(keyword in topic.lower() for keyword in ["latitude", "lat"])
             is_longitude = any(keyword in topic.lower() for keyword in ["longitude", "long", "lon", "lng"])
 
-            # Track for the device tracker coordination
-            location_type = "latitude" if is_latitude else "longitude" if is_longitude else "location"
-            self.location_entities[location_type] = unique_id
-
-            # Create a corresponding sensor entity
-            sensor_unique_id = f"{unique_id}_sensor"
-            sensor_name = f"{name}_sensor"
-
-            # Make sure friendly name is also descriptive
+            # Track the entity ID for later use in creating the combined tracker
             if is_latitude:
-                sensor_friendly_name = "Latitude"
+                self.location_entities["latitude"] = unique_id
+                _LOGGER.debug("Tracked latitude entity: %s", unique_id)
             elif is_longitude:
-                sensor_friendly_name = "Longitude"
-            else:
-                # Get metric info like we do for normal sensors
-                metric_path = self._get_metric_path_from_topic(topic)
-                metric_info = get_metric_by_path(metric_path)
-                if not metric_info:
-                    parts = entity_data.get("parts", [])
-                    metric_info = get_metric_by_pattern(parts)
-                sensor_friendly_name = self.naming_service.create_friendly_name(
-                    entity_data.get("parts", []), metric_info, topic, name
-                )
-
-            # Prepare attributes for the sensor
-            attributes = entity_data.get("attributes", {})
-            category = attributes.get("category", "location")
-            parts = entity_data.get("parts", [])
-            sensor_attributes = self.attribute_manager.prepare_attributes(topic, category, parts)
-            sensor_attributes.update({
-                "original_entity": unique_id,
-                "original_entity_type": "device_tracker",
-                "location_type": location_type,
-            })
-
-            sensor_data = {
-                "entity_type": "sensor",
-                "unique_id": sensor_unique_id,
-                "name": sensor_name,
-                "friendly_name": sensor_friendly_name,
-                "topic": topic,
-                "payload": payload,
-                "device_info": self._get_device_info(),
-                "attributes": sensor_attributes,
-            }
-
-            # Register the relationship for update coordination
-            self.entity_registry.register_relationship(
-                unique_id,
-                sensor_unique_id,
-                "location_sensor"
-            )
-
-            # Add to entity registry
-            self.entity_registry.register_entity(topic, sensor_unique_id, "sensor", priority=5)
-
-            # Send to platform or queue for later
-            if self.platforms_loaded:
-                async_dispatcher_send(
-                    self.hass,
-                    SIGNAL_ADD_ENTITIES,
-                    sensor_data,
-                )
-            else:
-                await self.entity_queue.put(sensor_data)
-
-            # If we have both latitude and longitude, create a combined device tracker
-            if "latitude" in self.location_entities and "longitude" in self.location_entities:
-                await self._create_combined_device_tracker()
+                self.location_entities["longitude"] = unique_id
+                _LOGGER.debug("Tracked longitude entity: %s", unique_id)
 
         except Exception as ex:
-            _LOGGER.exception("Error creating location entities: %s", ex)
+            _LOGGER.exception("Error tracking coordinate entity: %s", ex)
 
     async def _create_combined_device_tracker(self) -> None:
         """Create a combined device tracker using lat/lon data."""
@@ -201,11 +161,20 @@ class EntityFactory:
             if not vehicle_id:
                 return
 
+            # Check if already created to avoid duplicates
+            if self.combined_tracker_created:
+                _LOGGER.debug("Combined tracker already created, skipping")
+                return
+
+            # Flag that we've created it
+            self.combined_tracker_created = True
+
             # Create a unique ID for the combined device tracker
             tracker_id = f"{vehicle_id}_location"
 
             # Skip if already created
             if tracker_id in self.created_entities:
+                _LOGGER.debug("Combined tracker entity already exists, skipping creation")
                 return
 
             self.created_entities.add(tracker_id)

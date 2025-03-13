@@ -23,7 +23,7 @@ class EntityNamingService:
         if metric_info and "name" in metric_info:
             # Vehicle-specific metrics already have the vehicle name in the metric definition
             return metric_info["name"]
-        
+
         # Check if this is a VW eUP! metric by looking for 'xvu' prefix
         has_xvu = any(p == "xvu" for p in parts) if parts else ('xvu' in topic)
         if has_xvu:
@@ -31,12 +31,12 @@ class EntityNamingService:
                 last_part = parts[-1].replace("_", " ").title()
                 return f"VW eUP! {last_part}"
             return f"VW eUP! {raw_name.replace('_', ' ').title()}" if raw_name else "VW eUP! Sensor"
-        
+
         # Standard handling for other metrics - extract meaningful names from parts
         if parts and len(parts) > 0:
             last_part = parts[-1].replace("_", " ").title()
             return last_part
-        
+
         # Fallback to cleaned raw name
         return raw_name.replace("_", " ").title() if raw_name else "Unknown"
 
