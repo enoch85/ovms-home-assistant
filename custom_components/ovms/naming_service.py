@@ -18,8 +18,10 @@ class EntityNamingService:
     def create_friendly_name(self, parts: List[str], metric_info: Optional[Dict],
                             topic: str, raw_name: str) -> str:
         """Create a friendly name based on topic parts and metric info."""
-        # Extract base name directly from metric info if available
+        # For vehicle-specific metrics (like xvu/VW eUP!), prioritize the metric name exactly as defined
+        # This preserves names like "VW eUP! Absolute Battery Capacity" without modification
         if metric_info and "name" in metric_info:
+            # Vehicle-specific metrics already have the vehicle name in the metric definition
             return metric_info["name"]
         
         # If no metric info, try to extract a clean name from parts
