@@ -130,8 +130,20 @@ class EntityFactory:
             sensor_name = f"{name}_sensor"
 
             # Make sure friendly name is also descriptive
-            friendly_name = entity_data.get('friendly_name', name)
-            sensor_friendly_name = f"{friendly_name} Sensor"
+            if is_latitude:
+                sensor_friendly_name = "Latitude"
+            elif is_longitude:
+                sensor_friendly_name = "Longitude" 
+            else:
+                # Get metric info like we do for normal sensors
+                metric_path = self._get_metric_path_from_topic(topic)
+                metric_info = get_metric_by_path(metric_path)
+                if not metric_info:
+                    parts = entity_data.get("parts", [])
+                    metric_info = get_metric_by_pattern(parts)
+                sensor_friendly_name = self.naming_service.create_friendly_name(
+                    entity_data.get("parts", []), metric_info, topic, name
+                )
 
             # Prepare attributes for the sensor
             attributes = entity_data.get("attributes", {})
@@ -311,6 +323,19 @@ class EntityFactory:
                 "name": f"OVMS - {self.config.get('vehicle_id', 'unknown')}",
             }
 
+    def _get_metric_path_from_topic(self, topic: str) -> str:
+        """Extract metric path from topic."""
+        topic_suffix = topic
+        if topic.count('/') >= 3:  # Skip the prefix part
+            parts = topic.split('/')
+            # Find where the actual metric path starts
+            for i, part in enumerate(parts):
+                if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
+                    topic_suffix = '/'.join(parts[i:])
+                    break
+
+        return topic_suffix.replace("/", ".")
+
     async def async_process_queued_entities(self) -> None:
         """Process any queued entities."""
         self.platforms_loaded = True
@@ -330,4 +355,3 @@ class EntityFactory:
             )
 
             self.entity_queue.task_done()
-
