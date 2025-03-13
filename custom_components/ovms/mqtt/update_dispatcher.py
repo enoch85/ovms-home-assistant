@@ -89,8 +89,9 @@ class UpdateDispatcher:
         """Check if a topic is related to location data."""
         if topic is None:
             return False
-        location_keywords = ["latitude", "longitude", "lat", "lon", "lng", "gps"]
-        return any(keyword in topic.lower() for keyword in location_keywords)
+        # Be very specific about which topics are considered location topics
+        coordinate_keywords = ["latitude", "/lat/", "longitude", "/lon/", "/lng/"]
+        return any(keyword in topic.lower() for keyword in coordinate_keywords)
 
     def _is_gps_quality_topic(self, topic: str) -> bool:
         """Check if a topic is related to GPS quality."""
@@ -209,6 +210,7 @@ class UpdateDispatcher:
                         # Create update payload with accuracy
                         quality_payload = {
                             "gps_accuracy": attributes["gps_accuracy"],
+                            "gps_accuracy_unit": "m",  # Add proper unit
                             "last_updated": dt_util.utcnow().isoformat()
                         }
                         self._update_entity(tracker_id, quality_payload)
@@ -286,6 +288,7 @@ class UpdateDispatcher:
             # Add accuracy if available
             if accuracy is not None:
                 payload["gps_accuracy"] = accuracy
+                payload["gps_accuracy_unit"] = "m"  # Add proper unit
 
             for tracker_id in device_trackers:
                 # Skip if it's a specific lat/lon entity
@@ -326,6 +329,7 @@ class UpdateDispatcher:
             # Add accuracy if available
             if accuracy is not None:
                 payload["gps_accuracy"] = accuracy
+                payload["gps_accuracy_unit"] = "m"  # Add proper unit
 
             # Update the tracker
             self._update_entity(tracker_id, payload)
