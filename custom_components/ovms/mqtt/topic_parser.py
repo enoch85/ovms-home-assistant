@@ -206,29 +206,7 @@ class TopicParser:
 
         # If we have a car prefix, add it to the friendly name
         if car_prefix:
-            # Extract specific metric type from the parts
-            if len(parts) > 2 and parts[0] == "metric" and parts[1] == "xvu":
-                # For xvu metrics, use parts[2] and onwards for better context
-                metric_context = ".".join(parts[2:])
-                # Map common subsystems to more user-friendly names
-                subsystem_map = {
-                    "b": "Battery",
-                    "c": "Charging",
-                    "e": "System",
-                    "m": "Motor",
-                    "v": "Vehicle"
-                }
-
-                if parts[2] in subsystem_map:
-                    subsystem = subsystem_map[parts[2]]
-                    # Format as "VW eUP Battery: State of Charge"
-                    return f"{car_prefix} {subsystem}: {base_name}"
-                else:
-                    # Format as "VW eUP: Specific Metric Name"
-                    return f"{car_prefix}: {base_name}"
-            else:
-                # For other car-specific metrics, just add the car prefix
-                return f"{car_prefix}: {base_name}"
+            return f"{car_prefix} {base_name}"
 
         # For standard metrics, just use the base name
         return base_name
