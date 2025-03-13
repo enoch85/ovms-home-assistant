@@ -55,7 +55,7 @@ class TopicParser:
                 vehicle_id = self.config.get("vehicle_id", "")
                 attributes = {"topic": topic, "category": "diagnostic"}
                 # Ensure proper friendly name for status sensor
-                friendly_name = f"{vehicle_id} Connection"
+                friendly_name = f"{vehicle_id} Status"
                 return {
                     "entity_type": "binary_sensor",
                     "name": f"ovms_{vehicle_id}_status",
@@ -148,21 +148,17 @@ class TopicParser:
 
     def _convert_to_metric_path(self, parts: List[str]) -> str:
         """Convert topic parts to metric path."""
-        if len(parts) >= 2 and parts[0] == "metric":
-            if parts[1] == "xvu":
-                # This is a vendor-specific metric, adjust parts to match standard pattern
-                if len(parts) > 3:
-                    # Create a modified path that might match standard metrics
-                    standard_parts = ["metric", parts[2]] + parts[3:]
-                    metric_path = ".".join(standard_parts[1:])
-                else:
-                    metric_path = ".".join(parts[1:])
-            else:
-                metric_path = ".".join(parts[1:])
-        else:
-            metric_path = ".".join(parts)
-
-        return metric_path
+        # Keep xvu prefix intact for VW e-UP metrics
+        if len(parts) >= 2:
+            if "xvu" in parts:
+                # For vendor-specific metrics, preserve the entire path including xvu
+                return ".".join(parts)
+            
+            # Metric specific prefixes
+            if parts[0] in ["metric", "status", "notify"]:
+                return ".".join(parts[1:])
+        
+        return ".".join(parts)
 
     def _determine_entity_type(self, parts: List[str], metric_path: str) -> str:
         """Determine the entity type based on topic parts and metric info."""
