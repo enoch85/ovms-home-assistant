@@ -122,7 +122,7 @@ class UpdateDispatcher:
             if any(ver_keyword in topic.lower() for ver_keyword in ["version", "m.version"]):
                 # Update device info in Home Assistant with the version
                 _LOGGER.info("Detected firmware version update: %s", payload)
-                
+
                 # First try to get vehicle_id directly from config (most reliable method)
                 vehicle_id = None
                 for entry_id, data in self.hass.data[DOMAIN].items():
@@ -132,15 +132,15 @@ class UpdateDispatcher:
                             vehicle_id = config["vehicle_id"]
                             _LOGGER.debug("Found vehicle_id '%s' in config", vehicle_id)
                             break
-                
+
                 # Skip extraction from topic as it's unreliable - we'll use the device registry instead
                 if not vehicle_id:
                     _LOGGER.warning("Could not find vehicle_id in config")
-                    
+
                 # Find device directly in the registry
                 from homeassistant.helpers import device_registry as dr
                 device_registry = dr.async_get(self.hass)
-                
+
                 # First try to find any OVMS device (there's typically only one)
                 device = None
                 for dev in device_registry.devices.values():
@@ -151,7 +151,7 @@ class UpdateDispatcher:
                             break
                     if device:
                         break
-                
+
                 # If we found a device and have a vehicle ID, confirm it's the right one
                 if device and vehicle_id:
                     # Check if this is the correct device
@@ -160,11 +160,11 @@ class UpdateDispatcher:
                         if identifier[0] == DOMAIN and identifier[1] == vehicle_id:
                             matched = True
                             break
-                    
+
                     if matched:
                         # Update the firmware version
                         device_registry.async_update_device(
-                            device.id, 
+                            device.id,
                             sw_version=payload
                         )
                         _LOGGER.debug("Updated device %s firmware version to %s", device.id, payload)
@@ -173,7 +173,7 @@ class UpdateDispatcher:
                 elif device:
                     # If we found a device but don't have a vehicle ID, update it anyway
                     device_registry.async_update_device(
-                        device.id, 
+                        device.id,
                         sw_version=payload
                     )
                     _LOGGER.debug("Updated device %s firmware version without vehicle_id check", device.id)
@@ -189,7 +189,7 @@ class UpdateDispatcher:
                         if device:
                             # Update the firmware version
                             device_registry.async_update_device(
-                                device.id, 
+                                device.id,
                                 sw_version=payload
                             )
                             _LOGGER.debug("Updated device %s firmware version via entity", device.id)
@@ -212,12 +212,12 @@ class UpdateDispatcher:
         try:
             # Process GPS quality information
             quality_value = self._parse_numeric_value(payload)
-            
+
             if quality_value is not None:
                 # Check what type of GPS quality metric this is
                 is_hdop = any(keyword in topic.lower() for keyword in ["gpshdop", "gps_hdop"])
                 is_signal_quality = any(keyword in topic.lower() for keyword in ["gpssq", "gps_sq"])
-                
+
                 # Calculate accuracy
                 accuracy = None
                 if is_signal_quality:
@@ -226,7 +226,7 @@ class UpdateDispatcher:
                 elif is_hdop:
                     # HDOP - lower is better
                     accuracy = max(5, quality_value * 5)  # Each HDOP unit is ~5m of accuracy
-                
+
                 if accuracy is not None:
                     # Update all device trackers with this GPS accuracy
                     device_trackers = self.entity_registry.get_entities_by_type("device_tracker")
@@ -237,7 +237,7 @@ class UpdateDispatcher:
                             "last_updated": dt_util.utcnow().isoformat()
                         }
                         self._update_entity(tracker_id, quality_payload)
-        
+
         except Exception as ex:
             _LOGGER.exception("Error handling GPS quality update: %s", ex)
 
@@ -260,7 +260,7 @@ class UpdateDispatcher:
 
         except (ValueError, TypeError):
             return None
-            
+
     def _parse_numeric_value(self, value: Any) -> Optional[float]:
         """Parse a numeric value from various formats."""
         if value is None:
@@ -289,13 +289,13 @@ class UpdateDispatcher:
             # Get GPS accuracy if available
             accuracy = None
             mqtt_client = None
-            
+
             # Try to get the MQTT client from hass.data
             for entry_id, data in self.hass.data.get(DOMAIN, {}).items():
                 if "mqtt_client" in data:
                     mqtt_client = data["mqtt_client"]
                     break
-                    
+
             if mqtt_client and hasattr(mqtt_client, "get_gps_accuracy"):
                 accuracy = mqtt_client.get_gps_accuracy()
 
@@ -305,7 +305,7 @@ class UpdateDispatcher:
                 "longitude": self.location_values.get("longitude"),
                 "last_updated": dt_util.utcnow().isoformat(),
             }
-            
+
             # Add accuracy if available
             if accuracy is not None:
                 payload["gps_accuracy"] = accuracy
@@ -328,13 +328,13 @@ class UpdateDispatcher:
             # Get GPS accuracy if available
             accuracy = None
             mqtt_client = None
-            
+
             # Try to get the MQTT client from hass.data
             for entry_id, data in self.hass.data.get(DOMAIN, {}).items():
                 if "mqtt_client" in data:
                     mqtt_client = data["mqtt_client"]
                     break
-                    
+
             if mqtt_client and hasattr(mqtt_client, "get_gps_accuracy"):
                 accuracy = mqtt_client.get_gps_accuracy()
 
@@ -344,7 +344,7 @@ class UpdateDispatcher:
                 "longitude": self.location_values.get("longitude"),
                 "last_updated": dt_util.utcnow().isoformat(),
             }
-            
+
             # Add accuracy if available
             if accuracy is not None:
                 payload["gps_accuracy"] = accuracy
