@@ -9,7 +9,6 @@ from ..metrics import (
     get_metric_by_path,
     get_metric_by_pattern,
     determine_category_from_topic,
-    create_friendly_name,
 )
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -55,7 +54,7 @@ class TopicParser:
             if topic.endswith("/status"):
                 vehicle_id = self.config.get("vehicle_id", "")
                 attributes = {"topic": topic, "category": "diagnostic"}
-                # Ensure proper friendly name for status sensor (fixing issue #1)
+                # Ensure proper friendly name for status sensor
                 friendly_name = f"{vehicle_id} Connection"
                 return {
                     "entity_type": "binary_sensor",
@@ -109,136 +108,66 @@ class TopicParser:
                 return None
 
             # Handle vendor-specific prefixes (like xvu)
-            if len(parts) >= 2 and parts[0] == "metric":
-                if parts[1] == "xvu":
-                    # This is a vendor-specific metric, adjust parts to match standard pattern
-                    if len(parts) > 3:
-                        # Create a modified path that might match standard metrics
-                        standard_parts = ["metric", parts[2]] + parts[3:]
-                        metric_path = ".".join(standard_parts[1:])
-                    else:
-                        metric_path = ".".join(parts[1:])
-                else:
-                    metric_path = ".".join(parts[1:])
-            else:
-                metric_path = ".".join(parts)
-
-            # Try to match with known metric patterns
-            # First, check if this is a standard OVMS metric
-            metric_info = get_metric_by_path(metric_path)
-
-            # If no exact match, try to match by patterns
-            if not metric_info and parts:
-                metric_info = get_metric_by_pattern(parts)
-
+            metric_path = self._convert_to_metric_path(parts)
+            
             # Determine entity type and category
-            entity_type = self._determine_entity_type(parts, metric_path, metric_info)
+            entity_type = self._determine_entity_type(parts, metric_path)
             category = determine_category_from_topic(parts)
 
             # Create entity name and add extra attributes
             raw_name = "_".join(parts) if parts else "unknown"
-
-            # Get vehicle ID for entity naming
             vehicle_id = self.config.get("vehicle_id", "")
-
-            # Include vehicle_id in entity name
             name = f"ovms_{vehicle_id}_{raw_name}"
 
-            # Create more descriptive friendly name using the improved function
-            friendly_name = self._create_friendly_name(parts, metric_info, topic, raw_name)
+            # Get metric info for later use
+            metric_info = get_metric_by_path(metric_path)
+            if not metric_info:
+                metric_info = get_metric_by_pattern(parts)
 
-            attributes = self._prepare_attributes(topic, category, parts, metric_info)
-
-            # Special handling for latitude/longitude
-            if self._is_location_topic(parts, name, topic):
-                # Give it higher priority as this is for the device tracker
-                location_data = {
-                    "entity_type": "device_tracker",
-                    "name": name,
-                    "friendly_name": friendly_name,
-                    "attributes": attributes,
-                    "priority": 10,  # Higher priority for location data
-                }
-
-                # Look for GPS signal quality if this is a location topic
-                gps_sq = self._find_gps_signal_quality(topic)
-                if gps_sq is not None:
-                    attributes["gps_accuracy"] = gps_sq
-
-                return location_data
+            # Prepare basic attributes
+            attributes = {
+                "topic": topic,
+                "category": category,
+                "parts": parts,
+            }
 
             return {
                 "entity_type": entity_type,
                 "name": name,
-                "friendly_name": friendly_name,
+                "raw_name": raw_name,
+                "parts": parts,
+                "metric_path": metric_path,
+                "metric_info": metric_info,
                 "attributes": attributes,
-                "priority": 5 if "version" in name.lower() else 0,  # Higher priority for version
+                "priority": 5 if "version" in name.lower() else 0,
             }
 
         except Exception as ex:
             _LOGGER.exception("Error parsing topic: %s", ex)
             return None
 
-    def _create_friendly_name(self, parts, metric_info, topic, raw_name):
-        """Create a friendly name based on topic parts and metric info."""
-        # Extract base metric name from metric info
-        if metric_info and "name" in metric_info:
-            base_name = metric_info["name"]
+    def _convert_to_metric_path(self, parts: List[str]) -> str:
+        """Convert topic parts to metric path."""
+        if len(parts) >= 2 and parts[0] == "metric":
+            if parts[1] == "xvu":
+                # This is a vendor-specific metric, adjust parts to match standard pattern
+                if len(parts) > 3:
+                    # Create a modified path that might match standard metrics
+                    standard_parts = ["metric", parts[2]] + parts[3:]
+                    metric_path = ".".join(standard_parts[1:])
+                else:
+                    metric_path = ".".join(parts[1:])
+            else:
+                metric_path = ".".join(parts[1:])
         else:
-            base_name = parts[-1].replace("_", " ").title() if parts else "Unknown"
+            metric_path = ".".join(parts)
+            
+        return metric_path
 
-        # Check for vehicle-specific metrics
-        car_prefix = None
-
-        # Detect car model from parts or topic
-        if "xvu" in topic or "xvu" in raw_name:
-            car_prefix = "VW eUP"
-        elif "eu3" in topic or "e.up3" in raw_name:
-            car_prefix = "VW e-Up3"
-        elif "id3" in topic or "id.3" in raw_name:
-            car_prefix = "VW ID.3"
-        elif "id4" in topic or "id.4" in raw_name:
-            car_prefix = "VW ID.4"
-
-        # Check if the car prefix is already in the base name
-        if car_prefix and car_prefix in base_name:
-            return base_name
-
-        # If we have a car prefix, add it to the friendly name
-        if car_prefix:
-            return f"{car_prefix} {base_name}"
-
-        # For standard metrics, just use the base name
-        return base_name
-
-    def _find_gps_signal_quality(self, topic: str) -> Optional[float]:
-        """Find GPS signal quality value for location accuracy."""
-        # This is a placeholder - in a real implementation, you would need access to the
-        # discovered topics and their values to look up GPS signal quality
-        return None
-
-    def _is_location_topic(self, parts: List[str], name: str, topic: str) -> bool:
-        """Check if topic is a location topic."""
-        location_keywords = ["latitude", "longitude", "lat", "lon", "lng", "gps"]
-
-        # Check in name
-        if any(keyword in name.lower() for keyword in location_keywords):
-            return True
-
-        # Check in topic
-        if any(keyword in topic.lower() for keyword in location_keywords):
-            return True
-
-        # Check in parts
-        if any(keyword in part.lower() for part in parts for keyword in location_keywords):
-            return True
-
-        return False
-
-    def _determine_entity_type(self, parts: List[str], metric_path: str, metric_info: Optional[Dict]) -> str:
+    def _determine_entity_type(self, parts: List[str], metric_path: str) -> str:
         """Determine the entity type based on topic parts and metric info."""
         # Check if this should be a binary sensor
-        if self._should_be_binary_sensor(parts, metric_path, metric_info):
+        if self._should_be_binary_sensor(parts, metric_path):
             return "binary_sensor"
 
         # Check for commands/switches
@@ -254,10 +183,14 @@ class TopicParser:
         ):
             return "switch"
 
+        # Special handling for location topics
+        if self._is_location_topic(parts, "_".join(parts), "/".join(parts)):
+            return "device_tracker"
+
         # Default to sensor
         return "sensor"
 
-    def _should_be_binary_sensor(self, parts: List[str], metric_path: str, metric_info: Optional[Dict]) -> bool:
+    def _should_be_binary_sensor(self, parts: List[str], metric_path: str) -> bool:
         """Determine if topic should be a binary sensor."""
         try:
             # Check if this is a known binary metric
@@ -265,6 +198,10 @@ class TopicParser:
                 return True
 
             # Check if the metric info defines it as a binary sensor
+            metric_info = get_metric_by_path(metric_path)
+            if not metric_info:
+                metric_info = get_metric_by_pattern(parts)
+
             if metric_info and "device_class" in metric_info:
                 # Check if the device class is from binary_sensor
                 if hasattr(metric_info["device_class"], "__module__"):
@@ -302,40 +239,28 @@ class TopicParser:
                     "monotonic",
                 ]
                 # Check if name contains any exclusions
-                if not any(
-                    exclusion in name_lower for exclusion in exclusions
-                ):
+                if not any(exclusion in name_lower for exclusion in exclusions):
                     return True
 
             return False
         except Exception as ex:
-            _LOGGER.exception(
-                "Error determining if should be binary sensor: %s", ex
-            )
+            _LOGGER.exception("Error determining if should be binary sensor: %s", ex)
             return False
 
-    def _prepare_attributes(self, topic: str, category: str, parts: List[str], metric_info: Optional[Dict]) -> Dict[str, Any]:
-        """Prepare entity attributes."""
-        try:
-            attributes = {
-                "topic": topic,
-                "category": category,
-                "parts": parts,
-            }
+    def _is_location_topic(self, parts: List[str], name: str, topic: str) -> bool:
+        """Check if topic is a location topic."""
+        location_keywords = ["latitude", "longitude", "lat", "lon", "lng", "gps"]
 
-            # Add additional attributes from metric definition
-            if metric_info:
-                # Only add attributes that aren't already in the entity definition
-                for key, value in metric_info.items():
-                    if key not in [
-                        "name",
-                        "device_class",
-                        "state_class",
-                        "unit",
-                    ]:
-                        attributes[key] = value
+        # Check in name
+        if any(keyword in name.lower() for keyword in location_keywords):
+            return True
 
-            return attributes
-        except Exception as ex:
-            _LOGGER.exception("Error preparing attributes: %s", ex)
-            return {"topic": topic, "category": category}
+        # Check in topic
+        if any(keyword in topic.lower() for keyword in location_keywords):
+            return True
+
+        # Check in parts
+        if any(keyword in part.lower() for part in parts for keyword in location_keywords):
+            return True
+
+        return False
