@@ -205,7 +205,7 @@ class UpdateDispatcher:
                         except Exception:
                             _LOGGER.error("Failed to update device with shortened version too")
                 else:
-                    _LOGGER.warning("No OVMS device found in registry to update version")
+                    _LOGGER.debug("No OVMS device found in registry to update version")
 
                 # Ensure version topics have higher priority
                 current_priority = self.entity_registry.priorities.get(topic, 0)
