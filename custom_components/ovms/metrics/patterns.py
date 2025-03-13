@@ -178,4 +178,29 @@ TOPIC_PATTERNS = {
         "icon": "mdi:car-electric",
         "category": "vw_eup",
     },
+    # Add specific patterns for our problematic metrics
+    "egpio_input": {
+        "name": "GPIO Input Ports",
+        "icon": "mdi:integrated-circuit-chip",
+        "category": "system",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    "egpio_output": {
+        "name": "GPIO Output Ports",
+        "icon": "mdi:integrated-circuit-chip",
+        "category": "system",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    "t_diff": {
+        "name": "Tire Pressure Difference",
+        "icon": "mdi:car-tire-alert",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "tire",
+    },
+    "diff": {
+        "name": "Difference",
+        "icon": "mdi:car-tire-alert",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "tire",
+    },
 }

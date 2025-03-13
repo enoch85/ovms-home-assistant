@@ -44,4 +44,11 @@ TIRE_METRICS = {
         "unit": UnitOfTemperature.CELSIUS,
         "category": "tire",
     },
+    "v.t.diff": {
+        "name": "Tire Pressure Difference",
+        "description": "Difference in tire pressure values",
+        "icon": "mdi:car-tire-alert",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "tire",
+    },
 }

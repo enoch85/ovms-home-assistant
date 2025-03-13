@@ -366,7 +366,7 @@ VW_EUP_METRICS = {
     "xvu.v.t.diff": {
         "name": "VW eUP! Tire Pressure Difference",
         "description": "Difference in tire pressure values",
-        "icon": "mdi:gauge-gap",
+        "icon": "mdi:car-tire-alert",
         "state_class": SensorStateClass.MEASUREMENT,
         "category": "vw_eup",
     },
