@@ -86,6 +86,13 @@ class AttributeManager:
                 try:
                     value = float(payload) if payload else None
                     attributes["gps_hdop"] = value
+                    # If we have HDOP, we can estimate accuracy (meters)
+                    if value is not None:
+                        # HDOP to meters accuracy - typical formula
+                        # Each HDOP unit is roughly 5 meters of accuracy
+                        accuracy = max(5, value * 5)  # Minimum 5m
+                        attributes["gps_accuracy"] = accuracy
+                        attributes["gps_accuracy_unit"] = "m"
                 except (ValueError, TypeError):
                     pass
             elif "gpssq" in topic.lower():
@@ -98,6 +105,7 @@ class AttributeManager:
                         # Higher signal quality = better accuracy (lower value)
                         accuracy = max(5, 100 - value)  # Clamp minimum accuracy to 5m
                         attributes["gps_accuracy"] = accuracy
+                        attributes["gps_accuracy_unit"] = "m"
                 except (ValueError, TypeError):
                     pass
             elif "gpsspeed" in topic.lower():
