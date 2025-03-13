@@ -154,11 +154,11 @@ class TopicParser:
             if "xvu" in parts:
                 # For vendor-specific metrics, preserve the entire path including xvu
                 return ".".join(parts)
-            
+
             # Metric specific prefixes
             if parts[0] in ["metric", "status", "notify"]:
                 return ".".join(parts[1:])
-        
+
         return ".".join(parts)
 
     def _determine_entity_type(self, parts: List[str], metric_path: str, topic: str) -> str:
@@ -243,44 +243,44 @@ class TopicParser:
         except Exception as ex:
             _LOGGER.exception("Error determining if should be binary sensor: %s", ex)
             return False
-            
+
     def _is_coordinate_topic(self, parts: List[str], name: str, topic: str) -> bool:
         """Check if topic is a latitude/longitude coordinate topic.
-        
+
         These topics contain actual location coordinates.
         """
         # Define strict coordinate keywords - only these will create device trackers
         coordinate_keywords = ["latitude", "lat", "longitude", "long", "lon", "lng"]
-        
+
         # Only match exact coordinate keywords, not any topic containing "gps"
         for keyword in coordinate_keywords:
             # Check in topic name
             if keyword == name.lower():
                 return True
-            
+
             # Check for exact match in parts
             if any(part.lower() == keyword for part in parts):
                 return True
-            
+
             # Check in full topic path for exact coordinate matches
             if f"/p/{keyword}" in topic.lower() or f".p.{keyword}" in topic.lower():
                 return True
-        
+
         # For multi-part words like "v_p_latitude", we need additional check
-        if any(part.lower().endswith("_latitude") or 
+        if any(part.lower().endswith("_latitude") or
                part.lower().endswith("_longitude") for part in parts):
             return True
-        
+
         return False
 
     def _is_gps_metric_topic(self, parts: List[str], name: str, topic: str) -> bool:
         """Check if topic is a GPS-related metric that should be a sensor."""
         gps_keywords = ["gpshdop", "gpssq", "gpsmode", "gpsspeed", "gpstime", "gps"]
         coordinate_keywords = ["latitude", "lat", "longitude", "long", "lon", "lng"]
-        
+
         # GPS topics OR coordinate topics should be sensors
         if (any(keyword in topic.lower() for keyword in gps_keywords) or
             any(keyword in topic.lower() for keyword in coordinate_keywords)):
             return True
-        
+
         return False

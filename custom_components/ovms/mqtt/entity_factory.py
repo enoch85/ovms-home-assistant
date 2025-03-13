@@ -105,35 +105,35 @@ class EntityFactory:
                 await self.entity_queue.put(dispatcher_data)
 
             # If we have both latitude and longitude entities tracked, create a combined device tracker
-            if (len(self.location_entities) >= 2 and 
-                "latitude" in self.location_entities and 
-                "longitude" in self.location_entities and 
+            if (len(self.location_entities) >= 2 and
+                "latitude" in self.location_entities and
+                "longitude" in self.location_entities and
                 not self.combined_tracker_created):
                 await self._create_combined_device_tracker()
 
         except Exception as ex:
             _LOGGER.exception("Error creating entity: %s", ex)
-            
+
     def _is_coordinate_entity(self, topic: str, entity_data: Dict[str, Any]) -> bool:
         """Check if this entity contains coordinate data (latitude/longitude)."""
         topic_lower = topic.lower()
         name = entity_data.get("name", "").lower()
-        
+
         # Check for latitude/longitude keywords
-        if any(keyword in topic_lower or keyword in name 
+        if any(keyword in topic_lower or keyword in name
                for keyword in ["latitude", "lat", "longitude", "long", "lon", "lng"]):
-                
+
             # More specific checks to avoid false positives
             parts = topic.split('/')
             for part in parts:
                 part_lower = part.lower()
                 if part_lower in ["latitude", "lat", "longitude", "long", "lon", "lng"]:
                     return True
-                    
+
             # Check for common patterns in topic paths
             if any(pattern in topic_lower for pattern in ["/p/lat", "/p/lon", ".p.lat", ".p.lon"]):
                 return True
-                
+
         return False
 
     async def _track_coordinate_entity(self, topic: str, unique_id: str, entity_data: Dict[str, Any]) -> None:

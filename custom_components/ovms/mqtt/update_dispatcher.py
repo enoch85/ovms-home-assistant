@@ -87,33 +87,33 @@ class UpdateDispatcher:
 
     def _is_coordinate_topic(self, topic: str) -> bool:
         """Check if a topic is related to location coordinates for device tracker.
-        
+
         Only latitude and longitude topics should be considered coordinate topics
         """
         if topic is None:
             return False
-            
+
         # Define strict coordinate keywords - only these for coordinates
         coordinate_keywords = ["latitude", "lat", "longitude", "long", "lon", "lng"]
-        
+
         # Convert topic to parts for more precise matching
         parts = topic.split('/')
-        
+
         # Only match exact coordinate keywords, not any topic containing "gps"
         for keyword in coordinate_keywords:
             # Check for exact match in parts
             if any(part.lower() == keyword for part in parts):
                 return True
-            
+
             # Check in full topic path for exact coordinate matches
             if f"/p/{keyword}" in topic.lower() or f".p.{keyword}" in topic.lower():
                 return True
-        
+
         # For multi-part words like "v_p_latitude", we need additional check
-        if any(part.lower().endswith("_latitude") or 
+        if any(part.lower().endswith("_latitude") or
                part.lower().endswith("_longitude") for part in parts):
             return True
-            
+
         return False
 
     def _is_gps_quality_topic(self, topic: str) -> bool:
@@ -127,7 +127,7 @@ class UpdateDispatcher:
         """Handle updates to location topics."""
         try:
             now = dt_util.utcnow().timestamp()
-            
+
             # Extract latitude/longitude values if applicable
             is_latitude = any(keyword in topic.lower() for keyword in ["latitude", "lat"])
             is_longitude = any(keyword in topic.lower() for keyword in ["longitude", "long", "lon", "lng"])
