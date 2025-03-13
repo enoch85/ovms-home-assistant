@@ -133,7 +133,7 @@ class EntityFactory:
             if is_latitude:
                 sensor_friendly_name = "Latitude"
             elif is_longitude:
-                sensor_friendly_name = "Longitude" 
+                sensor_friendly_name = "Longitude"
             else:
                 # Get metric info like we do for normal sensors
                 metric_path = self._get_metric_path_from_topic(topic)

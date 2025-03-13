@@ -23,12 +23,12 @@ class EntityNamingService:
         if metric_info and "name" in metric_info:
             # Vehicle-specific metrics already have the vehicle name in the metric definition
             return metric_info["name"]
-        
+
         # If no metric info, try to extract a clean name from parts
         if parts:
             last_part = parts[-1].replace("_", " ").title()
             return last_part
-        
+
         # Fallback to a cleaned version of the raw name
         return raw_name.replace("_", " ").title() if raw_name else "Unknown"
 
