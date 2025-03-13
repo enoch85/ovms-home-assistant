@@ -377,4 +377,23 @@ VW_EUP_METRICS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "category": "vw_eup",
     },
+    # Add path variations to support different MQTT topic formats
+    "metric.xvu.b.cap.ah.abs": {
+        "name": "VW eUP! Absolute Battery Capacity",
+        "description": "Absolute battery capacity in Ampere hours",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.ENERGY_STORAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UNIT_AMPERE_HOUR,
+        "category": "vw_eup",
+    },
+    "metric.xvu.b.soc.abs": {
+        "name": "VW eUP! Absolute SOC",
+        "description": "Absolute state of charge",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": "vw_eup",
+    },
 }
