@@ -13,18 +13,24 @@ from ..const import (
     LOGGER_NAME,
     SIGNAL_ADD_ENTITIES,
 )
+from ..naming_service import EntityNamingService
+from ..attribute_manager import AttributeManager
+from ..metrics import get_metric_by_path, get_metric_by_pattern
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 class EntityFactory:
     """Factory for creating OVMS entities."""
 
-    def __init__(self, hass: HomeAssistant, entity_registry, update_dispatcher, config: Dict[str, Any]):
+    def __init__(self, hass: HomeAssistant, entity_registry, update_dispatcher, config: Dict[str, Any],
+                naming_service: EntityNamingService, attribute_manager: AttributeManager):
         """Initialize the entity factory."""
         self.hass = hass
         self.entity_registry = entity_registry
         self.update_dispatcher = update_dispatcher
         self.config = config
+        self.naming_service = naming_service
+        self.attribute_manager = attribute_manager
         self.entity_queue = asyncio.Queue()
         self.platforms_loaded = False
         self.created_entities = set()
@@ -46,7 +52,22 @@ class EntityFactory:
                 _LOGGER.debug("Entity already created for topic: %s", topic)
                 return
 
-            _LOGGER.info("Creating %s: %s", entity_type, entity_data.get("friendly_name", entity_data.get("name")))
+            # Get parts and metric info
+            parts = entity_data.get("parts", [])
+            raw_name = entity_data.get("raw_name", "")
+            metric_info = entity_data.get("metric_info")
+            
+            # Create friendly name using the naming service
+            friendly_name = self.naming_service.create_friendly_name(
+                parts, metric_info, topic, raw_name
+            )
+
+            # If it's a device tracker, use the special naming format
+            if entity_type == "device_tracker":
+                vehicle_id = self.config.get("vehicle_id", "")
+                friendly_name = self.naming_service.create_device_tracker_name(vehicle_id)
+
+            _LOGGER.info("Creating %s: %s", entity_type, friendly_name)
 
             # Record that we've processed this entity
             self.created_entities.add(unique_id)
@@ -55,16 +76,21 @@ class EntityFactory:
             priority = entity_data.get("priority", 0)
             self.entity_registry.register_entity(topic, unique_id, entity_type, priority)
 
+            # Prepare attributes
+            attributes = entity_data.get("attributes", {})
+            category = attributes.get("category", "unknown")
+            attributes = self.attribute_manager.prepare_attributes(topic, category, parts, metric_info)
+
             # Create entity data for dispatcher
             dispatcher_data = {
                 "entity_type": entity_type,
                 "unique_id": unique_id,
                 "name": entity_data.get("name"),
-                "friendly_name": entity_data.get("friendly_name"),
+                "friendly_name": friendly_name,
                 "topic": topic,
                 "payload": payload,
                 "device_info": self._get_device_info(),
-                "attributes": entity_data.get("attributes", {}),
+                "attributes": attributes,
             }
 
             # For device trackers, also create a sensor version
@@ -107,6 +133,17 @@ class EntityFactory:
             friendly_name = entity_data.get('friendly_name', name)
             sensor_friendly_name = f"{friendly_name} Sensor"
 
+            # Prepare attributes for the sensor
+            attributes = entity_data.get("attributes", {})
+            category = attributes.get("category", "location")
+            parts = entity_data.get("parts", [])
+            sensor_attributes = self.attribute_manager.prepare_attributes(topic, category, parts)
+            sensor_attributes.update({
+                "original_entity": unique_id,
+                "original_entity_type": "device_tracker",
+                "location_type": location_type,
+            })
+
             sensor_data = {
                 "entity_type": "sensor",
                 "unique_id": sensor_unique_id,
@@ -115,12 +152,7 @@ class EntityFactory:
                 "topic": topic,
                 "payload": payload,
                 "device_info": self._get_device_info(),
-                "attributes": {
-                    **entity_data.get("attributes", {}),
-                    "original_entity": unique_id,
-                    "original_entity_type": "device_tracker",
-                    "location_type": location_type,
-                },
+                "attributes": sensor_attributes,
             }
 
             # Register the relationship for update coordination
@@ -166,23 +198,31 @@ class EntityFactory:
 
             self.created_entities.add(tracker_id)
 
+            # Create friendly name using the naming service
+            friendly_name = self.naming_service.create_device_tracker_name(vehicle_id)
+
+            # Create device tracker attributes
+            attributes = self.attribute_manager.prepare_attributes(
+                "combined_location", "location", []
+            )
+            attributes.update({
+                "lat_entity_id": self.location_entities.get("latitude"),
+                "lon_entity_id": self.location_entities.get("longitude"),
+            })
+
             # Create device tracker data
             tracker_data = {
                 "entity_type": "device_tracker",
                 "unique_id": tracker_id,
                 "name": f"ovms_{vehicle_id}_location",
-                "friendly_name": "Location",
+                "friendly_name": friendly_name,
                 "topic": "combined_location",  # Virtual topic
                 "payload": {
                     "latitude": 0,
                     "longitude": 0,
                 },
                 "device_info": self._get_device_info(),
-                "attributes": {
-                    "category": "location",
-                    "lat_entity_id": self.location_entities.get("latitude"),
-                    "lon_entity_id": self.location_entities.get("longitude"),
-                },
+                "attributes": attributes,
             }
 
             # Register relationships with individual lat/lon entities
@@ -291,70 +331,3 @@ class EntityFactory:
 
             self.entity_queue.task_done()
 
-    def _create_friendly_name(self, parts, metric_info, topic, raw_name):
-        """Create a friendly name based on topic parts and metric info."""
-        # Extract base metric name from metric info
-        if metric_info and "name" in metric_info:
-            base_name = metric_info["name"]
-        else:
-            base_name = parts[-1].replace("_", " ").title() if parts else "Unknown"
-
-        # Get vehicle ID for prefix
-        vehicle_id = self.config.get("vehicle_id", "")
-
-        # Detect car model from parts or topic
-        car_prefix = None
-        if "xvu" in topic or "xvu" in raw_name:
-            car_prefix = "VW eUP"
-        elif "eu3" in topic or "e.up3" in raw_name:
-            car_prefix = "VW e-Up3"
-        elif "id3" in topic or "id.3" in raw_name:
-            car_prefix = "VW ID.3"
-        elif "id4" in topic or "id.4" in raw_name:
-            car_prefix = "VW ID.4"
-        elif vehicle_id:
-            car_prefix = vehicle_id  # Use vehicle_id as prefix if no specific model detected
-
-        # Special handling for battery capacity sensors
-        if "b_cap" in topic:
-            if "ah_norm" in topic:
-                return f"{car_prefix} Battery Capacity (Ah Normalized)"
-            elif "kwh_abs" in topic:
-                return f"{car_prefix} Battery Capacity (kWh Absolute)"
-        
-        # Check if the car prefix is already in the base name
-        if car_prefix and car_prefix in base_name:
-            return base_name
-
-        # For all sensors, include vehicle prefix if not already included
-        if car_prefix:
-            return f"{car_prefix} {base_name}"
-
-        # For standard metrics, just use the base name
-        return base_name
-
-    def _prepare_attributes(self, topic: str, category: str, parts: List[str], metric_info: Optional[Dict]) -> Dict[str, Any]:
-        """Prepare entity attributes."""
-        try:
-            attributes = {
-                "topic": topic,
-                "category": category,
-                "parts": parts,
-            }
-
-            # Add additional attributes from metric definition
-            if metric_info:
-                # Only add attributes that aren't already in the entity definition
-                for key, value in metric_info.items():
-                    if key not in [
-                        "name",
-                        "device_class",
-                        "state_class",
-                        "unit",
-                    ]:
-                        attributes[key] = value
-
-            return attributes
-        except Exception as ex:
-            _LOGGER.exception("Error preparing attributes: %s", ex)
-            return {"topic": topic, "category": category}
