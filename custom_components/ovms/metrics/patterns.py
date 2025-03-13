@@ -181,25 +181,25 @@ TOPIC_PATTERNS = {
     # Add specific patterns for our problematic metrics
     "egpio_input": {
         "name": "GPIO Input Ports",
-        "icon": "mdi:gpio",
+        "icon": "mdi:integrated-circuit-chip",
         "category": "system",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "egpio_output": {
         "name": "GPIO Output Ports",
-        "icon": "mdi:gpio",
+        "icon": "mdi:integrated-circuit-chip",
         "category": "system",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "t_diff": {
         "name": "Tire Pressure Difference",
-        "icon": "mdi:gauge-gap",
+        "icon": "mdi:car-tire-alert",
         "state_class": SensorStateClass.MEASUREMENT,
         "category": "tire",
     },
     "diff": {
         "name": "Difference",
-        "icon": "mdi:gauge-gap",
+        "icon": "mdi:car-tire-alert",
         "state_class": SensorStateClass.MEASUREMENT,
         "category": "tire",
     },
