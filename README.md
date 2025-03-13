@@ -10,20 +10,37 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 - Identifies vehicle data and creates appropriate entity types (sensors, binary sensors, device trackers, switches)
 - Categorizes entities by data type (battery, climate, location, etc.)
 - Maintains entity state based on real-time MQTT updates
+- Processes data for comprehensive metrics including statistics
 - Provides services to send commands to your vehicle
 
 ## Features
 
-- **Automatic Discovery**: Detects all metrics published by your OVMS module
-- **Entity Creation**: Creates appropriate Home Assistant entities based on data type
-- **Smart Categorization**: Organizes entities into logical groups
-- **Real-time Updates**: Entities update as new data is published
-- **Command Interface**: Send commands to your vehicle through services (rate limited to 5 commands per minute)
-- **Vehicle Status**: Track online/offline status of your vehicle
-- **Secure Communication**: Supports TLS/SSL connections to MQTT brokers
+- **Automatic Discovery**: Detects all metrics published by your OVMS module without manual configuration
+- **Entity Creation**: Creates appropriate Home Assistant entities based on data type with intelligent state parsing
+- **Smart Categorization**: Organizes entities into logical groups (battery, climate, location, etc.)
+- **Real-time Updates**: Entities update as new data is published through MQTT
+- **Command Interface**: Send commands to your vehicle through services with proper rate limiting
+- **Vehicle Status**: Track online/offline status of your vehicle automatically
+- **Secure Communication**: Supports TLS/SSL connections to MQTT brokers with certificate verification
 - **Vehicle-Specific Metrics**: Special support for VW e-UP! with additional vehicle models planned
 - **Diagnostics Support**: Provides detailed diagnostics for troubleshooting
+- **Flexible Topic Structure**: Supports various MQTT topic structures including custom formats
 - **Multi-language Support**: Includes translations for English, German, and Swedish
+- **GPS Tracking**: Advanced location tracking with accuracy estimation from signal quality
+- **Cell-level Battery Data**: Processes and displays individual cell data with statistical analysis
+- **Command Rate Limiting**: Prevents overwhelming the vehicle with too many commands
+
+## Technical Quality
+
+- **Code Structure**: Well-organized codebase with proper separation of concerns
+- **Error Handling**: Comprehensive error handling with detailed logging
+- **Type Hints**: Full Python type hinting for better code maintainability
+- **Security**: SSL/TLS support, credential protection, and input validation
+- **Standards Compliance**: Follows Home Assistant development guidelines
+- **Performance**: Efficient MQTT message processing with minimal overhead
+- **Reliability**: Connection recovery mechanisms with backoff strategy
+- **Testing**: Automated validations via HACS and Hassfest
+- **Maintenance**: Structured release process with version control
 
 ## Requirements
 
@@ -44,7 +61,7 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 
 ![3](/assets/screenshot-overview3.png)
 
-*All topics with a lot of metrics are stored in attributes instead, where the average and median are caluclated and presented*
+*All topics with a lot of metrics are stored in attributes instead, where the average and median are calculated and presented*
 
 ## Installation
 
@@ -166,6 +183,7 @@ data:
   vehicle_id: your_vehicle_id
   command: stat
   parameters: range
+  timeout: 10  # Optional timeout in seconds
 ```
 
 Could be done as a button in HA:
@@ -211,8 +229,8 @@ service: ovms.control_climate
 data:
   vehicle_id: your_vehicle_id
   temperature: 21.5
-  hvac_mode: heat
-  duration: 30
+  hvac_mode: heat  # Options: off, heat, cool, auto
+  duration: 30  # Duration in minutes
 ```
 
 #### `ovms.control_charging`
@@ -222,9 +240,9 @@ Control the vehicle's charging functions.
 service: ovms.control_charging
 data:
   vehicle_id: your_vehicle_id
-  action: start
-  mode: range
-  limit: 80
+  action: start  # Options: start, stop, status
+  mode: range  # Options: standard, storage, range, performance
+  limit: 80  # Percentage limit for charging
 ```
 
 ## Technical Details
@@ -248,12 +266,13 @@ The integration supports these MQTT topic structures:
 
 ### Entity Classification
 
-The integration uses pattern matching to determine entity types:
+The integration uses pattern matching and metric definitions to determine entity types:
 
 - Metrics with temperature data become temperature sensors
 - Location data becomes device trackers
 - Binary states (on/off, connected/disconnected) become binary sensors
 - Numeric values become standard sensors
+- Array data (like cell voltages) is processed with statistical analysis
 
 ### Command Protocol
 
@@ -266,9 +285,26 @@ You can for example use the developer tool in Home Assistant to update all the m
 
 ![send update all](/assets/send_update_all.png)
 
+### Data Processing
+
+The integration includes sophisticated data processing:
+- Auto-detection of data types and units
+- Extraction of statistics from array data (min, max, average, median)
+- Conversion between different units based on user preferences
+- JSON payload parsing for complex data structures
+- GPS accuracy calculation from quality metrics
+
+## Security Features
+
+- **TLS/SSL Support**: Secure encrypted connections to MQTT broker
+- **Certificate Verification**: Option to verify SSL certificates (enabled by default)
+- **Rate Limiting**: Command limiting to prevent overwhelming the vehicle (5 per minute by default)
+- **Input Validation**: Comprehensive validation of all inputs
+- **MQTT ACL**: Detailed guidance for restrictive MQTT permissions
+
 ## Troubleshooting
 
-*Warning! The debug output is substancial. It may fill your disk if you are not careful, don't leave it turned on.*
+*Warning! The debug output is substantial. It may fill your disk if you are not careful, don't leave it turned on.*
 
 ### No Entities Created
 
@@ -325,13 +361,30 @@ cards:
       - entity: device_tracker.ovms_location
 ```
 
+## Code Quality and Maintenance
+
+The OVMS integration follows these development principles:
+
+- **Modular Architecture**: Separation of concerns with dedicated modules for specific functions
+- **Comprehensive Logging**: Detailed logging for troubleshooting at various levels
+- **Consistent Formatting**: Code formatted with Black and checked with Pylint
+- **Automated Testing**: CI/CD pipeline with GitHub Actions for validation
+- **Release Management**: Structured release process with semantic versioning
+- **Documentation**: Extensive inline documentation and comments
+
+This integration undergoes regular validation through:
+- HACS compatibility checking
+- Hassfest validation for Home Assistant standards
+- Python code validation and linting
+- Version checking and dependency management
+
 ## FAQ
 
 **Q: Can I use multiple vehicles with this integration?**  
 A: Yes, you can set up multiple instances of the integration, one for each vehicle.
 
 **Q: Does this work with all OVMS-supported vehicles?**  
-A: Yes, the integration is vehicle-agnostic and works with any vehicle supported by OVMS.
+A: Yes, the integration is vehicle-agnostic and works with any vehicle supported by OVMS. Vehicle-specific enhancements are provided for some models like VW e-UP!
 
 **Q: Can I use this without internet access?**  
 A: Yes, as long as your OVMS module, MQTT broker, and Home Assistant can communicate on the same network.
@@ -339,10 +392,28 @@ A: Yes, as long as your OVMS module, MQTT broker, and Home Assistant can communi
 **Q: How frequent are the updates?**  
 A: Updates happen in real-time as the OVMS module publishes new data, typically every few seconds while the vehicle is active.
 
+**Q: How does the integration handle connectivity issues?**  
+A: The integration includes automatic reconnection with exponential backoff, online/offline status tracking, and will resume normal operation when connection is restored.
+
+**Q: Is my data secure?**  
+A: Yes, the integration supports TLS/SSL encryption for MQTT connections and follows secure coding practices for handling sensitive data.
+
+## Contributing
+
+Contributions to the OVMS Home Assistant integration are welcome! Whether it's bug reports, feature requests, documentation improvements, or code contributions.
+
+To contribute:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+Please ensure your code follows the existing style conventions and includes appropriate tests and documentation.
+
 ## License
 
 MIT License - see LICENSE file
 
 ---
 
-*This integration is not officially affiliated with the Open Vehicles project.*
+*This integration is not officially affiliated with the Open Vehicles project, yet.*
