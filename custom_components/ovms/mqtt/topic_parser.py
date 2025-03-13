@@ -144,26 +144,9 @@ class TopicParser:
             # Include vehicle_id in entity name
             name = f"ovms_{vehicle_id}_{raw_name}"
             
-            # Create more descriptive friendly name that includes metric info
-            if metric_info and "name" in metric_info:
-                metric_name = metric_info["name"]
-            else:
-                metric_name = parts[-1].replace("_", " ").title() if parts else "Unknown"
-            
-            # Check for specific vehicle subsystem data (like VW eUP)
-            vehicle_type = ""
-            if "xvu" in raw_name.lower() or "eup" in raw_name.lower():
-                vehicle_type = "VW eUP! "
-            elif "eu3" in raw_name.lower() or "e.up3" in raw_name.lower():
-                vehicle_type = "VW e-Up3 "
-            elif "id3" in raw_name.lower() or "id.3" in raw_name.lower():
-                vehicle_type = "VW ID.3 "
-            elif "id4" in raw_name.lower() or "id.4" in raw_name.lower():
-                vehicle_type = "VW ID.4 "
+            # Create more descriptive friendly name using the improved function
+            friendly_name = self._create_friendly_name(parts, metric_info, topic, raw_name)
                 
-            # Format friendly name to be descriptive without category for brevity
-            friendly_name = f"{vehicle_type}{metric_name}"
-            
             attributes = self._prepare_attributes(topic, category, parts, metric_info)
 
             # Special handling for latitude/longitude
@@ -195,6 +178,60 @@ class TopicParser:
         except Exception as ex:
             _LOGGER.exception("Error parsing topic: %s", ex)
             return None
+
+    def _create_friendly_name(self, parts, metric_info, topic, raw_name):
+        """Create a friendly name based on topic parts and metric info."""
+        # Extract base metric name from metric info
+        if metric_info and "name" in metric_info:
+            base_name = metric_info["name"]
+        else:
+            base_name = parts[-1].replace("_", " ").title() if parts else "Unknown"
+        
+        # Check for vehicle-specific metrics
+        car_prefix = None
+        
+        # Detect car model from parts or topic
+        if "xvu" in topic or "xvu" in raw_name:
+            car_prefix = "VW eUP"
+        elif "eu3" in topic or "e.up3" in raw_name:
+            car_prefix = "VW e-Up3"
+        elif "id3" in topic or "id.3" in raw_name:
+            car_prefix = "VW ID.3"
+        elif "id4" in topic or "id.4" in raw_name:
+            car_prefix = "VW ID.4"
+        
+        # Check if the car prefix is already in the base name
+        if car_prefix and car_prefix in base_name:
+            return base_name
+        
+        # If we have a car prefix, add it to the friendly name
+        if car_prefix:
+            # Extract specific metric type from the parts
+            if len(parts) > 2 and parts[0] == "metric" and parts[1] == "xvu":
+                # For xvu metrics, use parts[2] and onwards for better context
+                metric_context = ".".join(parts[2:])
+                # Map common subsystems to more user-friendly names
+                subsystem_map = {
+                    "b": "Battery",
+                    "c": "Charging",
+                    "e": "System",
+                    "m": "Motor",
+                    "v": "Vehicle"
+                }
+                
+                if parts[2] in subsystem_map:
+                    subsystem = subsystem_map[parts[2]]
+                    # Format as "VW eUP Battery: State of Charge"
+                    return f"{car_prefix} {subsystem}: {base_name}"
+                else:
+                    # Format as "VW eUP: Specific Metric Name"
+                    return f"{car_prefix}: {base_name}"
+            else:
+                # For other car-specific metrics, just add the car prefix
+                return f"{car_prefix}: {base_name}"
+        
+        # For standard metrics, just use the base name
+        return base_name
 
     def _find_gps_signal_quality(self, topic: str) -> Optional[float]:
         """Find GPS signal quality value for location accuracy."""
