@@ -27,7 +27,25 @@ def get_metric_by_path(metric_path):
         # Import only when needed
         from . import METRIC_DEFINITIONS as MD
         METRIC_DEFINITIONS = MD
-    return METRIC_DEFINITIONS.get(metric_path)
+    
+    # First try exact match
+    if metric_path in METRIC_DEFINITIONS:
+        return METRIC_DEFINITIONS[metric_path]
+    
+    # For VW eUP metrics, also try removing 'metric.' prefix if it's present
+    if metric_path.startswith('metric.xvu.'):
+        alt_path = metric_path[7:]  # Remove 'metric.'
+        if alt_path in METRIC_DEFINITIONS:
+            return METRIC_DEFINITIONS[alt_path]
+    
+    # Try with just 'xvu.' if it exists in the path
+    if 'xvu.' in metric_path and not metric_path.startswith('xvu.'):
+        xvu_index = metric_path.find('xvu.')
+        alt_path = metric_path[xvu_index:]
+        if alt_path in METRIC_DEFINITIONS:
+            return METRIC_DEFINITIONS[alt_path]
+            
+    return None
 
 
 def get_metric_by_pattern(topic_parts):
@@ -38,6 +56,29 @@ def get_metric_by_pattern(topic_parts):
         for pattern, info in TOPIC_PATTERNS.items():
             if pattern == last_part:
                 return info
+
+        # Check for VW eUP metrics specifically
+        for part in topic_parts:
+            if part == "xvu":
+                # This is a VW eUP metric, try to construct a matching key
+                metric_key = ".".join(topic_parts)
+                global METRIC_DEFINITIONS
+                if METRIC_DEFINITIONS is None:
+                    # Import only when needed
+                    from . import METRIC_DEFINITIONS as MD
+                    METRIC_DEFINITIONS = MD
+                
+                # Try several variations to handle different path formats
+                variations = [
+                    metric_key,
+                    f"xvu.{metric_key.split('xvu.', 1)[1]}" if 'xvu.' in metric_key else None,
+                    ".".join(topic_parts[topic_parts.index("xvu"):])
+                ]
+                
+                for variation in variations:
+                    if variation and variation in METRIC_DEFINITIONS:
+                        return METRIC_DEFINITIONS[variation]
+                break
 
     # Then try partial matches in topic parts
     for pattern, info in TOPIC_PATTERNS.items():
@@ -62,6 +103,10 @@ def determine_category_from_topic(topic_parts):
             CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE,
             CATEGORY_VW_EUP, PREFIX_CATEGORIES
         )
+
+    # Special handling for VW eUP topics
+    if "xvu" in topic_parts:
+        return CATEGORY_VW_EUP
 
     # Check for known categories in topic
     for part in topic_parts:
@@ -101,6 +146,12 @@ def create_friendly_name(topic_parts, metric_info=None):
     # If we have metric info, use its name
     if metric_info and "name" in metric_info:
         return metric_info["name"]
+
+    # Check for VW eUP metrics
+    if "xvu" in topic_parts:
+        # Format as "VW eUP! Sensor Name"
+        last_part = topic_parts[-1].replace("_", " ").title()
+        return f"VW eUP! {last_part}"
 
     # Otherwise, build a name from the last part of the topic
     last_part = topic_parts[-1].replace("_", " ").title()
