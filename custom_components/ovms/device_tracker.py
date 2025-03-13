@@ -302,6 +302,11 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                             # Add accuracy if available
                             if "gps_accuracy" in payload:
                                 self._attr_extra_state_attributes["gps_accuracy"] = payload["gps_accuracy"]
+                                # Also add unit
+                                if "gps_accuracy_unit" in payload:
+                                    self._attr_extra_state_attributes["gps_accuracy_unit"] = payload["gps_accuracy_unit"]
+                                else:
+                                    self._attr_extra_state_attributes["gps_accuracy_unit"] = "m"  # Default unit
 
                             # Also update last_updated even if coordinates haven't changed
                             if "last_updated" in payload:
@@ -351,6 +356,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
             # Add sensible default for gps_accuracy if necessary
             if "gps_accuracy" not in self._attr_extra_state_attributes:
                 self._attr_extra_state_attributes["gps_accuracy"] = 0
+                self._attr_extra_state_attributes["gps_accuracy_unit"] = "m"  # Add unit
 
         except Exception as ex:
             _LOGGER.exception("Error processing payload: %s", ex)
