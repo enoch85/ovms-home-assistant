@@ -225,8 +225,8 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
             if isinstance(payload, dict):
                 if "latitude" in payload and "longitude" in payload:
                     try:
-                        lat = float(payload["latitude"])
-                        lon = float(payload["longitude"])
+                        lat = float(payload["latitude"]) if payload["latitude"] else None
+                        lon = float(payload["longitude"]) if payload["longitude"] else None
 
                         # Validate coordinates
                         if -90 <= lat <= 90 and -180 <= lon <= 180:
