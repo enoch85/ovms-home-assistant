@@ -1,5 +1,6 @@
 """Update dispatcher for OVMS integration."""
 import logging
+import time
 from typing import Any, Dict, Optional, Set
 
 from homeassistant.core import HomeAssistant, callback
@@ -11,16 +12,18 @@ from ..const import (
     SIGNAL_UPDATE_ENTITY,
     DOMAIN,
 )
+from ..attribute_manager import AttributeManager
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 class UpdateDispatcher:
     """Dispatcher for coordinating updates between related entities."""
 
-    def __init__(self, hass: HomeAssistant, entity_registry):
+    def __init__(self, hass: HomeAssistant, entity_registry, attribute_manager: AttributeManager):
         """Initialize the update dispatcher."""
         self.hass = hass
         self.entity_registry = entity_registry
+        self.attribute_manager = attribute_manager
         self.last_location_update = {}  # Track when location was last updated
         self.location_values = {}  # Store current location values
 
@@ -214,26 +217,16 @@ class UpdateDispatcher:
             quality_value = self._parse_numeric_value(payload)
 
             if quality_value is not None:
-                # Check what type of GPS quality metric this is
-                is_hdop = any(keyword in topic.lower() for keyword in ["gpshdop", "gps_hdop"])
-                is_signal_quality = any(keyword in topic.lower() for keyword in ["gpssq", "gps_sq"])
+                # Get GPS attributes using attribute manager
+                attributes = self.attribute_manager.get_gps_attributes(topic, payload)
 
-                # Calculate accuracy
-                accuracy = None
-                if is_signal_quality:
-                    # Signal quality (0-100) - higher is better
-                    accuracy = max(5, 100 - quality_value)  # Minimum 5m accuracy
-                elif is_hdop:
-                    # HDOP - lower is better
-                    accuracy = max(5, quality_value * 5)  # Each HDOP unit is ~5m of accuracy
-
-                if accuracy is not None:
+                if "gps_accuracy" in attributes:
                     # Update all device trackers with this GPS accuracy
                     device_trackers = self.entity_registry.get_entities_by_type("device_tracker")
                     for tracker_id in device_trackers:
                         # Create update payload with accuracy
                         quality_payload = {
-                            "gps_accuracy": accuracy,
+                            "gps_accuracy": attributes["gps_accuracy"],
                             "last_updated": dt_util.utcnow().isoformat()
                         }
                         self._update_entity(tracker_id, quality_payload)

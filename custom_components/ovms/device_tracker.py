@@ -20,6 +20,8 @@ from .const import (
     SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY
 )
+from .naming_service import EntityNamingService
+from .attribute_manager import AttributeManager
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -37,6 +39,11 @@ async def async_setup_entry(
 
             _LOGGER.info("Adding device tracker: %s", data.get("friendly_name", data.get("name", "unknown")))
 
+            # Create naming and attribute services
+            config = entry.data
+            naming_service = EntityNamingService(config)
+            attribute_manager = AttributeManager(config)
+
             tracker = OVMSDeviceTracker(
                 data.get("unique_id", ""),
                 data.get("name", ""),
@@ -46,6 +53,8 @@ async def async_setup_entry(
                 data.get("attributes", {}),
                 hass,
                 data.get("friendly_name"),
+                naming_service,
+                attribute_manager
             )
 
             async_add_entities([tracker])
@@ -71,44 +80,49 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         attributes: Dict[str, Any],
         hass: Optional[HomeAssistant] = None,
         friendly_name: Optional[str] = None,
+        naming_service: Optional[EntityNamingService] = None,
+        attribute_manager: Optional[AttributeManager] = None
     ) -> None:
         """Initialize the device tracker."""
         self._attr_unique_id = unique_id
         self._internal_name = name
-        
-        # Extract vehicle ID from name or device info
+
+        # Use services if provided, otherwise create internal defaults
+        self.naming_service = naming_service or EntityNamingService({})
+        self.attribute_manager = attribute_manager or AttributeManager({})
+
+        # Extract vehicle ID
         vehicle_id = None
-        
+
         # Try to extract from device info identifiers
-        if isinstance(device_info, dict) and "identifiers" in device_info:
-            for identifier in device_info["identifiers"]:
-                if isinstance(identifier, tuple) and len(identifier) > 1 and identifier[0] == DOMAIN:
-                    vehicle_id = identifier[1]
-                    break
-        
+        vehicle_id = self.naming_service.extract_vehicle_id_from_device_info(device_info)
+
         # If not found in device info, try extracting from name
         if not vehicle_id:
-            match = re.search(r'ovms_([a-zA-Z0-9]+)_', name)
-            if match:
-                vehicle_id = match.group(1)
-        
+            vehicle_id = self.naming_service.extract_vehicle_id_from_name(name)
+
         # Set the device tracker friendly name per requirements
         if vehicle_id:
-            self._attr_name = f"({vehicle_id}) Location"
+            self._attr_name = self.naming_service.create_device_tracker_name(vehicle_id)
         else:
             self._attr_name = friendly_name or name.replace("_", " ").title()
-            
+
         self._topic = topic
         self._attr_device_info = device_info or {}
+
+        # Process attributes
         self._attr_extra_state_attributes = attributes.copy() if attributes else {}
+
+        # Add GPS attributes if needed
+        if "gps_accuracy" not in self._attr_extra_state_attributes:
+            gps_attributes = self.attribute_manager.get_gps_attributes(topic, initial_payload)
+            self._attr_extra_state_attributes.update(gps_attributes)
+
+        # Ensure topic and last_updated are present
         if topic:
             self._attr_extra_state_attributes["topic"] = topic
         if "last_updated" not in self._attr_extra_state_attributes:
             self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
-
-        # If gps_accuracy isn't in attributes, try to find it if available
-        if "gps_accuracy" not in self._attr_extra_state_attributes:
-            self._attr_extra_state_attributes["gps_accuracy"] = self._lookup_gps_accuracy(hass)
 
         self.hass = hass
         self._latitude = None
@@ -129,11 +143,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 name.lower(),
                 hass=hass,
             )
-
-    def _lookup_gps_accuracy(self, hass: Optional[HomeAssistant] = None) -> Optional[float]:
-        """Look up GPS accuracy value from available sources."""
-        # Default accuracy if not found
-        return 0
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -162,12 +171,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 }
                 self._attr_extra_state_attributes.update(saved_attributes)
 
-        # Update accuracy attribute if needed
-        if "gps_accuracy" not in self._attr_extra_state_attributes:
-            acc = self._lookup_gps_accuracy(self.hass)
-            if acc is not None:
-                self._attr_extra_state_attributes["gps_accuracy"] = acc
-
         @callback
         def update_state(payload: Any) -> None:
             """Update the tracker state."""
@@ -177,8 +180,14 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
             if isinstance(payload, dict) and "gps_accuracy" in payload:
                 self._attr_extra_state_attributes["gps_accuracy"] = payload["gps_accuracy"]
 
-            # Find and update GPS signal quality if available
-            self._check_gps_sq_and_accuracy()
+            # Update timestamp attribute
+            self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
+
+            # Process any JSON attributes if applicable
+            if isinstance(payload, str):
+                self._attr_extra_state_attributes = self.attribute_manager.process_json_payload(
+                    payload, self._attr_extra_state_attributes
+                )
 
             # Also update corresponding sensor entities
             try:
@@ -205,15 +214,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 update_state,
             )
         )
-
-    def _check_gps_sq_and_accuracy(self) -> None:
-        """Check and update GPS signal quality and accuracy."""
-        # Placeholder for real implementation that would look for GPS signal quality
-        # topics in the MQTT client's discovered topics
-
-        # Ensure at least a default accuracy if none exists
-        if "gps_accuracy" not in self._attr_extra_state_attributes:
-            self._attr_extra_state_attributes["gps_accuracy"] = 0
 
     def _process_payload(self, payload: Any) -> None:
         """Process the payload and update coordinates."""
@@ -277,32 +277,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                             self._prev_longitude = lon
                 except (ValueError, TypeError):
                     _LOGGER.warning("Invalid longitude value: %s", payload)
-
-            # Process specific GPS-related topics
-            elif "gpshdop" in self._topic.lower():
-                try:
-                    value = float(payload) if payload else None
-                    self._attr_extra_state_attributes["gps_hdop"] = value
-                except (ValueError, TypeError):
-                    pass
-            elif "gpssq" in self._topic.lower():
-                try:
-                    value = float(payload) if payload else None
-                    self._attr_extra_state_attributes["gps_signal_quality"] = value
-                    # Update accuracy based on signal quality
-                    if value is not None:
-                        # Simple formula that translates signal quality to meters accuracy
-                        # Higher signal quality = better accuracy (lower value)
-                        accuracy = max(5, 100 - value)  # Clamp minimum accuracy to 5m
-                        self._attr_extra_state_attributes["gps_accuracy"] = accuracy
-                except (ValueError, TypeError):
-                    pass
-            elif "gpsspeed" in self._topic.lower():
-                try:
-                    value = float(payload) if payload else None
-                    self._attr_extra_state_attributes["gps_speed"] = value
-                except (ValueError, TypeError):
-                    pass
 
             # Only update the timestamp if coordinates have changed or
             # sufficient time has passed (to avoid unnecessary state updates)
