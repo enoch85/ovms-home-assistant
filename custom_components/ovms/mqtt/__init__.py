@@ -18,6 +18,8 @@ from .entity_factory import EntityFactory
 from .entity_registry import EntityRegistry
 from .update_dispatcher import UpdateDispatcher
 from .command_handler import CommandHandler
+from ..naming_service import EntityNamingService
+from ..attribute_manager import AttributeManager
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -33,15 +35,21 @@ class OVMSMQTTClient:
         self.topic_cache = {}
         self._shutting_down = False
 
+        # Initialize services
+        self.naming_service = EntityNamingService(config)
+        self.attribute_manager = AttributeManager(config)
+
         # Initialize components
         self.entity_registry = EntityRegistry()
         self.topic_parser = TopicParser(self.config, self.entity_registry)
-        self.update_dispatcher = UpdateDispatcher(hass, self.entity_registry)
+        self.update_dispatcher = UpdateDispatcher(hass, self.entity_registry, self.attribute_manager)
         self.entity_factory = EntityFactory(
             hass,
             self.entity_registry,
             self.update_dispatcher,
-            self.config
+            self.config,
+            self.naming_service,
+            self.attribute_manager
         )
         self.command_handler = CommandHandler(hass, config)
 
