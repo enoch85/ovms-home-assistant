@@ -291,6 +291,48 @@ class EntityFactory:
 
             self.entity_queue.task_done()
 
+    def _create_friendly_name(self, parts, metric_info, topic, raw_name):
+        """Create a friendly name based on topic parts and metric info."""
+        # Extract base metric name from metric info
+        if metric_info and "name" in metric_info:
+            base_name = metric_info["name"]
+        else:
+            base_name = parts[-1].replace("_", " ").title() if parts else "Unknown"
+
+        # Get vehicle ID for prefix
+        vehicle_id = self.config.get("vehicle_id", "")
+
+        # Detect car model from parts or topic
+        car_prefix = None
+        if "xvu" in topic or "xvu" in raw_name:
+            car_prefix = "VW eUP"
+        elif "eu3" in topic or "e.up3" in raw_name:
+            car_prefix = "VW e-Up3"
+        elif "id3" in topic or "id.3" in raw_name:
+            car_prefix = "VW ID.3"
+        elif "id4" in topic or "id.4" in raw_name:
+            car_prefix = "VW ID.4"
+        elif vehicle_id:
+            car_prefix = vehicle_id  # Use vehicle_id as prefix if no specific model detected
+
+        # Special handling for battery capacity sensors
+        if "b_cap" in topic:
+            if "ah_norm" in topic:
+                return f"{car_prefix} Battery Capacity (Ah Normalized)"
+            elif "kwh_abs" in topic:
+                return f"{car_prefix} Battery Capacity (kWh Absolute)"
+        
+        # Check if the car prefix is already in the base name
+        if car_prefix and car_prefix in base_name:
+            return base_name
+
+        # For all sensors, include vehicle prefix if not already included
+        if car_prefix:
+            return f"{car_prefix} {base_name}"
+
+        # For standard metrics, just use the base name
+        return base_name
+
     def _prepare_attributes(self, topic: str, category: str, parts: List[str], metric_info: Optional[Dict]) -> Dict[str, Any]:
         """Prepare entity attributes."""
         try:
