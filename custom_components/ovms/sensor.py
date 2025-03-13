@@ -247,7 +247,13 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         """Initialize the sensor."""
         self._attr_unique_id = unique_id
         self._internal_name = name
-        self._attr_name = friendly_name or name.replace("_", " ").title()
+        
+        # Use friendly_name when provided
+        if friendly_name:
+            self._attr_name = friendly_name
+        else:
+            self._attr_name = name.replace("_", " ").title()
+            
         self._topic = topic
         self._attr_device_info = device_info or {}
         self._attr_extra_state_attributes = {
@@ -363,8 +369,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_unique_id = unique_id
         # Use the entity_id compatible name for internal use
         self._internal_name = name
-        # Set the entity name that will display in UI to friendly name or name
-        self._attr_name = friendly_name or name.replace("_", " ").title()
+        
+        # Set the entity name that will display in UI - ALWAYS use friendly_name when provided
+        if friendly_name:
+            self._attr_name = friendly_name
+        else:
+            self._attr_name = name.replace("_", " ").title()
+            
         self._topic = topic
         self._attr_device_info = device_info or {}
         self._attr_extra_state_attributes = {
@@ -377,7 +388,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Explicitly set entity_id - this ensures consistent naming
         if hass:
             self.entity_id = async_generate_entity_id(
-                "sensor.{}", name.lower(),
+                "sensor.{}",
+                name.lower(),
                 hass=hass,
             )
 
