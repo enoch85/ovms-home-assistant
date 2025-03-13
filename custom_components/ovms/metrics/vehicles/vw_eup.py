@@ -26,20 +26,20 @@ UNIT_AMPERE_HOUR = "Ah"
 VW_EUP_METRICS = {
     "xvu.b.cap.ah.abs": {
         "name": "VW eUP! Absolute Battery Capacity",
-        "description": "Absolute battery capacity in Ampere hours",
+        "description": "Absolute battery capacity",
         "icon": "mdi:battery",
         "device_class": SensorDeviceClass.ENERGY_STORAGE,
         "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UNIT_AMPERE_HOUR,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,  # Changed from UNIT_AMPERE_HOUR to kWh
         "category": "vw_eup",
     },
     "xvu.b.cap.ah.norm": {
         "name": "VW eUP! Normalized Battery Capacity",
-        "description": "Normalized battery capacity in Ampere hours",
+        "description": "Normalized battery capacity",
         "icon": "mdi:battery",
         "device_class": SensorDeviceClass.ENERGY_STORAGE,
         "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UNIT_AMPERE_HOUR,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,  # Changed from UNIT_AMPERE_HOUR to kWh
         "category": "vw_eup",
     },
     "xvu.b.cap.kwh.abs": {
@@ -83,7 +83,7 @@ VW_EUP_METRICS = {
         "description": "Energy available for driving range",
         "icon": "mdi:battery",
         "device_class": SensorDeviceClass.ENERGY,
-        "state_class": SensorStateClass.MEASUREMENT,
+        "state_class": SensorStateClass.TOTAL,  # Changed from MEASUREMENT to TOTAL
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "category": "vw_eup",
     },
@@ -375,25 +375,6 @@ VW_EUP_METRICS = {
         "description": "Emergency tire pressure values",
         "icon": "mdi:car-tire-alert",
         "state_class": SensorStateClass.MEASUREMENT,
-        "category": "vw_eup",
-    },
-    # Add path variations to support different MQTT topic formats
-    "metric.xvu.b.cap.ah.abs": {
-        "name": "VW eUP! Absolute Battery Capacity",
-        "description": "Absolute battery capacity in Ampere hours",
-        "icon": "mdi:battery",
-        "device_class": SensorDeviceClass.ENERGY_STORAGE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UNIT_AMPERE_HOUR,
-        "category": "vw_eup",
-    },
-    "metric.xvu.b.soc.abs": {
-        "name": "VW eUP! Absolute SOC",
-        "description": "Absolute state of charge",
-        "icon": "mdi:battery",
-        "device_class": SensorDeviceClass.BATTERY,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": PERCENTAGE,
         "category": "vw_eup",
     },
 }
