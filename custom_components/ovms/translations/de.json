@@ -13,7 +13,7 @@
           "verify_ssl_certificate": "SSL/TLS-Zertifikat überprüfen"
         }
         "data_description": {
-          "verify_ssl_certificate": "SSL/TLS-Zertifikatüberprüfung gilt nur für sichere Ports (8883, 8084)"
+          "verify_ssl_certificate": "SSL/TLS-Zertifikatüberprüfung gilt nur für sichere Ports (8883, 8084)",
       },
       "topics": {
         "title": "MQTT-Themenstruktur",
