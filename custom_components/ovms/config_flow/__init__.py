@@ -324,6 +324,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "potential_vehicle_ids": (
                         ", ".join(potential_vehicle_ids) if potential_vehicle_ids else "None found"
                     ),
+                    "broker_note": "{{broker_note}}",
                 },
             )
 
@@ -341,6 +342,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders={
                 "error_message": discovery_result["message"],
+                "broker_note": "{{broker_note}}",
             },
         )
 
