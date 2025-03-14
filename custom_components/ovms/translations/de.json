@@ -44,7 +44,6 @@
         }
       }
     },
-    
     "error": {
       "cannot_connect": "Verbindung zum Broker fehlgeschlagen",
       "invalid_auth": "Ungültige Authentifizierung",

@@ -44,7 +44,6 @@
         }
       }
     },
-    "broker_note": "Note: Your MQTT broker may retain topics from previous configurations. The system automatically selects the most likely vehicle ID based on topic structure - please verify that the suggestions are correct. To reset potential vehicle IDs, clear unused topics from your MQTT broker.",
     "error": {
       "cannot_connect": "Failed to connect to the broker",
       "invalid_auth": "Invalid authentication",
