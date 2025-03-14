@@ -124,7 +124,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     user_input[CONF_PORT] = 8083
                     user_input[CONF_VERIFY_SSL] = False
                 del user_input["Port"]
-                
+
                 # Remove the SSL verification option after processing it
                 if "verify_ssl_certificate" in user_input:
                     del user_input["verify_ssl_certificate"]
@@ -168,11 +168,11 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "8084": "Secure WebSocket Port: 8084 (wss://)",
             }),
         }
-        
+
         # Add SSL verification option right after port selection, but only for secure ports
         if not user_input or user_input.get("Port") in ["8883", "8084", None]:
             schema_dict[vol.Required("verify_ssl_certificate", default=True)] = bool
-            
+
         # Continue with remaining form fields
         schema_dict.update({
             vol.Optional(CONF_USERNAME): str,

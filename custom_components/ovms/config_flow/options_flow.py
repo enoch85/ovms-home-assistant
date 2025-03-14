@@ -39,7 +39,7 @@ class OVMSOptionsFlow(OptionsFlow):
             # Process port and SSL verification
             if "Port" in user_input:
                 port_selection = user_input["Port"]
-                
+
                 # Set appropriate protocol and port based on selection
                 if port_selection == "8883":
                     user_input[CONF_PROTOCOL] = "mqtts"
@@ -57,12 +57,12 @@ class OVMSOptionsFlow(OptionsFlow):
                     user_input[CONF_PROTOCOL] = "ws"
                     user_input[CONF_PORT] = 8083
                     user_input[CONF_VERIFY_SSL] = False
-                
+
                 # Remove temporary keys
                 del user_input["Port"]
                 if "verify_ssl_certificate" in user_input:
                     del user_input["verify_ssl_certificate"]
-                
+
             _LOGGER.debug("Saving options: %s", user_input)
             return self.async_create_entry(title="", data=user_input)
 
@@ -73,7 +73,7 @@ class OVMSOptionsFlow(OptionsFlow):
         # Determine current port selection
         current_port = entry_data.get(CONF_PORT, 8883)
         current_protocol = entry_data.get(CONF_PROTOCOL, "mqtts")
-        
+
         port_selection = "8883"  # Default
         if current_port == 1883 and current_protocol == "mqtt":
             port_selection = "1883"
@@ -94,18 +94,18 @@ class OVMSOptionsFlow(OptionsFlow):
                 "8084": "Secure WebSocket Port: 8084 (wss://)",
             }),
         }
-        
+
         # Add SSL verification option right after port selection, but only for secure ports
         if port_selection in ["8883", "8084"]:
             current_verify_ssl = entry_options.get(
-                CONF_VERIFY_SSL, 
+                CONF_VERIFY_SSL,
                 entry_data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
             )
             options[vol.Required(
                 "verify_ssl_certificate",
                 default=current_verify_ssl
             )] = bool
-        
+
         # Add remaining options
         options.update({
             vol.Required(
