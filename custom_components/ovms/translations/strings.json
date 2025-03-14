@@ -10,7 +10,7 @@
           "username": "Username",
           "password": "Password",
           "qos": "QoS Level",
-          "allow_insecure_ssl": "Allow Insecure SSL Connections"
+          "verify_ssl_certificate": "Verify SSL/TLS Certificate"
         }
       },
       "topics": {
@@ -33,7 +33,6 @@
         "title": "Topic Discovery",
         "description": "Discovering available OVMS topics...",
         "data": {
-          "confirm_discovery": "Continue with discovered topics",
           "retry_discovery": "Retry discovery"
         }
       },
@@ -71,7 +70,8 @@
           "qos": "QoS Level",
           "topic_prefix": "Topic Prefix",
           "topic_structure": "Topic Structure",
-          "verify_ssl": "Verify SSL Certificate"
+          "Port": "Connection Port",
+          "verify_ssl_certificate": "Verify SSL/TLS Certificate"
         }
       }
     }
