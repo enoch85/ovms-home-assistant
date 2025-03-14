@@ -31,7 +31,7 @@
       },
       "topic_discovery": {
         "title": "Ämnesupptäckt",
-        "description": "Upptäcker tillgängliga OVMS-ämnen...",
+        "description": "Upptäcker tillgängliga OVMS-ämnen...\n\n{broker_note}",
         "data": {
           "retry_discovery": "Försök igen"
         }
@@ -60,7 +60,8 @@
     },
     "abort": {
       "already_configured": "Detta OVMS-fordon är redan konfigurerat"
-    }
+    },
+    "broker_note": "OBS: Din MQTT-broker kan behålla ämnen från tidigare konfigurationer. Systemet väljer automatiskt det mest sannolika fordons-ID baserat på ämnesstruktur - vänligen verifiera att förslagen är korrekta. För att återställa potentiella fordons-ID, rensa oanvända ämnen från din MQTT-broker."
   },
   "options": {
     "step": {
