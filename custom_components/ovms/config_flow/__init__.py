@@ -296,7 +296,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             topics_count = len(self.discovered_topics or [])
             topics_sample = (list(self.discovered_topics)[:5]
                 if topics_count > 5 else list(self.discovered_topics))
-            
+
             # Fill sample topics, ensure we have 5 placeholders even if fewer topics
             sample_topics = topics_sample + [""] * (5 - len(topics_sample))
 
@@ -311,10 +311,10 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self.discovered_topics,
                 self.mqtt_config
             )
-            
+
             # Format vehicle IDs with newlines for bullet points
             formatted_vehicle_ids = "\n• ".join(potential_vehicle_ids) if potential_vehicle_ids else "None found"
-            
+
             self.debug_info["potential_vehicle_ids"] = list(potential_vehicle_ids)
             _LOGGER.debug("Potential vehicle IDs: %s", potential_vehicle_ids)
 
