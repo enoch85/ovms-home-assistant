@@ -12,6 +12,9 @@
           "qos": "Nivel QoS",
           "verify_ssl_certificate": "Verificar certificado SSL/TLS"
         }
+        "data_description": {
+          "verify_ssl_certificate": "La verificación de certificados SSL/TLS solo se aplica a puertos seguros (8883, 8084)"
+        }
       },
       "topics": {
         "title": "Estructura de temas MQTT",
