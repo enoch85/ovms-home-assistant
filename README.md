@@ -5,8 +5,10 @@ The [Open Vehicle Monitoring System (OVMS)](https://www.openvehicles.com/) integ
 
 ## Overview
 
+<!--
 [![ovms-home-assistant_downloads](https://img.shields.io/github/downloads/enoch85/ovms-home-assistant/total)](https://github.com/enoch85/ovms-home-assistant)
 [![ovms-home-assistant_downloads](https://img.shields.io/github/downloads/enoch85/ovms-home-assistant/latest/total)](https://github.com/enoch85/ovms-home-assistant)
+-->
 
 The OVMS integration discovers and creates Home Assistant entities from MQTT topics published by your OVMS module. The integration automatically:
 
@@ -118,7 +120,11 @@ Configure your OVMS module to publish data to your MQTT broker:
 1. In the OVMS web UI, go to Config → Server V3 (MQTT)
 2. Configure the following settings:
    - Server: Your MQTT broker address
-   - Port: 8883 (TLS/SSL, standard) or 1883 (unencrypted)
+   - Port:
+       - TCP Port: 1883 (mqtt://)
+       - WebSocket Port: 8083 (ws://)
+       - SSL/TLS Port: 8883 (mqtts://)
+       - Secure WebSocket Port: 8084 (wss://)
    - Username/Password: If required by your broker
    - Topic Prefix: `ovms` (default, can be customized)
    - Enable Auto-Start: YES
@@ -133,7 +139,11 @@ Configure your OVMS module to publish data to your MQTT broker:
 2. Search for "OVMS" and select it
 3. Enter the MQTT broker details:
    - MQTT Broker: Your broker address
-   - Port: Choose between standard (1883) or TLS/SSL (8883)
+   - Port:
+       - TCP Port: 1883 (mqtt://)
+       - WebSocket Port: 8083 (ws://) - default
+       - SSL/TLS Port: 8883 (mqtts://)
+       - Secure WebSocket Port: 8084 (wss://)
    - Username/Password: If required by your broker
 4. Configure topic structure:
    - Topic Prefix: Should match your OVMS setting (default: `ovms`)
