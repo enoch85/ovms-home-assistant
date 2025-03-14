@@ -281,14 +281,6 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Discover available topics on the broker."""
         errors = {}
 
-        # Get the translated broker_note with robust error handling
-        try:
-            broker_note = self.hass.config_entries.flow.async_get_string("config.broker_note")
-        except (AttributeError, KeyError, Exception) as ex:
-            _LOGGER.debug(f"Translation error for broker_note: {ex}, using fallback text")
-            # Fallback to hardcoded text if translation fails
-            broker_note = "Note: Your MQTT broker may retain topics from previous configurations. The system automatically selects the most likely vehicle ID based on topic structure - please verify that the suggestions are correct. To reset potential vehicle IDs, clear unused topics from your MQTT broker."
-
         if user_input is not None:
             # Make sure any discovered topics are properly accessed
             _LOGGER.debug("Topic discovery confirmed, moving to vehicle step")
