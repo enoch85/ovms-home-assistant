@@ -31,7 +31,7 @@
       },
       "topic_discovery": {
         "title": "Topic Discovery",
-        "description": "Note: Your MQTT broker may retain topics from previous configurations. The system automatically selects the most likely vehicle ID based on topic structure - please verify that the suggestions are correct. To reset potential vehicle IDs, clear unused topics from your MQTT broker.",
+        "description": "Found {topic_count} topics.\n\nSample topics:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nPotential vehicle IDs:\n• {potential_vehicle_ids}\n\nNote: Your MQTT broker may retain topics from previous configurations.\nThe system automatically selects the most likely vehicle ID based on topic structure - please verify that the suggestion(s) are correct.\n\nTo reset potential vehicle IDs, clear unused topics from your MQTT broker.",
         "data": {
           "retry_discovery": "Retry discovery"
         }
