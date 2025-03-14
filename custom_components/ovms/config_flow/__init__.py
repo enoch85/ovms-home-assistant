@@ -110,18 +110,22 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if port_selection == "8883":
                     user_input[CONF_PROTOCOL] = "mqtts"
                     user_input[CONF_PORT] = 8883
+                    # Use the checkbox value for secure ports
                     user_input[CONF_VERIFY_SSL] = user_input.get("verify_ssl_certificate", True)
                 elif port_selection == "8084":
                     user_input[CONF_PROTOCOL] = "wss"
                     user_input[CONF_PORT] = 8084
+                    # Use the checkbox value for secure ports
                     user_input[CONF_VERIFY_SSL] = user_input.get("verify_ssl_certificate", True)
                 elif port_selection == "1883":
                     user_input[CONF_PROTOCOL] = "mqtt"
                     user_input[CONF_PORT] = 1883
+                    # Force verify_ssl to False for non-secure ports regardless of checkbox
                     user_input[CONF_VERIFY_SSL] = False
                 elif port_selection == "8083":
                     user_input[CONF_PROTOCOL] = "ws"
                     user_input[CONF_PORT] = 8083
+                    # Force verify_ssl to False for non-secure ports regardless of checkbox
                     user_input[CONF_VERIFY_SSL] = False
                 del user_input["Port"]
 
@@ -169,10 +173,6 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }),
         }
 
-        # Add SSL verification option right after port selection, but only for secure ports
-        if not user_input or user_input.get("Port") in ["8883", "8084", None]:
-            schema_dict[vol.Required("verify_ssl_certificate", default=True)] = bool
-
         # Continue with remaining form fields
         schema_dict.update({
             vol.Optional(CONF_USERNAME): str,
@@ -187,6 +187,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=data_schema,
             errors=errors,
             description_placeholders={
+                "ssl_note": "ssl_note",
                 "debug_info": str(self.debug_info) if self.debug_info else ""
             },
         )
