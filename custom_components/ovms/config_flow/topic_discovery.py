@@ -146,7 +146,7 @@ def extract_vehicle_ids(topics, config):
     return potential_ids
 
 
-async def discover_topics(hass: HomeAssistant, config):
+async def discover_topics(hass: HomeAssistant, config):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
     """Discover available OVMS topics on the broker."""
     topic_prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
     log_prefix = f"Topic discovery for prefix {topic_prefix}"
@@ -413,7 +413,7 @@ async def discover_topics(hass: HomeAssistant, config):
         }
 
 
-async def test_topic_availability(hass: HomeAssistant, config):
+async def test_topic_availability(hass: HomeAssistant, config):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
     """Test if the OVMS topics are available for a specific vehicle."""
     vehicle_id = config[CONF_VEHICLE_ID]
     log_prefix = f"Topic availability test for vehicle {vehicle_id}"
