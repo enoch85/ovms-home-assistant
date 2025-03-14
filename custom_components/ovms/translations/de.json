@@ -31,7 +31,7 @@
       },
       "topic_discovery": {
         "title": "Themenerkennung",
-        "description": "Verfügbare OVMS-Themen werden erkannt...",
+        "description": "Verfügbare OVMS-Themen werden erkannt...\n\n{broker_note}",
         "data": {
           "retry_discovery": "Erkennung wiederholen"
         }
@@ -60,7 +60,8 @@
     },
     "abort": {
       "already_configured": "Dieses OVMS-Fahrzeug ist bereits konfiguriert"
-    }
+    },
+    "broker_note": "Hinweis: Ihr MQTT-Broker könnte Themen aus früheren Konfigurationen beibehalten. Das System wählt automatisch die wahrscheinlichste Fahrzeug-ID basierend auf der Themenstruktur aus - bitte überprüfen Sie, ob die Vorschläge korrekt sind. Um potenzielle Fahrzeug-IDs zurückzusetzen, löschen Sie unbenutzte Themen aus Ihrem MQTT-Broker."
   },
   "options": {
     "step": {
