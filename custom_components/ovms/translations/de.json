@@ -10,7 +10,7 @@
           "username": "Benutzername",
           "password": "Passwort",
           "qos": "QoS-Level",
-          "allow_insecure_ssl": "Unsichere SSL-Verbindungen zulassen"
+          "verify_ssl_certificate": "SSL/TLS-Zertifikat überprüfen"
         }
       },
       "topics": {
@@ -33,7 +33,6 @@
         "title": "Themenerkennung",
         "description": "Verfügbare OVMS-Themen werden erkannt...",
         "data": {
-          "confirm_discovery": "Mit erkannten Themen fortfahren",
           "retry_discovery": "Erkennung wiederholen"
         }
       },
@@ -71,7 +70,8 @@
           "qos": "QoS-Level",
           "topic_prefix": "Themenpräfix",
           "topic_structure": "Themenstruktur",
-          "verify_ssl": "SSL-Zertifikat überprüfen"
+          "Port": "Verbindungsport",
+          "verify_ssl_certificate": "SSL/TLS-Zertifikat überprüfen"
         }
       }
     }
