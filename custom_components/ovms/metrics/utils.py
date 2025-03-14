@@ -57,6 +57,16 @@ def get_metric_by_pattern(topic_parts):
             if pattern == last_part:
                 return info
 
+        # Special case for GPIO patterns that are commonly split across parts
+        if len(topic_parts) >= 2:
+            # Check for egpio_input and egpio_output patterns
+            for i in range(len(topic_parts) - 1):
+                combined = f"{topic_parts[i].lower()}_{topic_parts[i+1].lower()}"
+                if combined in ["egpio_input", "egpio_output", "egpio_monitor"]:
+                    for pattern, info in TOPIC_PATTERNS.items():
+                        if pattern == combined:
+                            return info
+
         # Check for VW eUP metrics specifically
         for part in topic_parts:
             if part == "xvu":
