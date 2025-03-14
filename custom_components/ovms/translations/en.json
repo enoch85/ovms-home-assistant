@@ -31,7 +31,7 @@
       },
       "topic_discovery": {
         "title": "Topic Discovery",
-        "description": "Discovering available OVMS topics...\n\n{broker_note}",
+        "description": "Note: Your MQTT broker may retain topics from previous configurations. The system automatically selects the most likely vehicle ID based on topic structure - please verify that the suggestions are correct. To reset potential vehicle IDs, clear unused topics from your MQTT broker.",
         "data": {
           "retry_discovery": "Retry discovery"
         }
@@ -44,6 +44,7 @@
         }
       }
     },
+    "broker_note": "Note: Your MQTT broker may retain topics from previous configurations. The system automatically selects the most likely vehicle ID based on topic structure - please verify that the suggestions are correct. To reset potential vehicle IDs, clear unused topics from your MQTT broker.",
     "error": {
       "cannot_connect": "Failed to connect to the broker",
       "invalid_auth": "Invalid authentication",
@@ -60,8 +61,7 @@
     },
     "abort": {
       "already_configured": "This OVMS vehicle is already configured"
-    },
-    "broker_note": "Note: Your MQTT broker may retain topics from previous configurations. The system automatically selects the most likely vehicle ID based on topic structure - please verify that the suggestion are correct. To reset potential vehicle IDs, clear unused topics from your MQTT broker."
+    }
   },
   "options": {
     "step": {
