@@ -44,7 +44,7 @@
         }
       }
     },
-    "broker_note": "Hinweis: Ihr MQTT-Broker kann Themen aus früheren Konfigurationen beibehalten. Das System wählt automatisch die wahrscheinlichste Fahrzeug-ID basierend auf der Themenstruktur aus - bitte überprüfen Sie, ob die Vorschläge korrekt sind. Um potenzielle Fahrzeug-IDs zurückzusetzen, löschen Sie unbenutzte Themen aus Ihrem MQTT-Broker.",
+    
     "error": {
       "cannot_connect": "Verbindung zum Broker fehlgeschlagen",
       "invalid_auth": "Ungültige Authentifizierung",
