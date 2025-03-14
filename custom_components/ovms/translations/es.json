@@ -1,0 +1,323 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Open Vehicle Monitoring System HA",
+        "description": "Configurar conexión al broker MQTT donde OVMS está publicando datos",
+        "data": {
+          "host": "Host del broker",
+          "Port": "Puerto de conexión",
+          "username": "Usuario",
+          "password": "Contraseña",
+          "qos": "Nivel QoS",
+          "verify_ssl_certificate": "Verificar certificado SSL/TLS"
+        }
+      },
+      "topics": {
+        "title": "Estructura de temas MQTT",
+        "description": "Configurar cómo están estructurados los temas OVMS",
+        "data": {
+          "topic_prefix": "Prefijo de tema (predeterminado: ovms)",
+          "topic_structure": "Estructura de tema",
+          "mqtt_username": "Usuario MQTT en el tema"
+        }
+      },
+      "custom_topic": {
+        "title": "Estructura de tema personalizada",
+        "description": "Introduzca su estructura de tema personalizada usando los marcadores {prefix}, {vehicle_id}, y opcionalmente {mqtt_username}",
+        "data": {
+          "custom_structure": "Estructura de tema personalizada"
+        }
+      },
+      "topic_discovery": {
+        "title": "Descubrimiento de temas",
+        "description": "Se encontraron {topic_count} temas.\n\nEjemplos de temas:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nIDs de vehículos potenciales:\n• {potential_vehicle_ids}\n\nNota: Su broker MQTT puede retener temas de configuraciones anteriores.\nEl sistema selecciona automáticamente el ID de vehículo más probable basado en la estructura de temas - por favor verifique que las sugerencias sean correctas.\n\nPara restablecer los IDs de vehículos potenciales, elimine los temas no utilizados de su broker MQTT.",
+        "data": {
+          "retry_discovery": "Reintentar descubrimiento"
+        }
+      },
+      "vehicle": {
+        "title": "Configuración del vehículo",
+        "description": "Configure su vehículo OVMS",
+        "data": {
+          "vehicle_id": "ID del vehículo"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "No se pudo conectar al broker",
+      "invalid_auth": "Autenticación inválida",
+      "timeout": "Tiempo de conexión agotado",
+      "invalid_response": "Respuesta inválida del broker",
+      "no_topics": "No se encontraron temas OVMS",
+      "topic_access_denied": "Acceso denegado a los temas OVMS",
+      "tls_error": "Error de configuración TLS/SSL",
+      "unknown": "Error inesperado",
+      "missing_prefix": "Falta el marcador requerido {prefix}",
+      "missing_vehicle_id": "Falta el marcador requerido {vehicle_id}",
+      "invalid_placeholder": "Marcador inválido en la estructura personalizada",
+      "invalid_format": "Formato inválido en la estructura personalizada"
+    },
+    "abort": {
+      "already_configured": "Este vehículo OVMS ya está configurado"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones OVMS",
+        "data": {
+          "qos": "Nivel QoS",
+          "topic_prefix": "Prefijo de tema",
+          "topic_structure": "Estructura de tema",
+          "Port": "Puerto de conexión",
+          "verify_ssl_certificate": "Verificar certificado SSL/TLS"
+        }
+      }
+    }
+  },
+  "services": {
+    "send_command": {
+      "name": "Enviar comando",
+      "description": "Envía un comando al módulo OVMS.",
+      "fields": {
+        "vehicle_id": {
+          "name": "ID del vehículo",
+          "description": "ID del vehículo al que enviar el comando"
+        },
+        "command": {
+          "name": "Comando",
+          "description": "Comando a enviar"
+        },
+        "parameters": {
+          "name": "Parámetros",
+          "description": "Parámetros del comando"
+        },
+        "command_id": {
+          "name": "ID del comando",
+          "description": "ID único para este comando (generado automáticamente si no se proporciona)"
+        },
+        "timeout": {
+          "name": "Tiempo de espera",
+          "description": "Tiempo de espera en segundos para la respuesta"
+        }
+      }
+    },
+    "set_feature": {
+      "name": "Establecer característica",
+      "description": "Establece una característica del módulo OVMS.",
+      "fields": {
+        "vehicle_id": {
+          "name": "ID del vehículo",
+          "description": "ID del vehículo"
+        },
+        "feature": {
+          "name": "Característica",
+          "description": "Nombre de la característica a establecer"
+        },
+        "value": {
+          "name": "Valor",
+          "description": "Valor a establecer"
+        }
+      }
+    },
+    "control_climate": {
+      "name": "Controlar climatización",
+      "description": "Controla el sistema de climatización del vehículo.",
+      "fields": {
+        "vehicle_id": {
+          "name": "ID del vehículo",
+          "description": "ID del vehículo"
+        },
+        "temperature": {
+          "name": "Temperatura",
+          "description": "Temperatura objetivo"
+        },
+        "hvac_mode": {
+          "name": "Modo HVAC",
+          "description": "Modo a establecer"
+        },
+        "duration": {
+          "name": "Duración",
+          "description": "Duración en minutos"
+        }
+      }
+    },
+    "control_charging": {
+      "name": "Controlar carga",
+      "description": "Controla el sistema de carga del vehículo.",
+      "fields": {
+        "vehicle_id": {
+          "name": "ID del vehículo",
+          "description": "ID del vehículo"
+        },
+        "action": {
+          "name": "Acción",
+          "description": "Acción de carga"
+        },
+        "mode": {
+          "name": "Modo",
+          "description": "Modo de carga"
+        },
+        "limit": {
+          "name": "Límite",
+          "description": "Límite de carga (porcentaje)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_soc": {
+        "name": "Estado de carga de la batería",
+        "state_attributes": {
+          "category": {
+            "name": "Categoría"
+          },
+          "last_updated": {
+            "name": "Última actualización"
+          }
+        }
+      },
+      "battery_range_est": {
+        "name": "Autonomía estimada"
+      },
+      "battery_power": {
+        "name": "Potencia de la batería"
+      },
+      "battery_current": {
+        "name": "Corriente de la batería"
+      },
+      "battery_voltage": {
+        "name": "Voltaje de la batería"
+      },
+      "battery_temperature": {
+        "name": "Temperatura de la batería"
+      },
+      "charging_time": {
+        "name": "Tiempo de carga"
+      },
+      "charging_power": {
+        "name": "Potencia de carga"
+      },
+      "odometer": {
+        "name": "Odómetro"
+      },
+      "temperature_cabin": {
+        "name": "Temperatura del habitáculo"
+      },
+      "temperature_ambient": {
+        "name": "Temperatura ambiente"
+      },
+      "trip": {
+        "name": "Contador parcial"
+      },
+      "speed": {
+        "name": "Velocidad del vehículo"
+      },
+      "status": {
+        "name": "Estado del vehículo"
+      }
+    },
+    "binary_sensor": {
+      "charging": {
+        "name": "Estado de carga",
+        "state": {
+          "on": "Cargando",
+          "off": "No cargando"
+        }
+      },
+      "door_lock": {
+        "name": "Estado de bloqueo de puertas",
+        "state": {
+          "on": "Bloqueado",
+          "off": "Desbloqueado"
+        }
+      },
+      "connected": {
+        "name": "Estado de conexión",
+        "state": {
+          "on": "Conectado",
+          "off": "Desconectado"
+        }
+      },
+      "door_fl": {
+        "name": "Puerta delantera izquierda",
+        "state": {
+          "on": "Abierta",
+          "off": "Cerrada"
+        }
+      },
+      "door_fr": {
+        "name": "Puerta delantera derecha",
+        "state": {
+          "on": "Abierta",
+          "off": "Cerrada"
+        }
+      },
+      "door_rl": {
+        "name": "Puerta trasera izquierda",
+        "state": {
+          "on": "Abierta",
+          "off": "Cerrada"
+        }
+      },
+      "door_rr": {
+        "name": "Puerta trasera derecha",
+        "state": {
+          "on": "Abierta",
+          "off": "Cerrada"
+        }
+      },
+      "trunk": {
+        "name": "Maletero",
+        "state": {
+          "on": "Abierto",
+          "off": "Cerrado"
+        }
+      },
+      "hood": {
+        "name": "Capó",
+        "state": {
+          "on": "Abierto",
+          "off": "Cerrado"
+        }
+      },
+      "status": {
+        "name": "Estado del módulo",
+        "state": {
+          "on": "En línea",
+          "off": "Fuera de línea"
+        }
+      }
+    },
+    "switch": {
+      "climate_control": {
+        "name": "Control de climatización",
+        "state": {
+          "on": "Encendido",
+          "off": "Apagado"
+        }
+      },
+      "charge_control": {
+        "name": "Control de carga",
+        "state": {
+          "on": "Habilitado",
+          "off": "Deshabilitado"
+        }
+      },
+      "valet_mode": {
+        "name": "Modo aparcacoches",
+        "state": {
+          "on": "Habilitado",
+          "off": "Deshabilitado"
+        }
+      }
+    },
+    "device_tracker": {
+      "location": {
+        "name": "Ubicación del vehículo"
+      }
+    }
+  }
+}

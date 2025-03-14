@@ -30,7 +30,7 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 - **Vehicle-Specific Metrics**: Special support for VW e-UP! with additional vehicle models planned
 - **Diagnostics Support**: Provides detailed diagnostics for troubleshooting
 - **Flexible Topic Structure**: Supports various MQTT topic structures including custom formats
-- **Multi-language Support**: Includes translations for English, German, and Swedish
+- **Multi-language Support**: Includes translations for English, French, German, Spanish, and Swedish
 - **GPS Tracking**: Advanced location tracking with accuracy estimation from signal quality
 - **Cell-level Battery Data**: Processes and displays individual cell data with statistical analysis
 - **Command Rate Limiting**: Prevents overwhelming the vehicle with too many commands

@@ -294,8 +294,11 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.discovered_topics = discovery_result.get("discovered_topics", set())
 
             topics_count = len(self.discovered_topics or [])
-            topics_sample = (list(self.discovered_topics)[:10]
-                if topics_count > 10 else self.discovered_topics)
+            topics_sample = (list(self.discovered_topics)[:5]
+                if topics_count > 5 else list(self.discovered_topics))
+
+            # Fill sample topics, ensure we have 5 placeholders even if fewer topics
+            sample_topics = topics_sample + [""] * (5 - len(topics_sample))
 
             _LOGGER.debug(
                 "Discovered %d topics: %s",
@@ -308,6 +311,10 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self.discovered_topics,
                 self.mqtt_config
             )
+
+            # Format vehicle IDs with newlines for bullet points
+            formatted_vehicle_ids = "\n• ".join(potential_vehicle_ids) if potential_vehicle_ids else "None found"
+
             self.debug_info["potential_vehicle_ids"] = list(potential_vehicle_ids)
             _LOGGER.debug("Potential vehicle IDs: %s", potential_vehicle_ids)
 
@@ -319,11 +326,13 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data_schema=data_schema,
                 errors=errors,
                 description_placeholders={
-                    "topic_count": str(len(self.discovered_topics)),
-                    "sample_topics": ", ".join(list(self.discovered_topics)[:5]),
-                    "potential_vehicle_ids": (
-                        ", ".join(potential_vehicle_ids) if potential_vehicle_ids else "None found"
-                    ),
+                    "topic_count": str(topics_count),
+                    "sample_topic1": sample_topics[0],
+                    "sample_topic2": sample_topics[1],
+                    "sample_topic3": sample_topics[2],
+                    "sample_topic4": sample_topics[3],
+                    "sample_topic5": sample_topics[4],
+                    "potential_vehicle_ids": formatted_vehicle_ids,
                 },
             )
 

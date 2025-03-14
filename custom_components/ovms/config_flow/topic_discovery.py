@@ -74,12 +74,12 @@ def extract_vehicle_ids(topics, config):
     _LOGGER.debug("Extracting potential vehicle IDs from %d topics", len(topics))
     potential_ids = set()
     discovered_username = None
-    
+
     # Get the configured topic structure and components
     structure = config.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
     prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX) or DEFAULT_TOPIC_PREFIX
     mqtt_username = config.get(CONF_MQTT_USERNAME, "")
-    
+
     # Phase 1: Try exact structure matching first
     if structure != "custom":
         # Convert structure to regex pattern, keeping vehicle_id as a capture group
@@ -91,33 +91,33 @@ def extract_vehicle_ids(topics, config):
         else:
             # Handle case when username isn't provided but is in the structure
             pattern_str = pattern_str.replace("{mqtt_username}", "[^/]+")
-            
+
         # Convert {vehicle_id} to a capture group
         pattern_str = pattern_str.replace("{vehicle_id}", "([^/]+)")
         # Add trailing slash and wildcard
         pattern_str = f"^{pattern_str}/.*"
-        
+
         _LOGGER.debug("Using exact structure pattern: %s", pattern_str)
         exact_pattern = re.compile(pattern_str)
-        
+
         # Check topics against exact pattern
         for topic in topics:
             match = exact_pattern.match(topic)
             if match and len(match.groups()) > 0:
                 vehicle_id = match.group(1)
                 if vehicle_id not in ["client", "rr"]:
-                    _LOGGER.debug("Found potential vehicle ID '%s' from exact structure match in topic '%s'", 
+                    _LOGGER.debug("Found potential vehicle ID '%s' from exact structure match in topic '%s'",
                                   vehicle_id, topic)
                     potential_ids.add(vehicle_id)
-    
+
     # Phase 2: Only if no IDs found with exact structure, use the generic pattern approach
     if not potential_ids:
         _LOGGER.debug("No vehicle IDs found with exact structure, trying generic pattern")
-        
+
         # General pattern to match various username formats for OVMS
         general_pattern = fr"^{re.escape(prefix)}/([^/]+)/([^/]+)/"
         _LOGGER.debug("Using general pattern to extract vehicle IDs: %s", general_pattern)
-        
+
         for topic in topics:
             match = re.match(general_pattern, topic)
             if match and len(match.groups()) > 1:
