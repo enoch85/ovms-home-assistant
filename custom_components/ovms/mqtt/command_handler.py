@@ -197,7 +197,17 @@ class CommandHandler:
             )
             response_payload = await asyncio.wait_for(future, timeout)
 
+            # Enhanced logging for responses
             _LOGGER.debug("Received response: %s", response_payload)
+            
+            # Add INFO level logging with command context for easier tracking
+            _LOGGER.info(
+                "Command response for '%s %s' (ID: %s): %s", 
+                command, 
+                parameters, 
+                command_id,
+                response_payload[:200] + "..." if isinstance(response_payload, str) and len(response_payload) > 200 else response_payload
+            )
 
             # Try to parse the response as JSON
             response_data = None
