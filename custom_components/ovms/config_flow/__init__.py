@@ -106,20 +106,28 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             # Extract protocol and port from Port selection
             if "Port" in user_input:
-                if user_input["Port"] == "mqtts":
+                port_selection = user_input["Port"]
+                if port_selection == "8883":
                     user_input[CONF_PROTOCOL] = "mqtts"
                     user_input[CONF_PORT] = 8883
-                    # Handle the inverted SSL verification setting
-                    if "allow_insecure_ssl" in user_input:
-                        user_input[CONF_VERIFY_SSL] = not user_input["allow_insecure_ssl"]
-                        del user_input["allow_insecure_ssl"]
-                    else:
-                        user_input[CONF_VERIFY_SSL] = True
-                else:  # mqtt option
+                    user_input[CONF_VERIFY_SSL] = user_input.get("verify_ssl_certificate", True)
+                elif port_selection == "8084":
+                    user_input[CONF_PROTOCOL] = "wss"
+                    user_input[CONF_PORT] = 8084
+                    user_input[CONF_VERIFY_SSL] = user_input.get("verify_ssl_certificate", True)
+                elif port_selection == "1883":
                     user_input[CONF_PROTOCOL] = "mqtt"
                     user_input[CONF_PORT] = 1883
-                    user_input[CONF_VERIFY_SSL] = False  # Not applicable for unencrypted
+                    user_input[CONF_VERIFY_SSL] = False
+                elif port_selection == "8083":
+                    user_input[CONF_PROTOCOL] = "ws"
+                    user_input[CONF_PORT] = 8083
+                    user_input[CONF_VERIFY_SSL] = False
                 del user_input["Port"]
+                
+                # Remove the SSL verification option after processing it
+                if "verify_ssl_certificate" in user_input:
+                    del user_input["verify_ssl_certificate"]
 
             # Test MQTT connection
             _LOGGER.debug("Testing MQTT connection")
@@ -150,25 +158,23 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if "details" in result:
                 errors["details"] = result["details"]
 
-        # Build the schema using radio buttons for connection options
+        # Build the schema with expanded port options
         schema_dict = {
             vol.Required(CONF_HOST): str,
-            vol.Required("Port", default="mqtts"): vol.In({
-                "mqtts": "port 8883 (mqtts://)",
-                "mqtt": "port 1883 (mqtt://)",
+            vol.Required("Port", default="8883"): vol.In({
+                "1883": "TCP Port: 1883 (mqtt://)",
+                "8083": "WebSocket Port: 8083 (ws://)",
+                "8883": "SSL/TLS Port: 8883 (mqtts://)",
+                "8084": "Secure WebSocket Port: 8084 (wss://)",
             }),
             vol.Optional(CONF_USERNAME): str,
             vol.Optional(CONF_PASSWORD): str,
             vol.Required(CONF_QOS, default=DEFAULT_QOS): vol.In([0, 1, 2]),
         }
 
-        # Add SSL verification option only if port 8883 is selected
-        if user_input and user_input.get("Port") == "mqtt":
-            # Don't include SSL verification for unencrypted connections
-            pass
-        else:
-            # For encrypted connections, include SSL verification but invert the meaning
-            schema_dict[vol.Required("allow_insecure_ssl", default=False)] = bool
+        # Add SSL verification option for secure ports
+        if not user_input or user_input.get("Port") in ["8883", "8084", None]:
+            schema_dict[vol.Required("verify_ssl_certificate", default=True)] = bool
 
         data_schema = vol.Schema(schema_dict)
 
@@ -301,10 +307,8 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.debug_info["potential_vehicle_ids"] = list(potential_vehicle_ids)
             _LOGGER.debug("Potential vehicle IDs: %s", potential_vehicle_ids)
 
-            # Create a schema with the discovered info
-            data_schema = vol.Schema({
-                vol.Required("confirm_discovery", default=True): bool,
-            })
+            # Create a schema without the confirmation checkbox
+            data_schema = vol.Schema({})
 
             return self.async_show_form(
                 step_id="topic_discovery",
