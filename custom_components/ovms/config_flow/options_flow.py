@@ -82,8 +82,32 @@ class OVMSOptionsFlow(OptionsFlow):
         elif current_port == 8084 and current_protocol == "wss":
             port_selection = "8084"
 
-        # Create options schema with port selection
+        # Create options schema with port selection and place SSL verification right after ports
         options = {
+            vol.Required(
+                "Port",
+                default=port_selection
+            ): vol.In({
+                "1883": "TCP Port: 1883 (mqtt://)",
+                "8083": "WebSocket Port: 8083 (ws://)",
+                "8883": "SSL/TLS Port: 8883 (mqtts://)",
+                "8084": "Secure WebSocket Port: 8084 (wss://)",
+            }),
+        }
+        
+        # Add SSL verification option right after port selection, but only for secure ports
+        if port_selection in ["8883", "8084"]:
+            current_verify_ssl = entry_options.get(
+                CONF_VERIFY_SSL, 
+                entry_data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+            )
+            options[vol.Required(
+                "verify_ssl_certificate",
+                default=current_verify_ssl
+            )] = bool
+        
+        # Add remaining options
+        options.update({
             vol.Required(
                 CONF_QOS,
                 default=entry_options.get(
@@ -104,26 +128,6 @@ class OVMSOptionsFlow(OptionsFlow):
                     entry_data.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
                 ),
             ): vol.In(TOPIC_STRUCTURES),
-            vol.Required(
-                "Port",
-                default=port_selection
-            ): vol.In({
-                "1883": "TCP Port: 1883 (mqtt://)",
-                "8083": "WebSocket Port: 8083 (ws://)",
-                "8883": "SSL/TLS Port: 8883 (mqtts://)",
-                "8084": "Secure WebSocket Port: 8084 (wss://)",
-            }),
-        }
-        
-        # Add SSL verification option for secure ports
-        if port_selection in ["8883", "8084"]:
-            current_verify_ssl = entry_options.get(
-                CONF_VERIFY_SSL, 
-                entry_data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
-            )
-            options[vol.Required(
-                "verify_ssl_certificate",
-                default=current_verify_ssl
-            )] = bool
+        })
 
         return self.async_show_form(step_id="init", data_schema=vol.Schema(options))
