@@ -12,6 +12,8 @@
           "qos": "QoS Level",
           "verify_ssl_certificate": "Verify SSL/TLS Certificate"
         }
+        "data_description": {
+          "verify_ssl_certificate": "SSL/TLS certificate verification only applies to secure ports (8883, 8084)"
       },
       "topics": {
         "title": "MQTT Topic Structure",
