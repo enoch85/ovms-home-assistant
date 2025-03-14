@@ -217,7 +217,7 @@ class CommandHandler:
             }
 
         except asyncio.TimeoutError:
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "Command timed out: %s (ID: %s)", command, command_id
             )
             # Clean up
