@@ -45,37 +45,28 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 
 
 def format_structure_prefix(config):
-    """Format the topic structure prefix based on the configuration."""
-    structure = config.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
-    prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
-    vehicle_id = config.get(CONF_VEHICLE_ID, "")
-    mqtt_username = config.get(CONF_MQTT_USERNAME, "")
-
-    _LOGGER.debug(
-        "Formatting structure prefix with: structure=%s, prefix=%s, vehicle_id=%s, "
-        "mqtt_username=%s",
-        structure, prefix, vehicle_id, mqtt_username
-    )
-
-    # Replace the variables in the structure
+    """Format the topic structure prefix based on configuration."""
     try:
+        structure = config.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
+        prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
+        vehicle_id = config.get(CONF_VEHICLE_ID, "")
+        mqtt_username = config.get(CONF_MQTT_USERNAME, "")
+
+        # Replace the variables in the structure
         structure_prefix = structure.format(
             prefix=prefix,
             vehicle_id=vehicle_id,
             mqtt_username=mqtt_username
         )
-    except KeyError as e:
-        _LOGGER.error(
-            "Error formatting structure prefix: %s - Variables available: prefix=%s, "
-            "vehicle_id=%s, mqtt_username=%s",
-            e, prefix, vehicle_id, mqtt_username
-        )
-        # Fallback to a default format
-        structure_prefix = f"{prefix}/{mqtt_username}/{vehicle_id}"
-        _LOGGER.debug("Using fallback structure prefix: %s", structure_prefix)
 
-    _LOGGER.debug("Formatted structure prefix: %s", structure_prefix)
-    return structure_prefix
+        _LOGGER.debug("Formatted structure prefix: %s", structure_prefix)
+        return structure_prefix
+    except Exception as ex:
+        _LOGGER.exception("Error formatting structure prefix: %s", ex)
+        # Fallback to a simple default
+        prefix = config.get(CONF_TOPIC_PREFIX, "ovms")
+        vehicle_id = config.get(CONF_VEHICLE_ID, "")
+        return f"{prefix}/{vehicle_id}"
 
 
 def extract_vehicle_ids(topics, config):
@@ -83,30 +74,63 @@ def extract_vehicle_ids(topics, config):
     _LOGGER.debug("Extracting potential vehicle IDs from %d topics", len(topics))
     potential_ids = set()
     discovered_username = None
-
-    # Get the topic prefix
+    
+    # Get the configured topic structure and components
+    structure = config.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
     prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX) or DEFAULT_TOPIC_PREFIX
-
-    # More generic pattern to match various username formats for OVMS
-    general_pattern = fr"^{re.escape(prefix)}/([^/]+)/([^/]+)/"
-    _LOGGER.debug(
-        "Using general pattern to extract vehicle IDs: %s",
-        general_pattern
-    )
-
-    for topic in topics:
-        match = re.match(general_pattern, topic)
-        if match and len(match.groups()) > 1:
-            username = match.group(1)
-            vehicle_id = match.group(2)
-            if vehicle_id not in ["client", "rr"]:
-                _LOGGER.debug(
-                    "Found potential vehicle ID '%s' with username '%s' from topic '%s'",
-                    vehicle_id, username, topic
-                )
-                # Save the discovered username for future use
-                discovered_username = username
-                potential_ids.add(vehicle_id)
+    mqtt_username = config.get(CONF_MQTT_USERNAME, "")
+    
+    # Phase 1: Try exact structure matching first
+    if structure != "custom":
+        # Convert structure to regex pattern, keeping vehicle_id as a capture group
+        # Replace {prefix} and {mqtt_username} with their actual values
+        # Keep {vehicle_id} as a capture group
+        pattern_str = structure.replace("{prefix}", re.escape(prefix))
+        if mqtt_username:
+            pattern_str = pattern_str.replace("{mqtt_username}", re.escape(mqtt_username))
+        else:
+            # Handle case when username isn't provided but is in the structure
+            pattern_str = pattern_str.replace("{mqtt_username}", "[^/]+")
+            
+        # Convert {vehicle_id} to a capture group
+        pattern_str = pattern_str.replace("{vehicle_id}", "([^/]+)")
+        # Add trailing slash and wildcard
+        pattern_str = f"^{pattern_str}/.*"
+        
+        _LOGGER.debug("Using exact structure pattern: %s", pattern_str)
+        exact_pattern = re.compile(pattern_str)
+        
+        # Check topics against exact pattern
+        for topic in topics:
+            match = exact_pattern.match(topic)
+            if match and len(match.groups()) > 0:
+                vehicle_id = match.group(1)
+                if vehicle_id not in ["client", "rr"]:
+                    _LOGGER.debug("Found potential vehicle ID '%s' from exact structure match in topic '%s'", 
+                                  vehicle_id, topic)
+                    potential_ids.add(vehicle_id)
+    
+    # Phase 2: Only if no IDs found with exact structure, use the generic pattern approach
+    if not potential_ids:
+        _LOGGER.debug("No vehicle IDs found with exact structure, trying generic pattern")
+        
+        # General pattern to match various username formats for OVMS
+        general_pattern = fr"^{re.escape(prefix)}/([^/]+)/([^/]+)/"
+        _LOGGER.debug("Using general pattern to extract vehicle IDs: %s", general_pattern)
+        
+        for topic in topics:
+            match = re.match(general_pattern, topic)
+            if match and len(match.groups()) > 1:
+                username = match.group(1)
+                vehicle_id = match.group(2)
+                if vehicle_id not in ["client", "rr"]:
+                    _LOGGER.debug(
+                        "Found potential vehicle ID '%s' with username '%s' from topic '%s'",
+                        vehicle_id, username, topic
+                    )
+                    # Save the discovered username for future use
+                    discovered_username = username
+                    potential_ids.add(vehicle_id)
 
     # Update the MQTT username in config if discovered
     if discovered_username:
@@ -122,7 +146,6 @@ def extract_vehicle_ids(topics, config):
     return potential_ids
 
 
-# pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 async def discover_topics(hass: HomeAssistant, config):
     """Discover available OVMS topics on the broker."""
     topic_prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
@@ -390,7 +413,6 @@ async def discover_topics(hass: HomeAssistant, config):
         }
 
 
-# pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 async def test_topic_availability(hass: HomeAssistant, config):
     """Test if the OVMS topics are available for a specific vehicle."""
     vehicle_id = config[CONF_VEHICLE_ID]
