@@ -10,7 +10,7 @@
           "username": "Användarnamn",
           "password": "Lösenord",
           "qos": "QoS-nivå",
-          "allow_insecure_ssl": "Tillåt osäkra SSL-anslutningar"
+          "verify_ssl_certificate": "Verifiera SSL/TLS-certifikat"
         }
       },
       "topics": {
@@ -33,7 +33,6 @@
         "title": "Ämnesupptäckt",
         "description": "Upptäcker tillgängliga OVMS-ämnen...",
         "data": {
-          "confirm_discovery": "Fortsätt med upptäckta ämnen",
           "retry_discovery": "Försök igen"
         }
       },
@@ -71,7 +70,8 @@
           "qos": "QoS-nivå",
           "topic_prefix": "Ämnesprefix",
           "topic_structure": "Ämnesstruktur",
-          "verify_ssl": "Verifiera SSL-certifikat"
+          "Port": "Anslutningsport",
+          "verify_ssl_certificate": "Verifiera SSL/TLS-certifikat"
         }
       }
     }
