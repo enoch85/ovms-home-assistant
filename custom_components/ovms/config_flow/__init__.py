@@ -158,7 +158,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if "details" in result:
                 errors["details"] = result["details"]
 
-        # Build the schema with expanded port options
+        # Build the schema with expanded port options and place SSL verification right after ports
         schema_dict = {
             vol.Required(CONF_HOST): str,
             vol.Required("Port", default="8883"): vol.In({
@@ -167,14 +167,18 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "8883": "SSL/TLS Port: 8883 (mqtts://)",
                 "8084": "Secure WebSocket Port: 8084 (wss://)",
             }),
+        }
+        
+        # Add SSL verification option right after port selection, but only for secure ports
+        if not user_input or user_input.get("Port") in ["8883", "8084", None]:
+            schema_dict[vol.Required("verify_ssl_certificate", default=True)] = bool
+            
+        # Continue with remaining form fields
+        schema_dict.update({
             vol.Optional(CONF_USERNAME): str,
             vol.Optional(CONF_PASSWORD): str,
             vol.Required(CONF_QOS, default=DEFAULT_QOS): vol.In([0, 1, 2]),
-        }
-
-        # Add SSL verification option for secure ports
-        if not user_input or user_input.get("Port") in ["8883", "8084", None]:
-            schema_dict[vol.Required("verify_ssl_certificate", default=True)] = bool
+        })
 
         data_schema = vol.Schema(schema_dict)
 
