@@ -10,6 +10,8 @@ from ..const import (
     CONF_TOPIC_PREFIX,
     CONF_TOPIC_STRUCTURE,
     CONF_VERIFY_SSL,
+    CONF_PORT,
+    CONF_PROTOCOL,
     DEFAULT_QOS,
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_TOPIC_STRUCTURE,
@@ -34,6 +36,33 @@ class OVMSOptionsFlow(OptionsFlow):
         _LOGGER.debug("Options flow async_step_init with input: %s", user_input)
 
         if user_input is not None:
+            # Process port and SSL verification
+            if "Port" in user_input:
+                port_selection = user_input["Port"]
+                
+                # Set appropriate protocol and port based on selection
+                if port_selection == "8883":
+                    user_input[CONF_PROTOCOL] = "mqtts"
+                    user_input[CONF_PORT] = 8883
+                    user_input[CONF_VERIFY_SSL] = user_input.get("verify_ssl_certificate", True)
+                elif port_selection == "8084":
+                    user_input[CONF_PROTOCOL] = "wss"
+                    user_input[CONF_PORT] = 8084
+                    user_input[CONF_VERIFY_SSL] = user_input.get("verify_ssl_certificate", True)
+                elif port_selection == "1883":
+                    user_input[CONF_PROTOCOL] = "mqtt"
+                    user_input[CONF_PORT] = 1883
+                    user_input[CONF_VERIFY_SSL] = False
+                elif port_selection == "8083":
+                    user_input[CONF_PROTOCOL] = "ws"
+                    user_input[CONF_PORT] = 8083
+                    user_input[CONF_VERIFY_SSL] = False
+                
+                # Remove temporary keys
+                del user_input["Port"]
+                if "verify_ssl_certificate" in user_input:
+                    del user_input["verify_ssl_certificate"]
+                
             _LOGGER.debug("Saving options: %s", user_input)
             return self.async_create_entry(title="", data=user_input)
 
@@ -41,7 +70,19 @@ class OVMSOptionsFlow(OptionsFlow):
         entry_data = self._config_entry.data
         entry_options = self._config_entry.options
 
-        # Create options schema
+        # Determine current port selection
+        current_port = entry_data.get(CONF_PORT, 8883)
+        current_protocol = entry_data.get(CONF_PROTOCOL, "mqtts")
+        
+        port_selection = "8883"  # Default
+        if current_port == 1883 and current_protocol == "mqtt":
+            port_selection = "1883"
+        elif current_port == 8083 and current_protocol == "ws":
+            port_selection = "8083"
+        elif current_port == 8084 and current_protocol == "wss":
+            port_selection = "8084"
+
+        # Create options schema with port selection
         options = {
             vol.Required(
                 CONF_QOS,
@@ -64,12 +105,25 @@ class OVMSOptionsFlow(OptionsFlow):
                 ),
             ): vol.In(TOPIC_STRUCTURES),
             vol.Required(
-                CONF_VERIFY_SSL,
-                default=entry_options.get(
-                    CONF_VERIFY_SSL,
-                    entry_data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
-                ),
-            ): bool,
+                "Port",
+                default=port_selection
+            ): vol.In({
+                "1883": "TCP Port: 1883 (mqtt://)",
+                "8083": "WebSocket Port: 8083 (ws://)",
+                "8883": "SSL/TLS Port: 8883 (mqtts://)",
+                "8084": "Secure WebSocket Port: 8084 (wss://)",
+            }),
         }
+        
+        # Add SSL verification option for secure ports
+        if port_selection in ["8883", "8084"]:
+            current_verify_ssl = entry_options.get(
+                CONF_VERIFY_SSL, 
+                entry_data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+            )
+            options[vol.Required(
+                "verify_ssl_certificate",
+                default=current_verify_ssl
+            )] = bool
 
         return self.async_show_form(step_id="init", data_schema=vol.Schema(options))
