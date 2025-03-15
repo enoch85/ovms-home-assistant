@@ -188,7 +188,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=data_schema,
             errors=errors,
             description_placeholders={
-                "ssl_note": "ssl_note",
+                "ssl_note": "data_description",
                 "debug_info": str(self.debug_info) if self.debug_info else ""
             },
         )
