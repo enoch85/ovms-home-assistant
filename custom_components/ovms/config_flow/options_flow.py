@@ -91,7 +91,7 @@ class OVMSOptionsFlow(OptionsFlow):
             CONF_VERIFY_SSL,
             entry_data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
         )
-        
+
         options = {
             vol.Required(
                 "Port",
@@ -133,7 +133,7 @@ class OVMSOptionsFlow(OptionsFlow):
         })
 
         return self.async_show_form(
-            step_id="init", 
+            step_id="init",
             data_schema=vol.Schema(options),
             description_placeholders={
                 "ssl_note": "ssl_note"
