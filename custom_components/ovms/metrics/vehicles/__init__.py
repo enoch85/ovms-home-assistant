@@ -1,6 +1,7 @@
 """Vehicle-specific metrics for OVMS integration."""
 
 from .vw_eup import VW_EUP_METRICS
+from .smart_fortwo import SMART_FORTWO_METRICS
 
 # Add imports for future vehicle-specific metric sets here
 # from .tesla_model_s import TESLA_MODEL_S_METRICS
@@ -10,6 +11,7 @@ from .vw_eup import VW_EUP_METRICS
 # Export all vehicle metrics for use in the main metrics module
 __all__ = [
     "VW_EUP_METRICS",
+    "SMART_FORTWO_METRICS",
     # "TESLA_MODEL_S_METRICS",
     # "NISSAN_LEAF_METRICS",
     # "RENAULT_ZOE_METRICS",
