@@ -22,6 +22,7 @@ SERVICE_SEND_COMMAND = "send_command"
 SERVICE_SET_FEATURE = "set_feature"
 SERVICE_CONTROL_CLIMATE = "control_climate"
 SERVICE_CONTROL_CHARGING = "control_charging"
+SERVICE_HOMELINK = "homelink"
 
 # Schema for the send_command service
 SEND_COMMAND_SCHEMA = vol.Schema({
@@ -53,6 +54,12 @@ CONTROL_CHARGING_SCHEMA = vol.Schema({
     vol.Required("action"): vol.In(["start", "stop", "status"]),
     vol.Optional("mode"): vol.In(["standard", "storage", "range", "performance"]),
     vol.Optional("limit"): vol.Coerce(int),
+})
+
+# Schema for the homelink service
+HOMELINK_SCHEMA = vol.Schema({
+    vol.Required("vehicle_id"): cv.string,
+    vol.Required("button"): vol.In([1, 2, 3]),
 })
 
 
@@ -213,6 +220,34 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.exception("Error in control_charging service: %s", ex)
             raise HomeAssistantError(f"Failed to control charging: {ex}") from ex
 
+    async def async_homelink(call: ServiceCall) -> Dict[str, Any]:
+        """Activate a homelink button on the OVMS module."""
+        vehicle_id = call.data.get("vehicle_id")
+        button = call.data.get("button")
+        
+        _LOGGER.debug("Service call homelink for vehicle %s: button %s",
+                     vehicle_id, button)
+        
+        mqtt_client = find_mqtt_client(vehicle_id)
+        if not mqtt_client:
+            raise HomeAssistantError(f"No OVMS integration found for vehicle_id: {vehicle_id}")
+        
+        try:
+            # Format the command
+            command = "homelink"
+            parameters = str(button)
+            
+            # Send the command and get the result
+            result = await mqtt_client.async_send_command(
+                command=command,
+                parameters=parameters
+            )
+            
+            return result
+        except Exception as ex:
+            _LOGGER.exception("Error in homelink service: %s", ex)
+            raise HomeAssistantError(f"Failed to activate homelink: {ex}") from ex
+
     # Register the services
     hass.services.async_register(
         DOMAIN,
@@ -241,6 +276,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         async_control_charging,
         schema=CONTROL_CHARGING_SCHEMA,
     )
+    
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_HOMELINK,
+        async_homelink,
+        schema=HOMELINK_SCHEMA,
+    )
 
 
 async def async_unload_services(hass: HomeAssistant) -> None:
@@ -250,6 +292,7 @@ async def async_unload_services(hass: HomeAssistant) -> None:
         SERVICE_SET_FEATURE,
         SERVICE_CONTROL_CLIMATE,
         SERVICE_CONTROL_CHARGING,
+        SERVICE_HOMELINK,
     ]
     for service in services:
         if hass.services.has_service(DOMAIN, service):
