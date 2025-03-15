@@ -155,6 +155,11 @@ class TopicParser:
                 # For vendor-specific metrics, preserve the entire path including xvu
                 return ".".join(parts)
 
+            # Keep xsq prefix intact for Smart ForTwo metrics
+            if "xsq" in parts:
+                # For vendor-specific metrics, preserve the entire path including xsq
+                return ".".join(parts)
+
             # Metric specific prefixes
             if parts[0] in ["metric", "status", "notify"]:
                 return ".".join(parts[1:])

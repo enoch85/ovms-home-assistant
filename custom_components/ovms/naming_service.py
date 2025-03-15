@@ -36,6 +36,14 @@ class EntityNamingService:
                 return f"VW eUP! {last_part}"
             return f"VW eUP! {raw_name.replace('_', ' ').title()}" if raw_name else "VW eUP! Sensor"
 
+        # Check if this is a Smart ForTwo metric by looking for 'xsq' prefix
+        has_xsq = any(p == "xsq" for p in parts) if parts else ('xsq' in topic)
+        if has_xsq:
+            if parts and len(parts) > 0:
+                last_part = parts[-1].replace("_", " ").title()
+                return f"Smart ForTwo {last_part}"
+            return f"Smart ForTwo {raw_name.replace('_', ' ').title()}" if raw_name else "Smart ForTwo Sensor"
+
         # Standard handling for other metrics - extract meaningful names from parts
         if parts and len(parts) > 0:
             last_part = parts[-1].replace("_", " ").title()

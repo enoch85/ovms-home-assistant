@@ -178,6 +178,11 @@ TOPIC_PATTERNS = {
         "icon": "mdi:car-electric",
         "category": "vw_eup",
     },
+    "xsq": {
+        "name": "Smart ForTwo",
+        "icon": "mdi:car-electric",
+        "category": "smart_fortwo",
+    },
     # Add specific patterns for our problematic metrics
     "egpio_input": {
         "name": "GPIO Input Ports",
