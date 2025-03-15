@@ -40,7 +40,7 @@ from .common import (
 )
 
 # Import vehicle-specific metrics
-from .vehicles import VW_EUP_METRICS
+from .vehicles import VW_EUP_METRICS, SMART_FORTWO_METRICS
 
 # Import patterns and utils
 from .patterns import TOPIC_PATTERNS
@@ -69,6 +69,7 @@ CATEGORY_NETWORK = "network"
 CATEGORY_SYSTEM = "system"
 CATEGORY_TIRE = "tire"
 CATEGORY_VW_EUP = "vw_eup"
+CATEGORY_SMART_FORTWO = "smart_fortwo"
 
 # Combine all metrics into the master dictionary
 METRIC_DEFINITIONS = {
@@ -86,6 +87,7 @@ METRIC_DEFINITIONS = {
     **SYSTEM_METRICS,
     **TIRE_METRICS,
     **VW_EUP_METRICS,
+    **SMART_FORTWO_METRICS,
 }
 
 # Group metrics by categories
@@ -144,6 +146,9 @@ METRIC_CATEGORIES = {
     CATEGORY_VW_EUP: [
         k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_VW_EUP
     ],
+    CATEGORY_SMART_FORTWO: [
+        k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_SMART_FORTWO
+    ],
 }
 
 # Binary metrics that should be boolean - includes only actual binary metrics
@@ -183,4 +188,12 @@ PREFIX_CATEGORIES = {
     "xvu.e": CATEGORY_VW_EUP,
     "xvu.m": CATEGORY_VW_EUP,
     "xvu.v": CATEGORY_VW_EUP,
+    "xsq.bms": CATEGORY_SMART_FORTWO,
+    "xsq.booster": CATEGORY_SMART_FORTWO,
+    "xsq.evc": CATEGORY_SMART_FORTWO,
+    "xsq.obl": CATEGORY_SMART_FORTWO,
+    "xsq.ocs": CATEGORY_SMART_FORTWO,
+    "xsq.odometer": CATEGORY_SMART_FORTWO,
+    "xsq.use": CATEGORY_SMART_FORTWO,
+    "xsq.v": CATEGORY_SMART_FORTWO,
 }
