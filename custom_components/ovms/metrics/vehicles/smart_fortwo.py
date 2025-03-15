@@ -218,7 +218,7 @@ SMART_FORTWO_METRICS = {
         "description": "High voltage energy measurement",
         "icon": "mdi:battery",
         "device_class": SensorDeviceClass.ENERGY,
-        "state_class": SensorStateClass.TOTAL,
+        "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "category": "smart_fortwo",
     },
