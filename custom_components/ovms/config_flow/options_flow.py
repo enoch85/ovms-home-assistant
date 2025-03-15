@@ -136,6 +136,6 @@ class OVMSOptionsFlow(OptionsFlow):
             step_id="init",
             data_schema=vol.Schema(options),
             description_placeholders={
-                "ssl_note": "ssl_note"
+                "ssl_note": "data_description"
             }
         )
