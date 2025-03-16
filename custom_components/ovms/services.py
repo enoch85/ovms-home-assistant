@@ -149,24 +149,30 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         try:
             # Build the climate command
             command = "climate"
-            command_parts = []
+            parameters = ""
 
+            # Simplified command structure: only use 'on' or 'off'
             if hvac_mode == "off":
-                command_parts.append("off")
+                parameters = "off"
             else:
-                if hvac_mode:
-                    command_parts.append(hvac_mode)
-
-                if temperature:
-                    command_parts.append(f"temp {temperature}")
-
-                if duration:
-                    command_parts.append(f"duration {duration}")
+                parameters = "on"
+                
+                # Add optional parameters only when turning on
+                additional_params = []
+                if temperature is not None:
+                    additional_params.append(f"temp {temperature}")
+                if duration is not None:
+                    additional_params.append(f"duration {duration}")
+                
+                if additional_params:
+                    parameters += " " + " ".join(additional_params)
+            
+            _LOGGER.debug("Sending climate command: %s %s", command, parameters)
 
             # Send the command and get the result
             result = await mqtt_client.async_send_command(
                 command=command,
-                parameters=" ".join(command_parts)
+                parameters=parameters
             )
 
             return result
