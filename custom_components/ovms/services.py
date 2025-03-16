@@ -224,25 +224,25 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         """Activate a homelink button on the OVMS module."""
         vehicle_id = call.data.get("vehicle_id")
         button = call.data.get("button")
-        
+
         _LOGGER.debug("Service call homelink for vehicle %s: button %s",
                      vehicle_id, button)
-        
+
         mqtt_client = find_mqtt_client(vehicle_id)
         if not mqtt_client:
             raise HomeAssistantError(f"No OVMS integration found for vehicle_id: {vehicle_id}")
-        
+
         try:
             # Format the command
             command = "homelink"
             parameters = str(button)
-            
+
             # Send the command and get the result
             result = await mqtt_client.async_send_command(
                 command=command,
                 parameters=parameters
             )
-            
+
             return result
         except Exception as ex:
             _LOGGER.exception("Error in homelink service: %s", ex)
@@ -276,7 +276,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         async_control_charging,
         schema=CONTROL_CHARGING_SCHEMA,
     )
-    
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_HOMELINK,
