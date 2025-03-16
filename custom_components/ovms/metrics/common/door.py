@@ -61,5 +61,6 @@ DOOR_METRICS = {
         "icon": "mdi:lock",
         "device_class": BinarySensorDeviceClass.LOCK,
         "category": "door",
+        "invert_state": True,  # Added to fix inverted reporting from OVMS
     },
 }
