@@ -30,9 +30,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref_name }}
         run: |
-          gh release create "$tag" \
-              --repo="$GITHUB_REPOSITORY" \
-              --title="OVMS Home Assistant $tag" \
-              --generate-notes \
-              --latest \
-              ovms.zip#"OVMS Home Assistant $tag"
+          if [[ "$tag" == *-beta* ]]; then
+            gh release create "$tag" \
+                --repo="$GITHUB_REPOSITORY" \
+                --title="OVMS Home Assistant $tag" \
+                --generate-notes \
+                --prerelease \
+                ovms.zip#"OVMS Home Assistant $tag"
+          else
+            gh release create "$tag" \
+                --repo="$GITHUB_REPOSITORY" \
+                --title="OVMS Home Assistant $tag" \
+                --generate-notes \
+                --latest \
+                ovms.zip#"OVMS Home Assistant $tag"
+          fi
