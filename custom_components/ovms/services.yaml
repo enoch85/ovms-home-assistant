@@ -143,3 +143,27 @@ control_charging:
           min: 1
           max: 100
           unit_of_measurement: "%"
+
+homelink:
+  name: Homelink button
+  description: Activate a homelink button on the OVMS module. For Smart ForTwo vehicles, these buttons control climate functions with SoC > 30% required.
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      description: ID of the vehicle
+      required: true
+      selector:
+        text:
+    button:
+      name: Button
+      description: Homelink button number (1-3)
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Button 1: 5min climate boost"
+              value: "1"
+            - label: "Button 2: 10min climate boost"
+              value: "2"
+            - label: "Button 3: 15min climate boost or 12V charging"
+              value: "3"
