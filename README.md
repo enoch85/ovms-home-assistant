@@ -68,6 +68,19 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 
 *All topics with a lot of metrics are stored in attributes instead, where the average and median are calculated and presented*
 
+## Data usage
+
+Compared to using the OVMS V2 server, this integration will use more data since it's using the V3 server over MQTT. If you are concerned about data usage, this integration might not be for you. Below are real-life cellular data usage from a car with both V2 and V3 OVMS server activated.
+
+**Specifications of the car in the example:**
+
+- While parked at home: WIFI
+- While parked at work: 4G
+- Traveled to work: 22 times
+- Duration of travel to work: 40 minutes per trip
+
+![data-usage](/assets/screenshot-data-usage.png)
+
 ## Installation
 
 ### HACS Installation (Recommended)
