@@ -16,6 +16,7 @@ from homeassistant.const import (
     UnitOfPower,
     UnitOfTemperature,
     UnitOfTime,
+    UnitOfFrequency,
 )
 from homeassistant.helpers.entity import EntityCategory
 
@@ -291,6 +292,7 @@ SMART_FORTWO_METRICS = {
         "description": "Charger frequency",
         "icon": "mdi:sine-wave",
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfFrequency.HERTZ,
         "category": "smart_fortwo",
     },
     "xsq.obl.power": {

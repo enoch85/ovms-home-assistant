@@ -17,6 +17,7 @@ from homeassistant.const import (
     UnitOfPressure,
     UnitOfSpeed,
     UnitOfTemperature,
+    UnitOfFrequency,
 )
 from homeassistant.helpers.entity import EntityCategory
 
@@ -200,12 +201,21 @@ TOPIC_PATTERNS = {
         "name": "Tire Pressure Difference",
         "icon": "mdi:car-tire-alert",
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPressure.KPA,
         "category": "tire",
     },
     "diff": {
         "name": "Difference",
         "icon": "mdi:car-tire-alert",
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPressure.KPA,
         "category": "tire",
+    },
+    "frequency": {
+        "name": "Frequency",
+        "icon": "mdi:sine-wave",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfFrequency.HERTZ,  # Added unit for frequency
+        "category": "system",
     },
 }

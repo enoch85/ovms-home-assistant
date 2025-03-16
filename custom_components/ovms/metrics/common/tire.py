@@ -49,6 +49,7 @@ TIRE_METRICS = {
         "description": "Difference in tire pressure values",
         "icon": "mdi:car-tire-alert",
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPressure.KPA,
         "category": "tire",
     },
 }

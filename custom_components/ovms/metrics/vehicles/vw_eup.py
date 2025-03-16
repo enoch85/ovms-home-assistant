@@ -16,6 +16,7 @@ from homeassistant.const import (
     UnitOfPower,
     UnitOfTemperature,  # noqa: F401
     UnitOfTime,
+    UnitOfPressure,
 )
 from homeassistant.helpers.entity import EntityCategory
 
@@ -368,6 +369,7 @@ VW_EUP_METRICS = {
         "description": "Difference in tire pressure values",
         "icon": "mdi:car-tire-alert",
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPressure.KPA,
         "category": "vw_eup",
     },
     "xvu.v.t.emgcy": {
@@ -375,6 +377,7 @@ VW_EUP_METRICS = {
         "description": "Emergency tire pressure values",
         "icon": "mdi:car-tire-alert",
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPressure.KPA,
         "category": "vw_eup",
     },
 }
