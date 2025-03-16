@@ -271,6 +271,42 @@ data:
   limit: 80  # Percentage limit for charging
 ```
 
+### Homelink Control
+
+The integration provides a Homelink service that can trigger vehicle functions associated with Homelink buttons:
+
+#### `ovms.homelink`
+Activate a Homelink button on the OVMS module. 
+
+```yaml
+service: ovms.homelink
+data:
+  vehicle_id: your_vehicle_id
+  button: 1  # Options: 1, 2, or 3
+```
+
+**Smart ForTwo-specific functionality:**
+For Smart ForTwo vehicles, these buttons control climate functions:
+- Button 1: 5 minute climate boost 
+- Button 2: 10 minute climate boost
+- Button 3: 15 minute climate boost or 12V battery charging
+
+This feature requires a battery State of Charge (SoC) greater than 30%.
+
+**Example Lovelace button configuration:**
+
+```yaml
+type: button
+name: "5min Climate Boost"
+icon: mdi:car-seat-heater
+tap_action:
+  action: call-service
+  service: ovms.homelink
+  service_data:
+    vehicle_id: your_vehicle_id
+    button: 1
+```
+
 ## Technical Details
 
 ### Topic Structure
