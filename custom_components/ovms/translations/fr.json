@@ -75,6 +75,9 @@
           "topic_structure": "Structure des sujets",
           "Port": "Port de connexion",
           "verify_ssl_certificate": "Vérifier le certificat SSL/TLS"
+        },
+        "data_description": {
+          "verify_ssl_certificate": "La vérification des certificats SSL/TLS s'applique uniquement aux ports sécurisés (8883, 8084)"
         }
       }
     }
