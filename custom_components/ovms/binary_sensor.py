@@ -190,17 +190,30 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
     def _parse_state(self, state: str) -> bool:
         """Parse the state string to a boolean."""
         try:
+            # Check if we should invert the state based on metric definition
+            invert_state = self._attr_extra_state_attributes.get("invert_state", False)
+            
             if isinstance(state, str):
                 if state.lower() in ("true", "on", "yes", "1", "open", "locked"):
-                    return True
-                if state.lower() in ("false", "off", "no", "0", "closed", "unlocked"):
-                    return False
-
-            # Try numeric comparison
-            try:
-                return float(state) > 0
-            except (ValueError, TypeError):
-                return False
+                    result = True
+                elif state.lower() in ("false", "off", "no", "0", "closed", "unlocked"):
+                    result = False
+                else:
+                    # Try numeric comparison
+                    try:
+                        result = float(state) > 0
+                    except (ValueError, TypeError):
+                        result = False
+            else:
+                # Try numeric comparison
+                try:
+                    result = float(state) > 0
+                except (ValueError, TypeError):
+                    result = False
+                    
+            # Apply inversion if needed
+            return not result if invert_state else result
+                
         except Exception as ex:
             _LOGGER.exception("Error parsing state '%s': %s", state, ex)
             return False
@@ -264,6 +277,8 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                     self._attr_icon = metric_info["icon"]
                 if "entity_category" in metric_info:
                     self._attr_entity_category = metric_info["entity_category"]
+                if "invert_state" in metric_info:
+                    self._attr_extra_state_attributes["invert_state"] = metric_info["invert_state"]
                 return True
             return False
         except Exception as ex:
