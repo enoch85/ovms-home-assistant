@@ -120,13 +120,20 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
             self._attr_name = name.replace("_", " ").title()
 
         self._topic = topic
-        self._attr_is_on = self._parse_state(initial_state)
-        self._attr_device_info = device_info
+        
+        # Initialize attributes first, before parsing the state
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
             "last_updated": dt_util.utcnow().isoformat(),
         }
+        
+        # Try to determine device class (needs to be before _parse_state)
+        self._determine_device_class()
+        
+        # Now parse the state after attributes and device class are set
+        self._attr_is_on = self._parse_state(initial_state)
+        self._attr_device_info = device_info
 
         # Explicitly set entity_id - this ensures consistent naming
         if hass:
@@ -140,9 +147,6 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                 _LOGGER.exception("Error generating entity_id: %s", ex)
                 # Use a fallback entity_id
                 self.entity_id = f"binary_sensor.{name.lower()}"
-
-        # Try to determine device class
-        self._determine_device_class()
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -190,8 +194,13 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
     def _parse_state(self, state: str) -> bool:
         """Parse the state string to a boolean."""
         try:
-            # Check if we should invert the state based on metric definition
-            invert_state = self._attr_extra_state_attributes.get("invert_state", False)
+            # Get invert state flag in a safe way
+            invert_state = False
+            if hasattr(self, "_attr_extra_state_attributes"):
+                invert_state = self._attr_extra_state_attributes.get("invert_state", False)
+            
+            # Parse the value to boolean
+            result = False
             
             if isinstance(state, str):
                 if state.lower() in ("true", "on", "yes", "1", "open", "locked"):
@@ -210,10 +219,12 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                     result = float(state) > 0
                 except (ValueError, TypeError):
                     result = False
-                    
+            
             # Apply inversion if needed
-            return not result if invert_state else result
-                
+            if invert_state:
+                return not result
+            return result
+            
         except Exception as ex:
             _LOGGER.exception("Error parsing state '%s': %s", state, ex)
             return False
