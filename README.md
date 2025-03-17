@@ -308,9 +308,7 @@ tap_action:
     button: 1
 ```
 
-## State Preservation for Notification Topics in Home Assistant
-
-### Introduction
+### State Preservation for Notification Topics in Home Assistant
 
 Notification topics in Home Assistant are inherently transient, representing momentary events rather than persistent states. As a result, the associated sensors typically remain active for a limited period before transitioning to an `unavailable` status—this behavior is by design.
 
@@ -336,7 +334,7 @@ This template creates a persistent sensor that:
 2. Updates with new information when the original notification sensor is active
 3. Remains continuously available regardless of the source sensor's status
 
-## Implementation Considerations
+### Implementation Considerations
 
 When implementing this solution, you should:
 
