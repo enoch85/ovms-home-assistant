@@ -44,7 +44,7 @@ SET_FEATURE_SCHEMA = vol.Schema({
 CONTROL_CLIMATE_SCHEMA = vol.Schema({
     vol.Required("vehicle_id"): cv.string,
     vol.Optional("temperature"): vol.Coerce(float),
-    vol.Optional("hvac_mode"): vol.In(["off", "heat", "cool", "auto"]),
+    vol.Optional("hvac_mode"): vol.In(["on", "off", "heat", "cool", "auto"]),
     vol.Optional("duration"): vol.Coerce(int),
 })
 
@@ -155,11 +155,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
         try:
             # Build the climate command
-            command = "climatecontrol"
+            command = "climate"
             command_parts = []
 
             if hvac_mode == "off":
                 command_parts.append("off")
+            elif hvac_mode == "on":
+                command_parts.append("on")
             else:
                 if hvac_mode:
                     command_parts.append(hvac_mode)

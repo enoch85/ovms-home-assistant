@@ -84,11 +84,12 @@ control_climate:
           unit_of_measurement: "°C"
     hvac_mode:
       name: HVAC Mode
-      description: Mode to set
+      description: Mode to set (for VW e-UP, use "on" or "off")
       required: false
       selector:
         select:
           options:
+            - "on"
             - "off"
             - "heat"
             - "cool"
