@@ -44,7 +44,7 @@ SET_FEATURE_SCHEMA = vol.Schema({
 CONTROL_CLIMATE_SCHEMA = vol.Schema({
     vol.Required("vehicle_id"): cv.string,
     vol.Optional("temperature"): vol.Coerce(float),
-    vol.Optional("hvac_mode"): vol.In(["off", "on", "heat", "cool", "auto"]),
+    vol.Optional("hvac_mode"): vol.In(["on", "off", "heat", "cool", "auto"]),
     vol.Optional("duration"): vol.Coerce(int),
 })
 
