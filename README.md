@@ -80,6 +80,7 @@ Compared to using the OVMS V2 server, this integration will use more data since 
 - Duration of travel to work: 40 minutes per trip
 
 ![data-usage](/assets/screenshot-data-usage.png)
+*The grah above are showing the usage over one month.*
 
 ## Installation
 
