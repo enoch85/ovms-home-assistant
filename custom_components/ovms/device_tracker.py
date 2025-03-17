@@ -350,8 +350,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                     self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
 
                 if coordinates_changed:
-                    _LOGGER.debug("Updated device tracker coordinates: lat=%s, lon=%s",
-                                 self._latitude, self._longitude)
+                    _LOGGER.debug("Updated device tracker coordinates.")
 
             # Add sensible default for gps_accuracy if necessary
             if "gps_accuracy" not in self._attr_extra_state_attributes:
