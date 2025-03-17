@@ -155,7 +155,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
         try:
             # Build the climate command
-            command = "climate"
+            command = "climatecontrol"
             command_parts = []
 
             if hvac_mode == "off":
