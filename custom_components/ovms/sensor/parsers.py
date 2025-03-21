@@ -57,7 +57,10 @@ def calculate_median(values: List[float]) -> Optional[float]:
     return sorted_values[n//2]
 
 def parse_comma_separated_values(value: str) -> Optional[Dict[str, Any]]:
-    """Parse comma-separated values into a dictionary with statistics."""
+    """Parse comma-separated values into a dictionary with statistics.
+    
+    This adds attributes but does NOT create separate sensors.
+    """
     result = {}
     try:
         # Try to parse all parts as floats
@@ -183,7 +186,10 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             return truncate_state_value(value)
 
 def process_json_payload(payload: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
-    """Process JSON payload to extract additional attributes."""
+    """Process JSON payload to extract additional attributes.
+    
+    This adds attributes but does NOT create separate sensors.
+    """
     updated_attributes = attributes.copy()
 
     try:
