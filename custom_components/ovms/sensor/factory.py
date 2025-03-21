@@ -140,6 +140,11 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         # Also apply diagnostic entity category to network and system sensors
         if category in ["diagnostic", "network", "system"]:
             result["entity_category"] = EntityCategory.DIAGNOSTIC
+            if category != "diagnostic":  # Don't return for network/system to allow further processing
+                _LOGGER.debug(
+                    "Setting EntityCategory.DIAGNOSTIC for %s category: %s",
+                    category, internal_name
+                )
 
     # Special check for timer mode sensors
     if "timermode" in internal_name.lower() or "timer_mode" in internal_name.lower():
@@ -235,7 +240,7 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
             if native_value is not None:
                 try:
                     temp = float(native_value)
-                    if "ambient" in attributes.get("category", "").lower() or "cabin" in attributes.get("category", "").lower():
+                    if "ambient" in updated_attrs.get("category", "").lower() or "cabin" in updated_attrs.get("category", "").lower():
                         if temp < 0:
                             updated_attrs["temperature_level"] = "freezing"
                         elif temp < 10:
@@ -255,8 +260,20 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
 
 def create_cell_sensors(topic: str, cell_values: List[float], 
                         vehicle_id: str, parent_unique_id: str, 
-                        device_info: Dict[str, Any], attributes: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Create configuration for individual cell sensors."""
+                        device_info: Dict[str, Any], attributes: Dict[str, Any],
+                        create_individual_sensors: bool = False) -> List[Dict[str, Any]]:
+    """Create configuration for individual cell sensors.
+    
+    Args:
+        create_individual_sensors: If True, create individual sensors for cells.
+                                 If False, only add as attributes (original behavior).
+    """
+    # NEVER create individual cell sensors by default
+    # This maintains the original behavior where cell values are only attributes
+    # Must be explicitly enabled via configuration
+    if not create_individual_sensors:
+        return []
+        
     # Add topic hash to make unique IDs truly unique
     topic_hash = hashlib.md5(topic.encode()).hexdigest()[:8]
     category = attributes.get("category", "battery")
