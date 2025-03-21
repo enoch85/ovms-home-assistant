@@ -78,6 +78,8 @@ def get_metric_by_path(metric_path):
 
 def get_metric_by_pattern(topic_parts):
     """Try to match a metric by pattern in topic parts."""
+    global METRIC_DEFINITIONS  # Move the global declaration to the beginning of the function
+    
     # First, try to find an exact match of the last path component
     if topic_parts:
         last_part = topic_parts[-1].lower()
@@ -100,7 +102,6 @@ def get_metric_by_pattern(topic_parts):
             if part == "xvu":
                 # This is a VW eUP metric, try to construct a matching key
                 metric_key = ".".join(topic_parts)
-                global METRIC_DEFINITIONS
                 if METRIC_DEFINITIONS is None:
                     # Import only when needed
                     from . import METRIC_DEFINITIONS as MD
@@ -123,7 +124,6 @@ def get_metric_by_pattern(topic_parts):
             if part == "xmg":
                 # This is an MG ZS-EV metric, try to construct a matching key
                 metric_key = ".".join(topic_parts)
-                global METRIC_DEFINITIONS
                 if METRIC_DEFINITIONS is None:
                     # Import only when needed
                     from . import METRIC_DEFINITIONS as MD
@@ -146,7 +146,6 @@ def get_metric_by_pattern(topic_parts):
             if part == "xsq":
                 # This is a Smart ForTwo metric, try to construct a matching key
                 metric_key = ".".join(topic_parts)
-                global METRIC_DEFINITIONS
                 if METRIC_DEFINITIONS is None:
                     # Import only when needed
                     from . import METRIC_DEFINITIONS as MD
