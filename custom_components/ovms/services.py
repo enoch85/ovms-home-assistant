@@ -59,7 +59,11 @@ CONTROL_CHARGING_SCHEMA = vol.Schema({
 # Schema for the homelink service
 HOMELINK_SCHEMA = vol.Schema({
     vol.Required("vehicle_id"): cv.string,
-    vol.Required("button"): vol.In([1, 2, 3]),
+    vol.Required("button"): vol.All(
+        # Ensure it can handle both string and integer inputs
+        vol.Coerce(int),
+        vol.In([1, 2, 3])
+    ),
 })
 
 
