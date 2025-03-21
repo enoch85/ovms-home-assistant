@@ -10,7 +10,7 @@ from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
+from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
 from .parsers import parse_value, process_json_payload, parse_comma_separated_values, requires_numeric_value, is_special_state_value
 from .factory import determine_sensor_type, add_device_specific_attributes, create_cell_sensors
 
@@ -59,7 +59,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         if requires_numeric_value(self._attr_device_class, self._attr_state_class) and is_special_state_value(initial_state):
             self._attr_native_value = None
         else:
-            self._attr_native_value = initial_state
+            self._attr_native_value = truncate_state_value(initial_state)
 
         # Explicitly set entity_id - this ensures consistent naming
         if hass:
@@ -98,7 +98,8 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                     value = float(payload)
                     self._attr_native_value = value
                 except (ValueError, TypeError):
-                    self._attr_native_value = payload
+                    # Make sure the value is truncated if needed
+                    self._attr_native_value = truncate_state_value(payload)
 
             # Update timestamp attribute
             now = dt_util.utcnow()
@@ -166,8 +167,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_entity_category = sensor_type["entity_category"]
         self._attr_icon = sensor_type["icon"]
 
-        # Only set native value after attributes are initialized
-        self._attr_native_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class)
+        # Only set native value after attributes are initialized - with truncation if needed
+        parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class)
+        self._attr_native_value = truncate_state_value(parsed_value)
 
         # Try to extract additional attributes from initial state if it's JSON
         updated_attrs = process_json_payload(initial_state, self._attr_extra_state_attributes)
@@ -206,7 +208,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         @callback
         def update_state(payload: str) -> None:
             """Update the sensor state."""
-            self._attr_native_value = parse_value(payload, self._attr_device_class, self._attr_state_class)
+            # Parse value and apply truncation if needed
+            parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class)
+            self._attr_native_value = truncate_state_value(parsed_value)
 
             # Update timestamp attribute
             now = dt_util.utcnow()

@@ -17,7 +17,8 @@ from .const import (
     DOMAIN,
     LOGGER_NAME,
     SIGNAL_ADD_ENTITIES,
-    SIGNAL_UPDATE_ENTITY
+    SIGNAL_UPDATE_ENTITY,
+    truncate_state_value
 )
 
 from .metrics import get_metric_by_path, get_metric_by_pattern
@@ -167,6 +168,10 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         @callback
         def update_state(payload: str) -> None:
             """Update the switch state."""
+            # Ensure payload is properly truncated if it's a string
+            if isinstance(payload, str) and len(payload) > 255:
+                payload = truncate_state_value(payload)
+                
             self._attr_is_on = self._parse_state(payload)
 
             # Update timestamp attribute
@@ -213,6 +218,10 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             # Not JSON, continue with string parsing
             pass
 
+        # Make sure state is truncated if needed
+        if isinstance(state, str):
+            state = truncate_state_value(state)
+            
         # Check for boolean-like values in string form
         if isinstance(state, str):
             if state.lower() in ("true", "on", "yes", "1", "enabled", "active"):
@@ -301,6 +310,10 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
     def _process_json_payload(self, payload: str) -> None:
         """Process JSON payload to extract additional attributes."""
         try:
+            # Ensure payload is properly truncated if it's a string
+            if isinstance(payload, str) and len(payload) > 255:
+                payload = truncate_state_value(payload)
+                
             json_data = json.loads(payload)
             if isinstance(json_data, dict):
                 # Add useful attributes from the data

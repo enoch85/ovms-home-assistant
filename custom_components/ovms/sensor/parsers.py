@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.util import dt as dt_util
 
-from ..const import LOGGER_NAME
+from ..const import LOGGER_NAME, MAX_STATE_LENGTH, truncate_state_value
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -25,6 +25,7 @@ NUMERIC_DEVICE_CLASSES = [
 
 # Special string values that should be converted to None for numeric sensors
 SPECIAL_STATE_VALUES = ["unavailable", "unknown", "none", "", "null", "nan"]
+
 
 def requires_numeric_value(device_class: Any, state_class: Any) -> bool:
     """Check if this sensor requires a numeric value based on its device class."""
@@ -131,12 +132,12 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
 
             # If we have a result, return it; otherwise fall back to string representation
             if result is not None:
-                return result
+                return truncate_state_value(result)
 
             # If we need a numeric value but couldn't extract one, return None
             if requires_numeric_value(device_class, state_class):
                 return None
-            return str(json_val)
+            return truncate_state_value(str(json_val))
 
         # If JSON is a scalar, use it directly
         if isinstance(json_val, (int, float)):
@@ -153,7 +154,7 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
                     return float(json_val)
                 except (ValueError, TypeError):
                     return None
-            return json_val
+            return truncate_state_value(json_val)
 
         if isinstance(json_val, bool):
             # If we need a numeric value, convert bool to int
@@ -164,7 +165,7 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
         # For arrays or other types, convert to string if not numeric
         if requires_numeric_value(device_class, state_class):
             return None
-        return str(json_val)
+        return truncate_state_value(str(json_val))
 
     except (ValueError, json.JSONDecodeError):
         # Not JSON, try numeric
@@ -178,8 +179,8 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             # If we need a numeric value but couldn't convert, return None
             if requires_numeric_value(device_class, state_class):
                 return None
-            # Otherwise return as string
-            return value
+            # Otherwise return as string with truncation if needed
+            return truncate_state_value(value)
 
 def process_json_payload(payload: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
     """Process JSON payload to extract additional attributes."""
