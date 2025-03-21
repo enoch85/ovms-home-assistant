@@ -57,10 +57,7 @@ def calculate_median(values: List[float]) -> Optional[float]:
     return sorted_values[n//2]
 
 def parse_comma_separated_values(value: str) -> Optional[Dict[str, Any]]:
-    """Parse comma-separated values into a dictionary with statistics.
-    
-    This adds attributes but does NOT create separate sensors.
-    """
+    """Parse comma-separated values into a dictionary with statistics."""
     result = {}
     try:
         # Try to parse all parts as floats
@@ -75,10 +72,12 @@ def parse_comma_separated_values(value: str) -> Optional[Dict[str, Any]]:
             result["mean"] = sum(parts) / len(parts)
             result["min"] = min(parts)
             result["max"] = max(parts)
-
-            # Store individual cell values with descriptive names
-            for i, val in enumerate(parts):
-                result[f"cell_{i+1}"] = val
+            result["min_value"] = min(parts)  # Legacy attribute name
+            result["max_value"] = max(parts)  # Legacy attribute name
+            result["mean_value"] = sum(parts) / len(parts)  # Legacy attribute name
+            result["median_value"] = calculate_median(parts)  # Legacy attribute name
+            result["values"] = parts  # Legacy attribute name
+            result["count"] = len(parts)  # Legacy attribute name
 
             # Return average as the main value, rounded to 4 decimal places
             result["value"] = round(sum(parts) / len(parts), 4)
@@ -186,22 +185,10 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             return truncate_state_value(value)
 
 def process_json_payload(payload: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
-    """Process JSON payload to extract additional attributes.
-    
-    This adds attributes but does NOT create separate sensors.
-    """
+    """Process JSON payload to extract additional attributes."""
     updated_attributes = attributes.copy()
 
     try:
-        # Check if payload is a comma-separated list of values (cell data)
-        if isinstance(payload, str) and "," in payload:
-            result = parse_comma_separated_values(payload)
-            if result:
-                # Add statistical attributes from the result
-                for key, value in result.items():
-                    if key != "value":  # Skip the main value as we just need attributes
-                        updated_attributes[key] = value
-
         # Try to parse as JSON
         try:
             json_data = json.loads(payload) if isinstance(payload, str) else payload
