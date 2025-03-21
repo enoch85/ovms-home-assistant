@@ -13,7 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from .const import (
+from ..const import (
     DOMAIN,
     LOGGER_NAME,
     SIGNAL_ADD_ENTITIES,
@@ -21,7 +21,7 @@ from .const import (
     truncate_state_value
 )
 
-from .metrics import get_metric_by_path, get_metric_by_pattern
+from ..metrics import get_metric_by_path, get_metric_by_pattern
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
