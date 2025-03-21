@@ -89,9 +89,8 @@ ERROR_UNKNOWN = "unknown"
 DEFAULT_COMMAND_RATE_LIMIT = 5  # commands per minute
 DEFAULT_COMMAND_RATE_PERIOD = 60.0  # seconds
 
-# Home Assistant state limits
-MAX_STATE_LENGTH = 255  # Maximum length for entity state values
-
+# Maximum length for state values in Home Assistant
+MAX_STATE_LENGTH = 255
 
 def truncate_state_value(value, max_length=MAX_STATE_LENGTH):
     """Truncate state value to the maximum allowed length.
