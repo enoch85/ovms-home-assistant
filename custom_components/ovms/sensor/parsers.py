@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.util import dt as dt_util
 
-from ..const import LOGGER_NAME
+from ..const import LOGGER_NAME, MAX_STATE_LENGTH, truncate_state_value
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -26,23 +26,6 @@ NUMERIC_DEVICE_CLASSES = [
 # Special string values that should be converted to None for numeric sensors
 SPECIAL_STATE_VALUES = ["unavailable", "unknown", "none", "", "null", "nan"]
 
-# Maximum length for state values in Home Assistant
-MAX_STATE_LENGTH = 255
-
-def truncate_state_value(value, max_length=MAX_STATE_LENGTH):
-    """Truncate state value to the maximum allowed length."""
-    if value is None:
-        return None
-        
-    # Convert to string if not already
-    if not isinstance(value, str):
-        value = str(value)
-    
-    # Check length and truncate if needed
-    if len(value) > max_length:
-        return value[:max_length-3] + "..."
-        
-    return value
 
 def requires_numeric_value(device_class: Any, state_class: Any) -> bool:
     """Check if this sensor requires a numeric value based on its device class."""
