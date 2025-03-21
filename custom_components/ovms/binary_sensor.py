@@ -18,7 +18,8 @@ from homeassistant.util import dt as dt_util
 from .const import (
     LOGGER_NAME,
     SIGNAL_ADD_ENTITIES,
-    SIGNAL_UPDATE_ENTITY
+    SIGNAL_UPDATE_ENTITY,
+    truncate_state_value
 )
 
 from .metrics import (
@@ -171,6 +172,10 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
             def update_state(payload: str) -> None:
                 """Update the sensor state."""
                 try:
+                    # Ensure payload is properly truncated if it's a string
+                    if isinstance(payload, str) and len(payload) > 255:
+                        payload = truncate_state_value(payload)
+                        
                     self._attr_is_on = self._parse_state(payload)
 
                     # Update timestamp attribute
@@ -203,6 +208,9 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
             result = False
             
             if isinstance(state, str):
+                # Make sure state is truncated if needed
+                state = truncate_state_value(state)
+                
                 if state.lower() in ("true", "on", "yes", "1", "open", "locked"):
                     result = True
                 elif state.lower() in ("false", "off", "no", "0", "closed", "unlocked"):
