@@ -108,7 +108,7 @@ class TopicParser:
             ):
                 return None
 
-            # Handle vendor-specific prefixes (like xvu)
+            # Handle vendor-specific prefixes (like xvu, xsq, xmg)
             metric_path = self._convert_to_metric_path(parts)
 
             # Determine entity type and category
@@ -149,15 +149,18 @@ class TopicParser:
 
     def _convert_to_metric_path(self, parts: List[str]) -> str:
         """Convert topic parts to metric path."""
-        # Keep xvu prefix intact for VW e-UP metrics
+        # Keep vendor-specific prefixes intact
         if len(parts) >= 2:
+            # VW e-UP metrics
             if "xvu" in parts:
-                # For vendor-specific metrics, preserve the entire path including xvu
                 return ".".join(parts)
 
-            # Keep xsq prefix intact for Smart ForTwo metrics
+            # Smart ForTwo metrics
             if "xsq" in parts:
-                # For vendor-specific metrics, preserve the entire path including xsq
+                return ".".join(parts)
+                
+            # MG ZS-EV metrics
+            if "xmg" in parts:
                 return ".".join(parts)
 
             # Metric specific prefixes
@@ -219,6 +222,11 @@ class TopicParser:
                 "locked",
                 "door",
                 "charging",
+                "fan",       # Added for MG ZS-EV radiator fan
+                "relay",     # Added for MG ZS-EV relays
+                "error",     # Added for MG ZS-EV battery error
+                "auth",      # Added for MG ZS-EV auth
+                "polling",   # Added for MG ZS-EV polling
             ]
 
             # Special handling for "on" to avoid false matches
