@@ -72,12 +72,10 @@ def parse_comma_separated_values(value: str) -> Optional[Dict[str, Any]]:
             result["mean"] = sum(parts) / len(parts)
             result["min"] = min(parts)
             result["max"] = max(parts)
-            result["min_value"] = min(parts)  # Legacy attribute name
-            result["max_value"] = max(parts)  # Legacy attribute name
-            result["mean_value"] = sum(parts) / len(parts)  # Legacy attribute name
-            result["median_value"] = calculate_median(parts)  # Legacy attribute name
-            result["values"] = parts  # Legacy attribute name
-            result["count"] = len(parts)  # Legacy attribute name
+
+            # Store individual cell values with descriptive names
+            for i, val in enumerate(parts):
+                result[f"cell_{i+1}"] = val
 
             # Return average as the main value, rounded to 4 decimal places
             result["value"] = round(sum(parts) / len(parts), 4)
@@ -104,6 +102,7 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
     if isinstance(value, str) and "," in value:
         parsed = parse_comma_separated_values(value)
         if parsed:
+            # Store cell values in the result, but return the average
             return parsed["value"]
 
     # Try parsing as JSON first
@@ -185,10 +184,19 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             return truncate_state_value(value)
 
 def process_json_payload(payload: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
-    """Process JSON payload to extract additional attributes."""
+    """Process JSON payload to extract additional attributes with focus on cell values as attributes."""
     updated_attributes = attributes.copy()
 
     try:
+        # First check if payload is a comma-separated list of values (cell data)
+        if isinstance(payload, str) and "," in payload:
+            result = parse_comma_separated_values(payload)
+            if result:
+                # Add all cell values and statistics directly as attributes
+                for key, value in result.items():
+                    if key != "value":  # Skip the main value as we just need attributes
+                        updated_attributes[key] = value
+
         # Try to parse as JSON
         try:
             json_data = json.loads(payload) if isinstance(payload, str) else payload
@@ -222,6 +230,10 @@ def process_json_payload(payload: str, attributes: Dict[str, Any]) -> Dict[str, 
                     updated_attributes["max_value"] = max(numeric_values)
                     updated_attributes["mean_value"] = sum(numeric_values) / len(numeric_values)
                     updated_attributes["median_value"] = calculate_median(numeric_values)
+                    
+                    # Add individual values as attributes
+                    for i, val in enumerate(numeric_values):
+                        updated_attributes[f"value_{i+1}"] = val
                 except (ValueError, TypeError):
                     # Not all elements are numeric
                     pass
