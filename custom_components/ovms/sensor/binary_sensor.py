@@ -15,14 +15,14 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from .const import (
+from ..const import (
     LOGGER_NAME,
     SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY,
     truncate_state_value
 )
 
-from .metrics import (
+from ..metrics import (
     METRIC_DEFINITIONS,
     TOPIC_PATTERNS,
     BINARY_METRICS,
