@@ -72,12 +72,6 @@ def parse_comma_separated_values(value: str) -> Optional[Dict[str, Any]]:
             result["mean"] = sum(parts) / len(parts)
             result["min"] = min(parts)
             result["max"] = max(parts)
-            result["min_value"] = min(parts)  # Legacy attribute name
-            result["max_value"] = max(parts)  # Legacy attribute name
-            result["mean_value"] = sum(parts) / len(parts)  # Legacy attribute name
-            result["median_value"] = calculate_median(parts)  # Legacy attribute name
-            result["values"] = parts  # Legacy attribute name
-            result["count"] = len(parts)  # Legacy attribute name
 
             # Return average as the main value, rounded to 4 decimal places
             result["value"] = round(sum(parts) / len(parts), 4)
