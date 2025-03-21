@@ -163,8 +163,8 @@ homelink:
         select:
           options:
             - label: "Button 1: 5min climate boost"
-              value: "1"
+              value: 1
             - label: "Button 2: 10min climate boost"
-              value: "2"
+              value: 2
             - label: "Button 3: 15min climate boost or 12V charging"
-              value: "3"
+              value: 3
