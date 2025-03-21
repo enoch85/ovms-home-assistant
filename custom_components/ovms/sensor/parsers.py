@@ -73,6 +73,11 @@ def parse_comma_separated_values(value: str) -> Optional[Dict[str, Any]]:
             result["min"] = min(parts)
             result["max"] = max(parts)
 
+            # Store individual cell values with descriptive names
+            stat_type = "cell"
+            for i, val in enumerate(parts):
+                result[f"{stat_type}_{i+1}"] = val
+
             # Return average as the main value, rounded to 4 decimal places
             result["value"] = round(sum(parts) / len(parts), 4)
             return result
@@ -183,6 +188,26 @@ def process_json_payload(payload: str, attributes: Dict[str, Any]) -> Dict[str, 
     updated_attributes = attributes.copy()
 
     try:
+        # First check if payload is a comma-separated list of values (cell data)
+        if isinstance(payload, str) and "," in payload:
+            try:
+                values = [float(val.strip()) for val in payload.split(",") if val.strip()]
+                if values:
+                    # Add statistical attributes
+                    updated_attributes["min_value"] = min(values)
+                    updated_attributes["max_value"] = max(values)
+                    updated_attributes["mean_value"] = sum(values) / len(values)
+                    updated_attributes["median_value"] = calculate_median(values)
+                    updated_attributes["count"] = len(values)
+                    updated_attributes["values"] = values
+
+                    # Add cell-specific attributes
+                    for i, val in enumerate(values):
+                        updated_attributes[f"cell_{i+1}"] = val
+            except (ValueError, TypeError):
+                # Not a list of numbers, continue with JSON parsing
+                pass
+
         # Try to parse as JSON
         try:
             json_data = json.loads(payload) if isinstance(payload, str) else payload
@@ -195,6 +220,10 @@ def process_json_payload(payload: str, attributes: Dict[str, Any]) -> Dict[str, 
                 # If there's a timestamp in the JSON, use it
                 if "timestamp" in json_data:
                     updated_attributes["device_timestamp"] = json_data["timestamp"]
+
+                # If there's a unit in the JSON, use it for native unit
+                if "unit" in json_data and "unit_of_measurement" not in updated_attributes:
+                    updated_attributes["unit"] = json_data["unit"]
 
                 # Extract and add any nested attributes
                 for key, value in json_data.items():
@@ -226,6 +255,10 @@ def process_json_payload(payload: str, attributes: Dict[str, Any]) -> Dict[str, 
 
         # Update timestamp
         updated_attributes["last_updated"] = dt_util.utcnow().isoformat()
+        
+        # Add full topic path for debugging
+        if "topic" in attributes:
+            updated_attributes["full_topic"] = attributes["topic"]
 
     except Exception as ex:
         _LOGGER.exception("Error processing attributes: %s", ex)
