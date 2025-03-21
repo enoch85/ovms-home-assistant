@@ -151,6 +151,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         }
         self.hass = hass
 
+        # Get config settings
+        self._enable_cell_sensors = False
+        for entry_id, data in hass.data.get(DOMAIN, {}).items():
+            if hasattr(data, "config") and "enable_cell_sensors" in data.config:
+                self._enable_cell_sensors = data.config.get("enable_cell_sensors", False)
+                break
+
         # Explicitly set entity_id - this ensures consistent naming
         if hass:
             self.entity_id = async_generate_entity_id(
@@ -187,6 +194,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._cell_sensors_created = False
         self._cell_sensors = []
 
+        # Process initial state for cells
+        self._process_cell_values(initial_state)
+
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
         await super().async_added_to_hass()
@@ -204,6 +214,10 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     if k not in ["device_class", "state_class", "unit_of_measurement"]
                 }
                 self._attr_extra_state_attributes.update(saved_attributes)
+                
+            # Restore the cell sensors created flag from attributes if it was saved
+            if "_cell_sensors_created" in state.attributes:
+                self._cell_sensors_created = state.attributes.get("_cell_sensors_created", False)
 
         @callback
         def update_state(payload: str) -> None:
@@ -216,12 +230,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             now = dt_util.utcnow()
             self._attr_extra_state_attributes["last_updated"] = now.isoformat()
 
+            # Process the payload for cell values
+            self._process_cell_values(payload)
+
             # Try to extract additional attributes from payload if it's JSON
             updated_attrs = process_json_payload(payload, self._attr_extra_state_attributes)
             self._attr_extra_state_attributes.update(updated_attrs)
-
-            # Handle cell values in payload
-            self._handle_cell_values(payload)
 
             # Add device-specific attributes
             updated_attrs = add_device_specific_attributes(
@@ -230,6 +244,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 self._attr_native_value
             )
             self._attr_extra_state_attributes.update(updated_attrs)
+
+            # Save the cell sensors created flag in attributes
+            self._attr_extra_state_attributes["_cell_sensors_created"] = self._cell_sensors_created
 
             self.async_write_ha_state()
 
@@ -241,8 +258,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             )
         )
 
-    def _handle_cell_values(self, payload: str) -> None:
-        """Handle cell values in payload."""
+    def _process_cell_values(self, payload: str) -> None:
+        """Process cell values from payload."""
         # Check if this is a comma-separated list of values (cell data)
         if isinstance(payload, str) and "," in payload:
             try:
@@ -251,14 +268,21 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 if result and "cell_values" in result:
                     cell_values = result["cell_values"]
                     
-                    # Update existing cell sensors if they exist
-                    if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created:
-                        self._update_cell_sensor_values(cell_values)
-                    # Create new cell sensors if not yet created
-                    elif not getattr(self, '_cell_sensors_created', False):
-                        self._create_cell_sensors(cell_values)
+                    # Add all cell values as attributes to THIS sensor
+                    for key, value in result.items():
+                        if key != "value":  # Skip the main value as we only want attributes
+                            self._attr_extra_state_attributes[key] = value
+                    
+                    # If enabled, create separate cell sensors
+                    if self._enable_cell_sensors:
+                        if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created:
+                            # Update existing cell sensors
+                            self._update_cell_sensor_values(cell_values)
+                        else:
+                            # Create new cell sensors
+                            self._create_cell_sensors(cell_values)
             except Exception as ex:
-                _LOGGER.exception("Error handling cell values: %s", ex)
+                _LOGGER.exception("Error processing cell values: %s", ex)
 
     def _update_cell_sensor_values(self, cell_values: List[float]) -> None:
         """Update the values of existing cell sensors."""
@@ -278,6 +302,10 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
     def _create_cell_sensors(self, cell_values: List[float]) -> None:
         """Create individual sensors for each cell value."""
+        # Skip if separate cell sensors are disabled
+        if not self._enable_cell_sensors:
+            return
+            
         # Skip creating individual sensors if the flag is set
         if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created:
             return
@@ -311,7 +339,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._cell_sensors_created = True
         
         # Create and add entities through the entity discovery mechanism
-        if sensor_configs:
+        if sensor_configs and self._enable_cell_sensors:
             async_dispatcher_send(
                 self.hass,
                 SIGNAL_ADD_ENTITIES,
