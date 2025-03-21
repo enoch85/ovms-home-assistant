@@ -10,11 +10,8 @@ from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
-from .parsers import (
-    parse_value, process_json_payload, parse_comma_separated_values, 
-    requires_numeric_value, is_special_state_value, truncate_state_value
-)
+from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
+from .parsers import parse_value, process_json_payload, parse_comma_separated_values, requires_numeric_value, is_special_state_value
 from .factory import determine_sensor_type, add_device_specific_attributes, create_cell_sensors
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
