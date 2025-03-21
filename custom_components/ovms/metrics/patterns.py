@@ -184,6 +184,11 @@ TOPIC_PATTERNS = {
         "icon": "mdi:car-electric",
         "category": "smart_fortwo",
     },
+    "xmg": {
+        "name": "MG ZS-EV",
+        "icon": "mdi:car-electric",
+        "category": "mg_zs_ev",
+    },
     # Add specific patterns for our problematic metrics
     "egpio_input": {
         "name": "GPIO Input Ports",
@@ -217,5 +222,31 @@ TOPIC_PATTERNS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfFrequency.HERTZ,  # Added unit for frequency
         "category": "system",
+    },
+    "torque": {
+        "name": "Torque",
+        "icon": "mdi:gauge",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": "Nm",
+        "category": "motor",
+    },
+    "coolant": {
+        "name": "Coolant Temperature",
+        "icon": "mdi:thermometer",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+        "category": "climate",
+    },
+    "resistance": {
+        "name": "Resistance",
+        "icon": "mdi:resistor",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "battery",
+    },
+    "dcdc": {
+        "name": "DC-DC Converter",
+        "icon": "mdi:car-battery",
+        "category": "power",
     },
 }

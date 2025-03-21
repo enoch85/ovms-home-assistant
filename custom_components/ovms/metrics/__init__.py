@@ -41,7 +41,7 @@ from .common import (
 )
 
 # Import vehicle-specific metrics
-from .vehicles import VW_EUP_METRICS, SMART_FORTWO_METRICS
+from .vehicles import VW_EUP_METRICS, SMART_FORTWO_METRICS, MG_ZS_EV_METRICS
 
 # Import patterns and utils
 from .patterns import TOPIC_PATTERNS
@@ -71,6 +71,7 @@ CATEGORY_SYSTEM = "system"
 CATEGORY_TIRE = "tire"
 CATEGORY_VW_EUP = "vw_eup"
 CATEGORY_SMART_FORTWO = "smart_fortwo"
+CATEGORY_MG_ZS_EV = "mg_zs_ev"
 
 # Combine all metrics into the master dictionary
 METRIC_DEFINITIONS = {
@@ -89,6 +90,7 @@ METRIC_DEFINITIONS = {
     **TIRE_METRICS,
     **VW_EUP_METRICS,
     **SMART_FORTWO_METRICS,
+    **MG_ZS_EV_METRICS,
 }
 
 # Group metrics by categories
@@ -150,6 +152,9 @@ METRIC_CATEGORIES = {
     CATEGORY_SMART_FORTWO: [
         k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_SMART_FORTWO
     ],
+    CATEGORY_MG_ZS_EV: [
+        k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_MG_ZS_EV
+    ],
 }
 
 # Binary metrics that should be boolean - includes only actual binary metrics
@@ -197,4 +202,12 @@ PREFIX_CATEGORIES = {
     "xsq.odometer": CATEGORY_SMART_FORTWO,
     "xsq.use": CATEGORY_SMART_FORTWO,
     "xsq.v": CATEGORY_SMART_FORTWO,
+    "xmg.b": CATEGORY_MG_ZS_EV,
+    "xmg.c": CATEGORY_MG_ZS_EV,
+    "xmg.p": CATEGORY_MG_ZS_EV,
+    "xmg.v": CATEGORY_MG_ZS_EV,
+    "xmg.state": CATEGORY_MG_ZS_EV,
+    "xmg.task": CATEGORY_MG_ZS_EV,
+    "xmg.enable": CATEGORY_MG_ZS_EV,
+    "xmg.auth": CATEGORY_MG_ZS_EV,
 }
