@@ -16,12 +16,6 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up OVMS sensors based on a config entry."""
-    # Get config data with defaults
-    config = entry.data.copy()
-    config.update(entry.options)
-    # Default to not creating individual cell sensors
-    create_cell_sensors = config.get("create_cell_sensors", False)
-    
     @callback
     def async_add_sensor(data: Dict[str, Any]) -> None:
         """Add sensor based on discovery data."""
@@ -39,40 +33,35 @@ async def async_setup_entry(
         if "cell_sensors" in data:
             _LOGGER.debug("Adding cell sensors from parent entity: %s", data.get("parent_entity"))
             try:
-                # Only add cell sensors if explicitly configured
-                if create_cell_sensors:
-                    sensors = []
-                    for cell_config in data["cell_sensors"]:
-                        sensor = CellVoltageSensor(
-                            cell_config["unique_id"],
-                            cell_config["name"],
-                            cell_config.get("topic", ""),
-                            cell_config.get("state"),
-                            cell_config.get("device_info", {}),
-                            cell_config.get("attributes", {}),
-                            cell_config.get("friendly_name"),
-                            hass,
-                        )
-                        sensors.append(sensor)
+                sensors = []
+                for cell_config in data["cell_sensors"]:
+                    sensor = CellVoltageSensor(
+                        cell_config["unique_id"],
+                        cell_config["name"],
+                        cell_config.get("topic", ""),
+                        cell_config.get("state"),
+                        cell_config.get("device_info", {}),
+                        cell_config.get("attributes", {}),
+                        cell_config.get("friendly_name"),
+                        hass,
+                    )
+                    sensors.append(sensor)
 
-                    async_add_entities(sensors)
-                else:
-                    _LOGGER.debug("Skipping cell sensor creation as per configuration")
+                async_add_entities(sensors)
             except Exception as ex:
                 _LOGGER.error("Error creating cell sensors: %s", ex)
             return
 
         try:
             sensor = OVMSSensor(
-                unique_id=data.get("unique_id", ""),
-                name=data.get("name", "unknown"),
-                topic=data.get("topic", ""),
-                initial_state=data.get("payload", ""),
-                device_info=data.get("device_info", {}),
-                attributes=data.get("attributes", {}),
-                friendly_name=data.get("friendly_name"),
-                hass=hass,
-                config=config
+                data.get("unique_id", ""),
+                data.get("name", "unknown"),
+                data.get("topic", ""),
+                data.get("payload", ""),
+                data.get("device_info", {}),
+                data.get("attributes", {}),
+                data.get("friendly_name"),
+                hass,
             )
 
             async_add_entities([sensor])
