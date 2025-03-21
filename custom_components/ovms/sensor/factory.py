@@ -268,6 +268,9 @@ def create_cell_sensors(topic: str, cell_values: List[float],
         create_individual_sensors: If True, create individual sensors for cells.
                                  If False, only add as attributes (original behavior).
     """
+    # NEVER create individual cell sensors by default
+    # This maintains the original behavior where cell values are only attributes
+    # Must be explicitly enabled via configuration
     if not create_individual_sensors:
         return []
         
