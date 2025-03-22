@@ -56,16 +56,26 @@ def calculate_median(values: List[float]) -> Optional[float]:
         return (sorted_values[n//2 - 1] + sorted_values[n//2]) / 2
     return sorted_values[n//2]
 
-def parse_comma_separated_values(value: str) -> Optional[Dict[str, Any]]:
-    """Parse comma-separated values into a dictionary with statistics."""
+def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sensor: bool = False, stat_type: str = "cell") -> Optional[Dict[str, Any]]:
+    """Parse comma-separated values into a dictionary with statistics.
+    
+    Args:
+        value: The comma-separated string of values
+        entity_name: The name of the entity for determining attribute type
+        is_cell_sensor: Whether this is a cell-type sensor (battery cells, etc)
+        stat_type: The specific attribute type to use (voltage, temp, etc)
+    """
+    if not is_cell_sensor:
+        return None  # Skip processing if not a cell sensor
+        
     result = {}
     try:
         # Try to parse all parts as floats
         parts = [float(part.strip()) for part in value.split(",") if part.strip()]
         if parts:
-            # Store the array in attributes
-            result["cell_values"] = parts
-            result["cell_count"] = len(parts)
+            # Store the array in attributes - use only one consistent naming
+            result[f"{stat_type}_values"] = parts
+            result["count"] = len(parts)
 
             # Calculate and store statistics
             result["median"] = calculate_median(parts)
@@ -73,8 +83,7 @@ def parse_comma_separated_values(value: str) -> Optional[Dict[str, Any]]:
             result["min"] = min(parts)
             result["max"] = max(parts)
 
-            # Store individual cell values with descriptive names
-            stat_type = "cell"
+            # Store individual values with descriptive names
             for i, val in enumerate(parts):
                 result[f"{stat_type}_{i+1}"] = val
 
@@ -85,7 +94,8 @@ def parse_comma_separated_values(value: str) -> Optional[Dict[str, Any]]:
         pass
     return None
 
-def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None) -> Any:
+def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None, 
+                is_cell_sensor: bool = False) -> Any:
     """Parse the value from the payload."""
     # Handle special state values for numeric sensors
     if requires_numeric_value(device_class, state_class) and is_special_state_value(value):
@@ -99,11 +109,17 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
         if value.lower() in ["yes", "on", "true", "enabled"]:
             return 1
 
-    # Check if this is a comma-separated list of numbers
-    if isinstance(value, str) and "," in value:
-        parsed = parse_comma_separated_values(value)
-        if parsed:
-            return parsed["value"]
+    # Check if this is a comma-separated list of numbers for a cell sensor
+    if is_cell_sensor and isinstance(value, str) and "," in value:
+        # For cell sensors with comma separated values, we'll extract the average
+        # as the state but this will be handled by _handle_cell_values 
+        # for attribute processing
+        try:
+            values = [float(part.strip()) for part in value.split(",") if part.strip()]
+            if values:
+                return round(sum(values) / len(values), 4)
+        except (ValueError, TypeError):
+            pass
 
     # Try parsing as JSON first
     try:
@@ -183,75 +199,67 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             # Otherwise return as string with truncation if needed
             return truncate_state_value(value)
 
-def process_json_payload(payload: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
-    """Process JSON payload to extract additional attributes."""
+def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: str = "", 
+                        is_cell_sensor: bool = False, stat_type: str = "cell") -> Dict[str, Any]:
+    """Process JSON payload to extract additional attributes.
+    
+    Args:
+        payload: The payload to process
+        attributes: Existing attributes to update
+        entity_name: The name of the entity for determining attribute type
+        is_cell_sensor: Whether this is a cell-type sensor (battery cells, etc)
+        stat_type: The specific attribute type to use (voltage, temp, etc)
+    """
     updated_attributes = attributes.copy()
 
     try:
-        # First check if payload is a comma-separated list of values (cell data)
-        if isinstance(payload, str) and "," in payload:
+        # Skip cell value processing here - handled by _handle_cell_values instead
+        # to avoid duplication of processing
+        if not (is_cell_sensor and isinstance(payload, str) and "," in payload):
+            # Try to parse as JSON
             try:
-                values = [float(val.strip()) for val in payload.split(",") if val.strip()]
-                if values:
-                    # Add statistical attributes
-                    updated_attributes["min_value"] = min(values)
-                    updated_attributes["max_value"] = max(values)
-                    updated_attributes["mean_value"] = sum(values) / len(values)
-                    updated_attributes["median_value"] = calculate_median(values)
-                    updated_attributes["count"] = len(values)
-                    updated_attributes["values"] = values
+                json_data = json.loads(payload) if isinstance(payload, str) else payload
+                if isinstance(json_data, dict):
+                    # Add all fields as attributes
+                    for key, value in json_data.items():
+                        if key not in ["value", "state", "data"] and key not in updated_attributes:
+                            updated_attributes[key] = value
 
-                    # Add cell-specific attributes
-                    for i, val in enumerate(values):
-                        updated_attributes[f"cell_{i+1}"] = val
-            except (ValueError, TypeError):
-                # Not a list of numbers, continue with JSON parsing
+                    # If there's a timestamp in the JSON, use it
+                    if "timestamp" in json_data:
+                        updated_attributes["device_timestamp"] = json_data["timestamp"]
+
+                    # If there's a unit in the JSON, use it for native unit
+                    if "unit" in json_data and "unit_of_measurement" not in updated_attributes:
+                        updated_attributes["unit"] = json_data["unit"]
+
+                    # Extract and add any nested attributes
+                    for key, value in json_data.items():
+                        if isinstance(value, dict):
+                            for subkey, subvalue in value.items():
+                                attr_key = f"{key}_{subkey}"
+                                if attr_key not in updated_attributes:
+                                    updated_attributes[attr_key] = subvalue
+
+                # If JSON is an array, add array attributes
+                elif isinstance(json_data, list):
+                    updated_attributes["list_values"] = json_data
+                    updated_attributes["list_length"] = len(json_data)
+
+                    # Try to convert to numbers and add statistics
+                    try:
+                        numeric_values = [float(val) for val in json_data]
+                        updated_attributes["min"] = min(numeric_values)
+                        updated_attributes["max"] = max(numeric_values)
+                        updated_attributes["mean"] = sum(numeric_values) / len(numeric_values)
+                        updated_attributes["median"] = calculate_median(numeric_values)
+                    except (ValueError, TypeError):
+                        # Not all elements are numeric
+                        pass
+
+            except (ValueError, json.JSONDecodeError):
+                # Not JSON, that's fine
                 pass
-
-        # Try to parse as JSON
-        try:
-            json_data = json.loads(payload) if isinstance(payload, str) else payload
-            if isinstance(json_data, dict):
-                # Add all fields as attributes
-                for key, value in json_data.items():
-                    if key not in ["value", "state", "data"] and key not in updated_attributes:
-                        updated_attributes[key] = value
-
-                # If there's a timestamp in the JSON, use it
-                if "timestamp" in json_data:
-                    updated_attributes["device_timestamp"] = json_data["timestamp"]
-
-                # If there's a unit in the JSON, use it for native unit
-                if "unit" in json_data and "unit_of_measurement" not in updated_attributes:
-                    updated_attributes["unit"] = json_data["unit"]
-
-                # Extract and add any nested attributes
-                for key, value in json_data.items():
-                    if isinstance(value, dict):
-                        for subkey, subvalue in value.items():
-                            attr_key = f"{key}_{subkey}"
-                            if attr_key not in updated_attributes:
-                                updated_attributes[attr_key] = subvalue
-
-            # If JSON is an array, add array attributes
-            elif isinstance(json_data, list):
-                updated_attributes["list_values"] = json_data
-                updated_attributes["list_length"] = len(json_data)
-
-                # Try to convert to numbers and add statistics
-                try:
-                    numeric_values = [float(val) for val in json_data]
-                    updated_attributes["min_value"] = min(numeric_values)
-                    updated_attributes["max_value"] = max(numeric_values)
-                    updated_attributes["mean_value"] = sum(numeric_values) / len(numeric_values)
-                    updated_attributes["median_value"] = calculate_median(numeric_values)
-                except (ValueError, TypeError):
-                    # Not all elements are numeric
-                    pass
-
-        except (ValueError, json.JSONDecodeError):
-            # Not JSON, that's fine
-            pass
 
         # Update timestamp
         updated_attributes["last_updated"] = dt_util.utcnow().isoformat()

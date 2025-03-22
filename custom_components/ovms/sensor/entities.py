@@ -172,13 +172,34 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_entity_category = sensor_type["entity_category"]
         self._attr_icon = sensor_type["icon"]
 
+        # Flag to indicate if this is a cell sensor
+        self._is_cell_sensor = (
+            ("cell" in self._topic.lower() or 
+             "voltage" in self._topic.lower() or 
+             "temp" in self._topic.lower()) and
+            self._attr_extra_state_attributes.get("category") == "battery"
+        )
+        
+        # Determine appropriate attribute type name based on the sensor
+        self._stat_type = "cell"  # Default fallback
+        if "temp" in self._internal_name.lower():
+            self._stat_type = "temp"
+        elif "voltage" in self._internal_name.lower():
+            self._stat_type = "voltage"
+
         # Only set native value after attributes are initialized - with truncation if needed
-        parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class)
+        parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
         self._attr_native_value = truncate_state_value(parsed_value)
 
-        # Try to extract additional attributes from initial state if it's JSON
-        updated_attrs = process_json_payload(initial_state, self._attr_extra_state_attributes)
-        self._attr_extra_state_attributes.update(updated_attrs)
+        # Try to extract additional attributes from initial state if it's JSON or cell values
+        if self._is_cell_sensor and isinstance(initial_state, str) and "," in initial_state:
+            # Cell values - process directly with our preferred attribute names
+            self._handle_cell_values(initial_state)
+        else:
+            # Not cell values or already handled - process as JSON
+            updated_attrs = process_json_payload(initial_state, self._attr_extra_state_attributes, 
+                                               self._internal_name, self._is_cell_sensor, self._stat_type)
+            self._attr_extra_state_attributes.update(updated_attrs)
 
         # Add device-specific attributes
         updated_attrs = add_device_specific_attributes(
@@ -191,42 +212,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Initialize cell sensors tracking
         self._cell_sensors_created = False
         self._cell_sensors = []
-
-        # Process initial state for cell values
-        self._process_initial_cell_values(initial_state)
-
-    def _process_initial_cell_values(self, initial_state: str) -> None:
-        """Process initial state for cell values."""
-        if isinstance(initial_state, str) and "," in initial_state:
-            try:
-                # Check if this is a comma-separated list of numbers (cell data)
-                values = [float(val.strip()) for val in initial_state.split(",") if val.strip()]
-                if values:
-                    # Calculate and add statistical attributes - like in the original code
-                    median_value = calculate_median(values)
-                    avg_value = sum(values) / len(values)
-                    min_value = min(values)
-                    max_value = max(values)
-
-                    # Store statistics as attributes
-                    self._attr_extra_state_attributes["median"] = median_value
-                    self._attr_extra_state_attributes["min"] = min_value
-                    self._attr_extra_state_attributes["max"] = max_value
-                    self._attr_extra_state_attributes["cell_values"] = values
-                    self._attr_extra_state_attributes["cell_count"] = len(values)
-
-                    # Store individual cell values with descriptive names
-                    stat_type = "cell"
-                    if "temp" in self._internal_name.lower():
-                        stat_type = "temp"
-                    elif "voltage" in self._internal_name.lower():
-                        stat_type = "voltage"
-
-                    for i, val in enumerate(values):
-                        self._attr_extra_state_attributes[f"{stat_type}_{i+1}"] = val
-            except (ValueError, TypeError):
-                # Not a list of cell values, ignore
-                pass
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -250,19 +235,22 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         def update_state(payload: str) -> None:
             """Update the sensor state."""
             # Parse value and apply truncation if needed
-            parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class)
+            parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
             self._attr_native_value = truncate_state_value(parsed_value)
 
             # Update timestamp attribute
             now = dt_util.utcnow()
             self._attr_extra_state_attributes["last_updated"] = now.isoformat()
 
-            # Handle cell values in payload
-            self._handle_cell_values(payload)
-
-            # Try to extract additional attributes from payload if it's JSON
-            updated_attrs = process_json_payload(payload, self._attr_extra_state_attributes)
-            self._attr_extra_state_attributes.update(updated_attrs)
+            # Process the payload based on its type
+            if self._is_cell_sensor and isinstance(payload, str) and "," in payload:
+                # Cell values - process directly with our preferred attribute names
+                self._handle_cell_values(payload)
+            else:
+                # Not cell values or already handled - process as JSON
+                updated_attrs = process_json_payload(payload, self._attr_extra_state_attributes, 
+                                                 self._internal_name, self._is_cell_sensor, self._stat_type)
+                self._attr_extra_state_attributes.update(updated_attrs)
 
             # Add device-specific attributes
             updated_attrs = add_device_specific_attributes(
@@ -285,58 +273,63 @@ class OVMSSensor(SensorEntity, RestoreEntity):
     def _handle_cell_values(self, payload: str) -> None:
         """Handle cell values in payload.
         
-        Primarily adds cell data as attributes to this sensor (original behavior).
-        Only creates individual cell sensors if explicitly configured.
+        Adds cell data as attributes to this sensor.
+        Uses descriptive attribute names (voltage/temp) rather than generic "cell".
         """
-        # Only process cell data for battery-related metrics
-        is_cell_data = (
-            ("cell" in self._topic.lower() or 
-             "voltage" in self._topic.lower() or 
-             "temp" in self._topic.lower()) and 
-            self._attr_extra_state_attributes.get("category") == "battery"
-        )
-        
-        if not is_cell_data:
-            return
-        
-        # Check if this is a comma-separated list of values (cell data)
-        if isinstance(payload, str) and "," in payload:
-            try:
-                # Try to parse comma-separated values and add as attributes
-                values = [float(part.strip()) for part in payload.split(",") if part.strip()]
-                if values:
-                    # Add the cell values to the attributes (always do this as per original)
-                    self._attr_extra_state_attributes["cell_values"] = values
-                    self._attr_extra_state_attributes["cell_count"] = len(values)
+        try:
+            # Parse comma-separated values
+            values = [float(part.strip()) for part in payload.split(",") if part.strip()]
+            if not values:
+                return
+                
+            # Add the cell values to the attributes - use only one attribute name for the array 
+            # based on the type of sensor (remove legacy/duplicate array names)
+            self._attr_extra_state_attributes[f"{self._stat_type}_values"] = values
+            self._attr_extra_state_attributes["count"] = len(values)
+            
+            # REMOVE legacy/duplicate names to avoid duplication
+            if "cell_values" in self._attr_extra_state_attributes and self._stat_type != "cell":
+                del self._attr_extra_state_attributes["cell_values"]
+            if "values" in self._attr_extra_state_attributes:
+                del self._attr_extra_state_attributes["values"]
+            if "cell_count" in self._attr_extra_state_attributes:
+                del self._attr_extra_state_attributes["cell_count"]
 
-                    # Calculate and store statistics
-                    median_value = calculate_median(values)
-                    avg_value = sum(values) / len(values)
-                    min_value = min(values)
-                    max_value = max(values)
+            # Calculate and store statistics
+            median_value = calculate_median(values)
+            avg_value = sum(values) / len(values)
+            min_value = min(values)
+            max_value = max(values)
 
-                    # Store statistics as attributes
-                    self._attr_extra_state_attributes["median"] = median_value
-                    self._attr_extra_state_attributes["min"] = min_value
-                    self._attr_extra_state_attributes["max"] = max_value
+            # Store statistics as attributes
+            self._attr_extra_state_attributes["median"] = median_value
+            self._attr_extra_state_attributes["min"] = min_value
+            self._attr_extra_state_attributes["max"] = max_value
+            
+            # REMOVE duplicate stats attributes to avoid duplication
+            for legacy_key in ["min_value", "max_value", "mean_value", "median_value"]:
+                if legacy_key in self._attr_extra_state_attributes:
+                    del self._attr_extra_state_attributes[legacy_key]
 
-                    # Store individual cell values with descriptive names
-                    stat_type = "cell"
-                    if "temp" in self._internal_name.lower():
-                        stat_type = "temp"
-                    elif "voltage" in self._internal_name.lower():
-                        stat_type = "voltage"
+            # Store individual values with descriptive names only
+            # First clear any existing cell_N attributes to prevent duplicates
+            for key in list(self._attr_extra_state_attributes.keys()):
+                # Remove both old "cell_N" and potentially existing "voltage_N" attributes 
+                # to ensure no duplication of previous attributes
+                if (key.startswith("cell_") or key.startswith("voltage_") or 
+                    key.startswith("temp_") or key.startswith("value_")):
+                    if key.split("_")[1].isdigit():
+                        del self._attr_extra_state_attributes[key]
+            
+            # Now add with the proper type
+            for i, val in enumerate(values):
+                self._attr_extra_state_attributes[f"{self._stat_type}_{i+1}"] = val
 
-                    for i, val in enumerate(values):
-                        self._attr_extra_state_attributes[f"{stat_type}_{i+1}"] = val
-
-                    # Update existing cell sensors if they exist and are enabled
-                    if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created and CREATE_INDIVIDUAL_CELL_SENSORS:
-                        self._update_cell_sensor_values(values)
-                    # NEVER automatically create new cell sensors unless explicitly configured
-                    # This maintains the original behavior where cell values are only attributes
-            except Exception as ex:
-                _LOGGER.exception("Error handling cell values: %s", ex)
+            # Update existing cell sensors if they exist and are enabled
+            if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created and CREATE_INDIVIDUAL_CELL_SENSORS:
+                self._update_cell_sensor_values(values)
+        except Exception as ex:
+            _LOGGER.exception("Error handling cell values: %s", ex)
 
     def _update_cell_sensor_values(self, cell_values: List[float]) -> None:
         """Update the values of existing cell sensors."""
