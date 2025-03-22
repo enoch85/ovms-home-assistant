@@ -288,6 +288,17 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         Primarily adds cell data as attributes to this sensor (original behavior).
         Only creates individual cell sensors if explicitly configured.
         """
+        # Only process cell data for battery-related metrics
+        is_cell_data = (
+            ("cell" in self._topic.lower() or 
+             "voltage" in self._topic.lower() or 
+             "temp" in self._topic.lower()) and 
+            self._attr_extra_state_attributes.get("category") == "battery"
+        )
+        
+        if not is_cell_data:
+            return
+        
         # Check if this is a comma-separated list of values (cell data)
         if isinstance(payload, str) and "," in payload:
             try:
