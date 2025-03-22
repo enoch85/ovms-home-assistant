@@ -108,7 +108,7 @@ class TopicParser:
             ):
                 return None
 
-            # Handle vendor-specific prefixes (like xvu, xsq, xmg)
+            # Handle vendor-specific prefixes (like xvu, xsq, xmg, xnl)
             metric_path = self._convert_to_metric_path(parts)
 
             # Determine entity type and category
@@ -161,6 +161,10 @@ class TopicParser:
                 
             # MG ZS-EV metrics
             if "xmg" in parts:
+                return ".".join(parts)
+                
+            # Nissan Leaf metrics
+            if "xnl" in parts:
                 return ".".join(parts)
 
             # Metric specific prefixes
@@ -227,6 +231,14 @@ class TopicParser:
                 "error",     # Added for MG ZS-EV battery error
                 "auth",      # Added for MG ZS-EV auth
                 "polling",   # Added for MG ZS-EV polling
+                "heat",      # Added for Nissan Leaf remote heat
+                "cool",      # Added for Nissan Leaf remote cool
+                "granted",   # Added for Nissan Leaf heater granted
+                "present",   # Added for Nissan Leaf heater present
+                "requested", # Added for Nissan Leaf heat requested
+                "progress",  # Added for Nissan Leaf request in progress
+                "quick",     # Added for Nissan Leaf quick charge status
+                "auto",      # Added for Nissan Leaf auto HVAC
             ]
 
             # Special handling for "on" to avoid false matches
