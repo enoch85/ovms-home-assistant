@@ -177,7 +177,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_native_value = truncate_state_value(parsed_value)
 
         # Try to extract additional attributes from initial state if it's JSON
-        updated_attrs = process_json_payload(initial_state, self._attr_extra_state_attributes)
+        updated_attrs = process_json_payload(initial_state, self._attr_extra_state_attributes, self._internal_name)
         self._attr_extra_state_attributes.update(updated_attrs)
 
         # Add device-specific attributes
@@ -191,42 +191,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Initialize cell sensors tracking
         self._cell_sensors_created = False
         self._cell_sensors = []
-
-        # Process initial state for cell values
-        self._process_initial_cell_values(initial_state)
-
-    def _process_initial_cell_values(self, initial_state: str) -> None:
-        """Process initial state for cell values."""
-        if isinstance(initial_state, str) and "," in initial_state:
-            try:
-                # Check if this is a comma-separated list of numbers (cell data)
-                values = [float(val.strip()) for val in initial_state.split(",") if val.strip()]
-                if values:
-                    # Calculate and add statistical attributes - like in the original code
-                    median_value = calculate_median(values)
-                    avg_value = sum(values) / len(values)
-                    min_value = min(values)
-                    max_value = max(values)
-
-                    # Store statistics as attributes
-                    self._attr_extra_state_attributes["median"] = median_value
-                    self._attr_extra_state_attributes["min"] = min_value
-                    self._attr_extra_state_attributes["max"] = max_value
-                    self._attr_extra_state_attributes["cell_values"] = values
-                    self._attr_extra_state_attributes["cell_count"] = len(values)
-
-                    # Store individual cell values with descriptive names
-                    stat_type = "cell"
-                    if "temp" in self._internal_name.lower():
-                        stat_type = "temp"
-                    elif "voltage" in self._internal_name.lower():
-                        stat_type = "voltage"
-
-                    for i, val in enumerate(values):
-                        self._attr_extra_state_attributes[f"{stat_type}_{i+1}"] = val
-            except (ValueError, TypeError):
-                # Not a list of cell values, ignore
-                pass
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -261,7 +225,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._handle_cell_values(payload)
 
             # Try to extract additional attributes from payload if it's JSON
-            updated_attrs = process_json_payload(payload, self._attr_extra_state_attributes)
+            updated_attrs = process_json_payload(payload, self._attr_extra_state_attributes, self._internal_name)
             self._attr_extra_state_attributes.update(updated_attrs)
 
             # Add device-specific attributes
@@ -285,8 +249,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
     def _handle_cell_values(self, payload: str) -> None:
         """Handle cell values in payload.
         
-        Primarily adds cell data as attributes to this sensor (original behavior).
-        Only creates individual cell sensors if explicitly configured.
+        Primarily adds cell data as attributes to this sensor.
+        Uses descriptive attribute names (voltage/temp) rather than generic "cell".
         """
         # Only process cell data for battery-related metrics
         is_cell_data = (
@@ -305,7 +269,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 # Try to parse comma-separated values and add as attributes
                 values = [float(part.strip()) for part in payload.split(",") if part.strip()]
                 if values:
-                    # Add the cell values to the attributes (always do this as per original)
+                    # Add the cell values to the attributes
                     self._attr_extra_state_attributes["cell_values"] = values
                     self._attr_extra_state_attributes["cell_count"] = len(values)
 
@@ -320,13 +284,14 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     self._attr_extra_state_attributes["min"] = min_value
                     self._attr_extra_state_attributes["max"] = max_value
 
-                    # Store individual cell values with descriptive names
-                    stat_type = "cell"
+                    # Determine the appropriate attribute type name based on the sensor
+                    stat_type = "cell"  # Default fallback
                     if "temp" in self._internal_name.lower():
                         stat_type = "temp"
                     elif "voltage" in self._internal_name.lower():
                         stat_type = "voltage"
 
+                    # Store individual values with descriptive names only
                     for i, val in enumerate(values):
                         self._attr_extra_state_attributes[f"{stat_type}_{i+1}"] = val
 
