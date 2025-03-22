@@ -291,18 +291,26 @@ def create_cell_sensors(topic: str, cell_values: List[float],
     topic_parts = topic_suffix.split('/')
     metric_path = "_".join(topic_parts)
 
+    # Determine the appropriate attribute name type based on sensor context
+    stat_type = "cell"  # Default fallback
+    sensor_name = attributes.get("name", "").lower()
+    if "temp" in sensor_name:
+        stat_type = "temp"
+    elif "voltage" in sensor_name:
+        stat_type = "voltage"
+
     sensor_configs = []
 
     # Create sensors
     for i, value in enumerate(cell_values):
         # Generate unique entity name that includes the parent metric path
-        entity_name = f"ovms_{vehicle_id}_{category}_{metric_path}_cell_{i+1}".lower()
+        entity_name = f"ovms_{vehicle_id}_{category}_{metric_path}_{stat_type}_{i+1}".lower()
 
         # Generate unique ID using hash
-        cell_unique_id = f"{vehicle_id}_{category}_{topic_hash}_cell_{i+1}"
+        cell_unique_id = f"{vehicle_id}_{category}_{topic_hash}_{stat_type}_{i+1}"
 
         # Create friendly name for cell
-        friendly_name = f"{attributes.get('name', 'Cell')} Cell {i+1}"
+        friendly_name = f"{attributes.get('name', stat_type.capitalize())} {stat_type.capitalize()} {i+1}"
 
         # Create sensor config
         sensor_config = {
@@ -311,7 +319,7 @@ def create_cell_sensors(topic: str, cell_values: List[float],
             "friendly_name": friendly_name,
             "state": value,
             "device_info": device_info,
-            "topic": f"{topic}/cell/{i+1}",
+            "topic": f"{topic}/{stat_type}/{i+1}",
             "attributes": {
                 "cell_index": i,
                 "parent_unique_id": parent_unique_id,
