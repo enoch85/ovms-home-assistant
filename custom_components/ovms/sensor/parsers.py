@@ -56,8 +56,13 @@ def calculate_median(values: List[float]) -> Optional[float]:
         return (sorted_values[n//2 - 1] + sorted_values[n//2]) / 2
     return sorted_values[n//2]
 
-def parse_comma_separated_values(value: str) -> Optional[Dict[str, Any]]:
-    """Parse comma-separated values into a dictionary with statistics."""
+def parse_comma_separated_values(value: str, entity_name: str = "") -> Optional[Dict[str, Any]]:
+    """Parse comma-separated values into a dictionary with statistics.
+    
+    Args:
+        value: The comma-separated string of values
+        entity_name: The name of the entity for determining attribute type
+    """
     result = {}
     try:
         # Try to parse all parts as floats
@@ -73,8 +78,15 @@ def parse_comma_separated_values(value: str) -> Optional[Dict[str, Any]]:
             result["min"] = min(parts)
             result["max"] = max(parts)
 
-            # Store individual cell values with descriptive names
-            stat_type = "cell"
+            # Determine appropriate attribute type name
+            stat_type = "cell"  # Default fallback
+            if entity_name:
+                if "temp" in entity_name.lower():
+                    stat_type = "temp"
+                elif "voltage" in entity_name.lower():
+                    stat_type = "voltage"
+
+            # Store individual values with descriptive names
             for i, val in enumerate(parts):
                 result[f"{stat_type}_{i+1}"] = val
 
@@ -183,8 +195,14 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             # Otherwise return as string with truncation if needed
             return truncate_state_value(value)
 
-def process_json_payload(payload: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
-    """Process JSON payload to extract additional attributes."""
+def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: str = "") -> Dict[str, Any]:
+    """Process JSON payload to extract additional attributes.
+    
+    Args:
+        payload: The payload to process
+        attributes: Existing attributes to update
+        entity_name: The name of the entity for determining attribute type
+    """
     updated_attributes = attributes.copy()
 
     try:
@@ -201,9 +219,17 @@ def process_json_payload(payload: str, attributes: Dict[str, Any]) -> Dict[str, 
                     updated_attributes["count"] = len(values)
                     updated_attributes["values"] = values
 
-                    # Add cell-specific attributes
+                    # Determine appropriate attribute type name
+                    stat_type = "cell"  # Default fallback
+                    if entity_name:
+                        if "temp" in entity_name.lower():
+                            stat_type = "temp"
+                        elif "voltage" in entity_name.lower():
+                            stat_type = "voltage"
+
+                    # Add cell-specific attributes with descriptive names
                     for i, val in enumerate(values):
-                        updated_attributes[f"cell_{i+1}"] = val
+                        updated_attributes[f"{stat_type}_{i+1}"] = val
             except (ValueError, TypeError):
                 # Not a list of numbers, continue with JSON parsing
                 pass
