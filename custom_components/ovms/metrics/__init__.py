@@ -41,7 +41,7 @@ from .common import (
 )
 
 # Import vehicle-specific metrics
-from .vehicles import VW_EUP_METRICS, SMART_FORTWO_METRICS, MG_ZS_EV_METRICS
+from .vehicles import VW_EUP_METRICS, SMART_FORTWO_METRICS, MG_ZS_EV_METRICS, NISSAN_LEAF_METRICS
 
 # Import patterns and utils
 from .patterns import TOPIC_PATTERNS
@@ -72,6 +72,7 @@ CATEGORY_TIRE = "tire"
 CATEGORY_VW_EUP = "vw_eup"
 CATEGORY_SMART_FORTWO = "smart_fortwo"
 CATEGORY_MG_ZS_EV = "mg_zs_ev"
+CATEGORY_NISSAN_LEAF = "nissan_leaf"
 
 # Combine all metrics into the master dictionary
 METRIC_DEFINITIONS = {
@@ -91,6 +92,7 @@ METRIC_DEFINITIONS = {
     **VW_EUP_METRICS,
     **SMART_FORTWO_METRICS,
     **MG_ZS_EV_METRICS,
+    **NISSAN_LEAF_METRICS,
 }
 
 # Group metrics by categories
@@ -155,6 +157,9 @@ METRIC_CATEGORIES = {
     CATEGORY_MG_ZS_EV: [
         k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_MG_ZS_EV
     ],
+    CATEGORY_NISSAN_LEAF: [
+        k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_NISSAN_LEAF
+    ],
 }
 
 # Binary metrics that should be boolean - includes only actual binary metrics
@@ -210,4 +215,9 @@ PREFIX_CATEGORIES = {
     "xmg.task": CATEGORY_MG_ZS_EV,
     "xmg.enable": CATEGORY_MG_ZS_EV,
     "xmg.auth": CATEGORY_MG_ZS_EV,
+    "xnl.bms": CATEGORY_NISSAN_LEAF,
+    "xnl.cc": CATEGORY_NISSAN_LEAF,
+    "xnl.v.b": CATEGORY_NISSAN_LEAF,
+    "xnl.v.c": CATEGORY_NISSAN_LEAF,
+    "xnl.v.e": CATEGORY_NISSAN_LEAF,
 }
