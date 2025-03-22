@@ -27,7 +27,7 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 - **Command Interface**: Send commands to your vehicle through services with proper rate limiting
 - **Vehicle Status**: Track online/offline status of your vehicle automatically
 - **Secure Communication**: Supports TLS/SSL connections to MQTT brokers with certificate verification
-- **Vehicle-Specific Metrics**: Special support for VW e-UP!, Smart ForTwo, and MG ZS-EV - with additional vehicle models planned
+- **Vehicle-Specific Metrics**: Special support for VW e-UP!, Smart ForTwo, Nissan Leaf, and MG ZS-EV - with additional vehicle models planned
 - **Diagnostics Support**: Provides detailed diagnostics for troubleshooting
 - **Flexible Topic Structure**: Supports various MQTT topic structures including custom formats
 - **Multi-language Support**: Includes translations for English, French, German, Spanish, and Swedish
@@ -54,6 +54,13 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 - OVMS module publishing to the same MQTT broker
 - OVMS firmware 3.3.001 or newer recommended
 - Python package: paho-mqtt>=1.6.1 (installed automatically)
+
+## Known "Issues" and Solutions
+
+- If you have trouble with certain metrics not appearing, try the `server v3 update all` command. Please see [this section](https://github.com/enoch85/ovms-home-assistant?tab=readme-ov-file#ovmssend_command) for more information. This command will update all of your metrics at once in the OVMS module, and in turn send the updated metrics over to the broker which is then picked up by the integration.
+- Some metrics may show as unavailable initially. This is normal until the vehicle provides data for these metrics.
+- For best results, ensure your OVMS module firmware is updated to at least version 3.3.004 or higher.
+
 
 ## Screenshots
 ![1](/assets/screenshot-overview1.png)
@@ -483,7 +490,7 @@ This integration undergoes regular validation through:
 A: Yes, you can set up multiple instances of the integration, one for each vehicle.
 
 **Q: Does this work with all OVMS-supported vehicles?**  
-A: Yes, the integration is vehicle-agnostic and works with any vehicle supported by OVMS. Vehicle-specific enhancements are provided for some models like VW e-UP!, Smart ForTwo, and MG ZS-EV.
+A: Yes, the integration is vehicle-agnostic and works with any vehicle supported by OVMS. Vehicle-specific enhancements are provided for some models like VW e-UP!, Smart ForTwo, Nissan Leaf and MG ZS-EV.
 
 **Q: Can I use this without internet access?**  
 A: Yes, as long as your OVMS module, MQTT broker, and Home Assistant can communicate on the same network.
