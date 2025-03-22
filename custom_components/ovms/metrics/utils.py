@@ -20,6 +20,7 @@ CATEGORY_TIRE = None
 CATEGORY_VW_EUP = None
 CATEGORY_SMART_FORTWO = None
 CATEGORY_MG_ZS_EV = None
+CATEGORY_NISSAN_LEAF = None
 PREFIX_CATEGORIES = None
 
 def get_metric_by_path(metric_path):
@@ -70,6 +71,19 @@ def get_metric_by_path(metric_path):
     if 'xsq.' in metric_path and not metric_path.startswith('xsq.'):
         xsq_index = metric_path.find('xsq.')
         alt_path = metric_path[xsq_index:]
+        if alt_path in METRIC_DEFINITIONS:
+            return METRIC_DEFINITIONS[alt_path]
+            
+    # For Nissan Leaf metrics, also try removing 'metric.' prefix if it's present
+    if metric_path.startswith('metric.xnl.'):
+        alt_path = metric_path[7:]  # Remove 'metric.'
+        if alt_path in METRIC_DEFINITIONS:
+            return METRIC_DEFINITIONS[alt_path]
+
+    # Try with just 'xnl.' if it exists in the path
+    if 'xnl.' in metric_path and not metric_path.startswith('xnl.'):
+        xnl_index = metric_path.find('xnl.')
+        alt_path = metric_path[xnl_index:]
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
@@ -162,6 +176,28 @@ def get_metric_by_pattern(topic_parts):
                     if variation and variation in METRIC_DEFINITIONS:
                         return METRIC_DEFINITIONS[variation]
                 break
+                
+        # Check for Nissan Leaf metrics specifically
+        for part in topic_parts:
+            if part == "xnl":
+                # This is a Nissan Leaf metric, try to construct a matching key
+                metric_key = ".".join(topic_parts)
+                if METRIC_DEFINITIONS is None:
+                    # Import only when needed
+                    from . import METRIC_DEFINITIONS as MD
+                    METRIC_DEFINITIONS = MD
+
+                # Try several variations to handle different path formats
+                variations = [
+                    metric_key,
+                    f"xnl.{metric_key.split('xnl.', 1)[1]}" if 'xnl.' in metric_key else None,
+                    ".".join(topic_parts[topic_parts.index("xnl"):])
+                ]
+
+                for variation in variations:
+                    if variation and variation in METRIC_DEFINITIONS:
+                        return METRIC_DEFINITIONS[variation]
+                break
 
     # Then try partial matches in topic parts
     for pattern, info in TOPIC_PATTERNS.items():
@@ -176,7 +212,8 @@ def determine_category_from_topic(topic_parts):
     global CATEGORY_BATTERY, CATEGORY_CHARGING, CATEGORY_CLIMATE, CATEGORY_DOOR
     global CATEGORY_LOCATION, CATEGORY_MOTOR, CATEGORY_TRIP, CATEGORY_DIAGNOSTIC
     global CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE
-    global CATEGORY_VW_EUP, CATEGORY_SMART_FORTWO, CATEGORY_MG_ZS_EV, PREFIX_CATEGORIES
+    global CATEGORY_VW_EUP, CATEGORY_SMART_FORTWO, CATEGORY_MG_ZS_EV, CATEGORY_NISSAN_LEAF
+    global PREFIX_CATEGORIES
 
     # Initialize categories if not already done
     if CATEGORY_BATTERY is None:
@@ -184,7 +221,8 @@ def determine_category_from_topic(topic_parts):
             CATEGORY_BATTERY, CATEGORY_CHARGING, CATEGORY_CLIMATE, CATEGORY_DOOR,
             CATEGORY_LOCATION, CATEGORY_MOTOR, CATEGORY_TRIP, CATEGORY_DIAGNOSTIC,
             CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE,
-            CATEGORY_VW_EUP, CATEGORY_SMART_FORTWO, CATEGORY_MG_ZS_EV, PREFIX_CATEGORIES
+            CATEGORY_VW_EUP, CATEGORY_SMART_FORTWO, CATEGORY_MG_ZS_EV, CATEGORY_NISSAN_LEAF,
+            PREFIX_CATEGORIES
         )
 
     # Special handling for vehicle-specific topics
@@ -194,6 +232,8 @@ def determine_category_from_topic(topic_parts):
         return CATEGORY_SMART_FORTWO
     if "xmg" in topic_parts:
         return CATEGORY_MG_ZS_EV
+    if "xnl" in topic_parts:
+        return CATEGORY_NISSAN_LEAF
 
     # Check for known categories in topic
     for part in topic_parts:
@@ -214,6 +254,7 @@ def determine_category_from_topic(topic_parts):
             CATEGORY_VW_EUP,
             CATEGORY_SMART_FORTWO,
             CATEGORY_MG_ZS_EV,
+            CATEGORY_NISSAN_LEAF,
         ]:
             return part_lower
 
@@ -253,6 +294,12 @@ def create_friendly_name(topic_parts, metric_info=None):
         # Format as "Smart ForTwo Sensor Name"
         last_part = topic_parts[-1].replace("_", " ").title()
         return f"Smart ForTwo {last_part}"
+        
+    # Check for Nissan Leaf metrics
+    if "xnl" in topic_parts:
+        # Format as "Nissan Leaf Sensor Name"
+        last_part = topic_parts[-1].replace("_", " ").title()
+        return f"Nissan Leaf {last_part}"
 
     # Otherwise, build a name from the last part of the topic
     last_part = topic_parts[-1].replace("_", " ").title()

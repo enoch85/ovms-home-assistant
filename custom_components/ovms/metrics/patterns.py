@@ -189,6 +189,11 @@ TOPIC_PATTERNS = {
         "icon": "mdi:car-electric",
         "category": "mg_zs_ev",
     },
+    "xnl": {
+        "name": "Nissan Leaf",
+        "icon": "mdi:car-electric",
+        "category": "nissan_leaf",
+    },
     # Add specific patterns for our problematic metrics
     "egpio_input": {
         "name": "GPIO Input Ports",
@@ -248,5 +253,34 @@ TOPIC_PATTERNS = {
         "name": "DC-DC Converter",
         "icon": "mdi:car-battery",
         "category": "power",
+    },
+    "gids": {
+        "name": "GIDs",
+        "icon": "mdi:battery-medium",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "nissan_leaf",
+    },
+    "balancing": {
+        "name": "Cell Balancing",
+        "icon": "mdi:battery-sync",
+        "category": "nissan_leaf",
+    },
+    "thermistor": {
+        "name": "Thermistor",
+        "icon": "mdi:thermometer",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "nissan_leaf",
+    },
+    "hx": {
+        "name": "Heat Exchange",
+        "icon": "mdi:heat-wave",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "nissan_leaf",
+    },
+    "chargebars": {
+        "name": "Charge Bars",
+        "icon": "mdi:battery-charging",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "nissan_leaf",
     },
 }
