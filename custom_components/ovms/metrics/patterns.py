@@ -189,6 +189,11 @@ TOPIC_PATTERNS = {
         "icon": "mdi:car-electric",
         "category": "mg_zs_ev",
     },
+    "xnl": {
+        "name": "Nissan Leaf",
+        "icon": "mdi:car-electric",
+        "category": "nissan_leaf",
+    },
     # Add specific patterns for our problematic metrics
     "egpio_input": {
         "name": "GPIO Input Ports",
