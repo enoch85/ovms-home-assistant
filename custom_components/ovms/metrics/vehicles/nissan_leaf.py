@@ -1,0 +1,311 @@
+"""Nissan Leaf specific metrics for OVMS integration.
+ 
+This module defines metrics specific to the Nissan Leaf EV.
+"""
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorStateClass,
+)
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+)
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfElectricCurrent,
+    UnitOfElectricPotential,
+    UnitOfEnergy,
+    UnitOfLength,
+    UnitOfPower,
+    UnitOfTemperature,
+    UnitOfTime,
+)
+from homeassistant.helpers.entity import EntityCategory
+
+# Nissan Leaf specific metrics
+NISSAN_LEAF_METRICS = {
+    # BMS metrics
+    "xnl.bms.balancing": {
+        "name": "Nissan Leaf BMS Balancing Cells",
+        "description": "Battery cells currently being balanced",
+        "icon": "mdi:battery-charging-50",
+        "category": "nissan_leaf",
+    },
+    "xnl.bms.temp.int": {
+        "name": "Nissan Leaf BMS Internal Temperature",
+        "description": "BMS internal temperature readings",
+        "icon": "mdi:thermometer",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+        "category": "nissan_leaf",
+    },
+    "xnl.bms.thermistor": {
+        "name": "Nissan Leaf BMS Thermistor Values",
+        "description": "BMS thermistor resistance readings",
+        "icon": "mdi:resistor",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "nissan_leaf",
+    },
+    
+    # Climate control metrics
+    "xnl.cc.fan.only": {
+        "name": "Nissan Leaf Fan Only Mode",
+        "description": "Climate control fan only mode",
+        "icon": "mdi:fan",
+        "device_class": BinarySensorDeviceClass.RUNNING,
+        "category": "nissan_leaf",
+    },
+    "xnl.cc.remotecool": {
+        "name": "Nissan Leaf Remote Cooling",
+        "description": "Remote cooling status",
+        "icon": "mdi:snowflake",
+        "device_class": BinarySensorDeviceClass.COLD,
+        "category": "nissan_leaf",
+    },
+    "xnl.cc.remoteheat": {
+        "name": "Nissan Leaf Remote Heating",
+        "description": "Remote heating status",
+        "icon": "mdi:fire",
+        "device_class": BinarySensorDeviceClass.HEAT,
+        "category": "nissan_leaf",
+    },
+    "xnl.cc.rqinprogress": {
+        "name": "Nissan Leaf Climate Request Progress",
+        "description": "Climate control request in progress",
+        "icon": "mdi:progress-clock",
+        "device_class": BinarySensorDeviceClass.RUNNING,
+        "category": "nissan_leaf",
+    },
+    
+    # Battery metrics
+    "xnl.v.b.charge.limit": {
+        "name": "Nissan Leaf Charge Power Limit",
+        "description": "Maximum charging power limit",
+        "icon": "mdi:battery-charging",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.KILO_WATT,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.e.available": {
+        "name": "Nissan Leaf Available Energy",
+        "description": "Available battery energy",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.ENERGY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.e.capacity": {
+        "name": "Nissan Leaf Battery Capacity",
+        "description": "Battery capacity in kWh",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.ENERGY_STORAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.gids": {
+        "name": "Nissan Leaf GIDs",
+        "description": "Battery GIDs (Nissan's energy units)",
+        "icon": "mdi:gauge",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.heatergranted": {
+        "name": "Nissan Leaf Battery Heater Granted",
+        "description": "Battery heater operation granted",
+        "icon": "mdi:radiator",
+        "device_class": BinarySensorDeviceClass.HEAT,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.heaterpresent": {
+        "name": "Nissan Leaf Battery Heater Present",
+        "description": "Battery heater is present in vehicle",
+        "icon": "mdi:radiator",
+        "device_class": BinarySensorDeviceClass.PRESENCE,
+        "category": "nissan_leaf",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    "xnl.v.b.heatrequested": {
+        "name": "Nissan Leaf Battery Heat Requested",
+        "description": "Battery heating has been requested",
+        "icon": "mdi:radiator",
+        "device_class": BinarySensorDeviceClass.HEAT,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.hx": {
+        "name": "Nissan Leaf Battery HX",
+        "description": "Battery HX value (Nissan specific)",
+        "icon": "mdi:car-battery",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.max.gids": {
+        "name": "Nissan Leaf Maximum GIDs",
+        "description": "Maximum battery GIDs (when new)",
+        "icon": "mdi:gauge-full",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.output.limit": {
+        "name": "Nissan Leaf Output Power Limit",
+        "description": "Maximum battery output power",
+        "icon": "mdi:lightning-bolt",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.KILO_WATT,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.range.instrument": {
+        "name": "Nissan Leaf Instrument Range",
+        "description": "Range displayed on dashboard",
+        "icon": "mdi:map-marker-distance",
+        "device_class": SensorDeviceClass.DISTANCE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfLength.KILOMETERS,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.regen.limit": {
+        "name": "Nissan Leaf Regen Limit",
+        "description": "Maximum regenerative braking power",
+        "icon": "mdi:battery-charging",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.KILO_WATT,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.soc.instrument": {
+        "name": "Nissan Leaf Instrument SOC",
+        "description": "SOC displayed on dashboard",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.soc.newcar": {
+        "name": "Nissan Leaf New Car SOC",
+        "description": "SOC compared to new car",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.soc.nominal": {
+        "name": "Nissan Leaf Nominal SOC",
+        "description": "Nominal state of charge",
+        "icon": "mdi:battery",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.soh.instrument": {
+        "name": "Nissan Leaf Instrument SOH",
+        "description": "SOH displayed on dashboard",
+        "icon": "mdi:battery-heart",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.soh.newcar": {
+        "name": "Nissan Leaf SOH vs New",
+        "description": "State of health compared to new car",
+        "icon": "mdi:battery-heart",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.b.type": {
+        "name": "Nissan Leaf Battery Type",
+        "description": "Battery type identifier",
+        "icon": "mdi:battery",
+        "category": "nissan_leaf",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    
+    # Charging metrics
+    "xnl.v.c.chargebars": {
+        "name": "Nissan Leaf Charge Bars",
+        "description": "Number of charge bars displayed",
+        "icon": "mdi:battery-charging",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.c.chargeminutes3kW": {
+        "name": "Nissan Leaf Charge Minutes at 3kW",
+        "description": "Time to charge at 3kW in minutes",
+        "icon": "mdi:timer",
+        "device_class": SensorDeviceClass.DURATION,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTime.MINUTES,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.c.count.l0l1l2": {
+        "name": "Nissan Leaf L1/L2 Charge Count",
+        "description": "Number of L1/L2 charging sessions",
+        "icon": "mdi:counter",
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.c.count.qc": {
+        "name": "Nissan Leaf QC Charge Count",
+        "description": "Number of quick charging sessions",
+        "icon": "mdi:counter",
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.c.duration": {
+        "name": "Nissan Leaf Charge Durations",
+        "description": "Various charging durations",
+        "icon": "mdi:timer",
+        "device_class": SensorDeviceClass.DURATION,
+        "unit": UnitOfTime.MINUTES,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.c.event.notification": {
+        "name": "Nissan Leaf Charge Event Notification",
+        "description": "Charge event notification",
+        "icon": "mdi:bell",
+        "category": "nissan_leaf",
+    },
+    "xnl.v.c.event.reason": {
+        "name": "Nissan Leaf Charge Event Reason",
+        "description": "Reason for charge event",
+        "icon": "mdi:information",
+        "category": "nissan_leaf",
+    },
+    "xnl.v.c.limit.reason": {
+        "name": "Nissan Leaf Charge Limit Reason",
+        "description": "Reason for charge current limit",
+        "icon": "mdi:information",
+        "category": "nissan_leaf",
+    },
+    "xnl.v.c.quick": {
+        "name": "Nissan Leaf Quick Charge",
+        "description": "Quick charge status (1=in progress)",
+        "icon": "mdi:battery-charging-high",
+        "device_class": BinarySensorDeviceClass.BATTERY_CHARGING,
+        "category": "nissan_leaf",
+    },
+    "xnl.v.c.state.previous": {
+        "name": "Nissan Leaf Previous Charge State",
+        "description": "Previous charging state",
+        "icon": "mdi:battery-clock",
+        "category": "nissan_leaf",
+    },
+    
+    # HVAC metrics
+    "xnl.v.e.hvac.auto": {
+        "name": "Nissan Leaf HVAC Auto Mode",
+        "description": "HVAC auto mode state",
+        "icon": "mdi:air-conditioner",
+        "device_class": BinarySensorDeviceClass.RUNNING,
+        "category": "nissan_leaf",
+    },
+}
