@@ -82,9 +82,7 @@ SENSOR_TYPES = {
     },
     "charging_time": {
         "icon": "mdi:timer",
-        "device_class": SensorDeviceClass.DURATION,
         "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "s",
     },
     "climate": {
         "icon": "mdi:fan",
@@ -208,7 +206,6 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         if time_keyword in name_lower or time_keyword in topic_lower:
             _LOGGER.info("Forcing DURATION device class for %s", internal_name)
             result["device_class"] = SensorDeviceClass.DURATION
-            result["native_unit_of_measurement"] = "s"  # Set seconds as the unit
             if "state_class" not in result or not result["state_class"]:
                 result["state_class"] = SensorStateClass.MEASUREMENT
             break

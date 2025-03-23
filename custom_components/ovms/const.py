@@ -116,3 +116,39 @@ def truncate_state_value(value, max_length=MAX_STATE_LENGTH):
         return value[:max_length-3] + "..."
         
     return value
+
+
+def format_duration(seconds):
+    """Format seconds into a human-readable duration string.
+    
+    Format as 'X min' when less than an hour, and 'X H Y min' when an hour or more.
+    
+    Args:
+        seconds: Number of seconds
+        
+    Returns:
+        Formatted duration string
+    """
+    import logging
+    _LOGGER = logging.getLogger(LOGGER_NAME)
+    
+    _LOGGER.debug("format_duration called with value: %s (type: %s)", seconds, type(seconds))
+    
+    if seconds is None:
+        return None
+        
+    try:
+        # Convert to float and then to total minutes
+        seconds_float = float(seconds)
+        _LOGGER.debug("Converted seconds to float: %s", seconds_float)
+        
+        total_minutes = int(seconds_float / 60)
+        hours = total_minutes // 60
+        minutes = total_minutes % 60
+        
+        formatted = f"{hours} H {minutes} min" if hours > 0 else f"{minutes} min"
+        _LOGGER.debug("Formatted duration: %s", formatted)
+        return formatted
+    except (ValueError, TypeError) as e:
+        _LOGGER.warning("Error formatting duration: %s - %s", seconds, e)
+        return str(seconds)  # Return original value as string if conversion fails
