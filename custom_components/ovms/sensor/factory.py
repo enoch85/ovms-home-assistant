@@ -204,11 +204,40 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
     topic_lower = topic.lower()
     
     # Expanded list of time-related keywords to catch more duration sensors
+    # Be more specific to avoid capturing timestamp sensors like "gps_time"
     time_keywords = [
-        "time", "duration", "drivetime", "parktime", "charging_time", 
+        "duration", "drivetime", "parktime", "charging_time", 
         "drive_time", "park_time", "charge_time", "uptime", "runtime",
-        "idle_time", "idletime", "active_time", "activetime"
+        "idle_time", "idletime", "active_time", "activetime",
+        "timer", "timeout", "charge_time", "trip_time"
     ]
+    
+    # Keywords that indicate a timestamp, not a duration
+    timestamp_keywords = [
+        "gpstime", "gps_time", "utc_time", "timestamp", "last_updated", 
+        "update_time", "creation_time", "modified", "service_date", 
+        "serv/time", "serv.time", "date", "scheduled", "maintenance/service"
+    ]
+    
+    # First check if this is a timestamp sensor - don't apply duration formatting
+    for timestamp_keyword in timestamp_keywords:
+        if timestamp_keyword in name_lower or timestamp_keyword in topic_lower:
+            # For GPS time sensors, set appropriate device class
+            if "gps" in name_lower or "gps" in topic_lower:
+                _LOGGER.debug("Setting timestamp device class for GPS Time sensor: %s", internal_name)
+                result["device_class"] = SensorDeviceClass.TIMESTAMP
+                result["icon"] = "mdi:clock"
+                return result
+            # For service date/time sensors
+            if "serv" in name_lower or "serv" in topic_lower or "maintenance" in name_lower:
+                _LOGGER.debug("Setting timestamp device class for Service Date sensor: %s", internal_name)
+                result["device_class"] = SensorDeviceClass.TIMESTAMP
+                result["icon"] = "mdi:calendar-clock"
+                return result
+            # Generic timestamp
+            result["device_class"] = SensorDeviceClass.TIMESTAMP
+            result["icon"] = "mdi:clock"
+            return result
     
     # Force duration device class for time-related sensors
     for time_keyword in time_keywords:
