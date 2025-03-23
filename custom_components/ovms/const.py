@@ -129,18 +129,26 @@ def format_duration(seconds):
     Returns:
         Formatted duration string
     """
+    import logging
+    _LOGGER = logging.getLogger(LOGGER_NAME)
+    
+    _LOGGER.debug("format_duration called with value: %s (type: %s)", seconds, type(seconds))
+    
     if seconds is None:
         return None
         
     try:
         # Convert to float and then to total minutes
-        total_minutes = int(float(seconds) / 60)
+        seconds_float = float(seconds)
+        _LOGGER.debug("Converted seconds to float: %s", seconds_float)
+        
+        total_minutes = int(seconds_float / 60)
         hours = total_minutes // 60
         minutes = total_minutes % 60
         
-        if hours == 0:
-            return f"{minutes} min"
-        else:
-            return f"{hours} H {minutes} min"
-    except (ValueError, TypeError):
-        return seconds  # Return original value if conversion fails
+        formatted = f"{hours} H {minutes} min" if hours > 0 else f"{minutes} min"
+        _LOGGER.debug("Formatted duration: %s", formatted)
+        return formatted
+    except (ValueError, TypeError) as e:
+        _LOGGER.warning("Error formatting duration: %s - %s", seconds, e)
+        return str(seconds)  # Return original value as string if conversion fails
