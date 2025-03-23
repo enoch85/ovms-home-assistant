@@ -263,11 +263,16 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
         # Special handling for duration sensors - store formatted value and raw seconds
         if self._attr_device_class == SensorDeviceClass.DURATION and self._attr_native_value is not None:
-            # Save original unit for future reference
+            # Save original unit and seconds value for reference
             self._attr_extra_state_attributes["original_unit"] = self._attr_native_unit_of_measurement
-            formatted = format_duration(self._attr_native_value, self._attr_native_unit_of_measurement)
             self._attr_extra_state_attributes["duration_seconds"] = self._attr_native_value
+            # Format the duration and store it
+            formatted = format_duration(self._attr_native_value, self._attr_native_unit_of_measurement)
             self._attr_extra_state_attributes["duration_formatted"] = formatted
+            # Set the formatted string as the native value (required for display)
+            self._attr_native_value = formatted
+            # Use None as unit for formatted durations
+            self._attr_native_unit_of_measurement = None
 
         # Try to extract additional attributes from initial state if it's JSON or cell values
         if self._is_cell_sensor and isinstance(initial_state, str) and "," in initial_state:
@@ -295,9 +300,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
     def state(self):
         """Return the state of the entity."""
         if self.device_class == SensorDeviceClass.DURATION and "duration_formatted" in self._attr_extra_state_attributes:
-            # Return the formatted duration directly
-            # We don't modify native_unit_of_measurement here to preserve it for formatting
-            return self._attr_extra_state_attributes["duration_formatted"]
+            # For duration sensors, we override native_value directly to ensure
+            # Home Assistant displays the formatted duration
+            self._attr_native_value = self._attr_extra_state_attributes["duration_formatted"]
+            # Use None as unit for formatted durations
+            self._attr_native_unit_of_measurement = None
+            return self._attr_native_value
         
         # Default to the parent class behavior for other sensors
         return super().state
@@ -322,10 +330,20 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             
             # If this is a duration sensor, update the formatted value after state restore
             if self._attr_device_class == SensorDeviceClass.DURATION and self._attr_native_value is not None:
+                # If the state was restored directly as a formatted value (e.g., "1d")
+                # we need to make sure to preserve the original seconds value
+                seconds_value = self._attr_extra_state_attributes.get("duration_seconds", self._attr_native_value)
+                self._attr_extra_state_attributes["duration_seconds"] = seconds_value
+                
+                # Format the duration using the original unit
                 unit = self._attr_extra_state_attributes.get("original_unit", self._attr_native_unit_of_measurement)
-                formatted = format_duration(self._attr_native_value, unit)
-                self._attr_extra_state_attributes["duration_seconds"] = self._attr_native_value
+                formatted = format_duration(seconds_value, unit)
                 self._attr_extra_state_attributes["duration_formatted"] = formatted
+                
+                # Set the native value to the formatted string
+                self._attr_native_value = formatted
+                # Use None as unit for formatted durations
+                self._attr_native_unit_of_measurement = None
 
         @callback
         def update_state(payload: str) -> None:
@@ -347,11 +365,16 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
             # Special handling for duration sensors - store formatted value and raw seconds
             if self._attr_device_class == SensorDeviceClass.DURATION and self._attr_native_value is not None:
+                # Store the raw seconds value as an attribute
+                self._attr_extra_state_attributes["duration_seconds"] = self._attr_native_value
                 # Use original unit if available, otherwise current unit
                 unit = self._attr_extra_state_attributes.get("original_unit", self._attr_native_unit_of_measurement)
                 formatted = format_duration(self._attr_native_value, unit)
-                self._attr_extra_state_attributes["duration_seconds"] = self._attr_native_value
                 self._attr_extra_state_attributes["duration_formatted"] = formatted
+                # Set the formatted string as the native value (required for display)
+                self._attr_native_value = formatted
+                # Use None as unit for formatted durations
+                self._attr_native_unit_of_measurement = None
 
             # Update timestamp attribute
             now = dt_util.utcnow()
