@@ -116,3 +116,31 @@ def truncate_state_value(value, max_length=MAX_STATE_LENGTH):
         return value[:max_length-3] + "..."
         
     return value
+
+
+def format_duration(seconds):
+    """Format seconds into a human-readable duration string.
+    
+    Format as 'X min' when less than an hour, and 'X H Y min' when an hour or more.
+    
+    Args:
+        seconds: Number of seconds
+        
+    Returns:
+        Formatted duration string
+    """
+    if seconds is None:
+        return None
+        
+    try:
+        # Convert to float and then to total minutes
+        total_minutes = int(float(seconds) / 60)
+        hours = total_minutes // 60
+        minutes = total_minutes % 60
+        
+        if hours == 0:
+            return f"{minutes} min"
+        else:
+            return f"{hours} H {minutes} min"
+    except (ValueError, TypeError):
+        return seconds  # Return original value if conversion fails
