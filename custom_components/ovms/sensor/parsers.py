@@ -57,6 +57,53 @@ def calculate_median(values: List[float]) -> Optional[float]:
         return (sorted_values[n//2 - 1] + sorted_values[n//2]) / 2
     return sorted_values[n//2]
 
+def detect_duration_unit(topic: str, name: str, value: Optional[float]) -> str:
+    """Detect the unit of a duration value based on name, topic and value magnitude.
+    
+    Args:
+        topic: The sensor topic
+        name: The sensor name
+        value: The numeric value
+    
+    Returns:
+        The detected unit (seconds, minutes, hours, days)
+    """
+    # Default to seconds - this is what Home Assistant duration sensors expect
+    unit = "seconds"
+    
+    # Check for clues in the topic or name
+    topic_lower = topic.lower()
+    name_lower = name.lower()
+    
+    # Check for specific metric patterns that indicate units
+    if any(x in topic_lower for x in ["/v/c/time", "/v/c/duration", "/v/e/drivetime", "/v/e/parktime", "/v/g/time"]):
+        # These are typical time metrics in OVMS - by default they use seconds
+        return "seconds"
+    
+    # Check for explicit unit indicators in the name
+    if "day" in name_lower or "days" in name_lower:
+        return "days"
+    elif "hour" in name_lower or "hours" in name_lower or "_h_" in name_lower:
+        return "hours"
+    elif "minute" in name_lower or "minutes" in name_lower or "mins" in name_lower or "_m_" in name_lower:
+        return "minutes"
+    elif "second" in name_lower or "seconds" in name_lower or "_s_" in name_lower:
+        return "seconds"
+    
+    # If no explicit unit, estimate from value magnitude if we have a value
+    if value is not None:
+        try:
+            if value > 86400 * 2:  # More than 2 days in seconds
+                unit = "days"
+            elif value > 3600 * 2:  # More than 2 hours in seconds
+                unit = "hours" 
+            elif value > 60 * 2:  # More than 2 minutes in seconds
+                unit = "minutes"
+        except (ValueError, TypeError):
+            pass
+    
+    return unit
+
 def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sensor: bool = False, stat_type: str = "cell") -> Optional[Dict[str, Any]]:
     """Parse comma-separated values into a dictionary with statistics.
     
@@ -94,54 +141,6 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
     except (ValueError, TypeError):
         pass
     return None
-
-def detect_duration_unit(topic: str, name: str, value: Optional[float]) -> str:
-    """Detect the unit of a duration value based on name, topic and value magnitude.
-    
-    Args:
-        topic: The sensor topic
-        name: The sensor name
-        value: The numeric value
-    
-    Returns:
-        The detected unit (seconds, minutes, hours, days)
-    """
-    # Default to seconds
-    unit = "seconds"
-    
-    # Check for clues in the topic or name
-    topic_lower = topic.lower()
-    name_lower = name.lower()
-    
-    # Check for specific metric patterns that indicate units
-    if any(x in topic_lower for x in ["/v/c/time", "/v/c/duration", "/v/e/drivetime", "/v/e/parktime", "/v/g/time"]):
-        # These are typical time metrics in OVMS
-        if "_c_time" in topic_lower or "_c_duration" in topic_lower:
-            return "seconds"
-    
-    # Check for explicit unit indicators in the name
-    if "day" in name_lower or "days" in name_lower:
-        return "days"
-    elif "hour" in name_lower or "hours" in name_lower or "_h_" in name_lower:
-        return "hours"
-    elif "minute" in name_lower or "minutes" in name_lower or "mins" in name_lower or "_m_" in name_lower:
-        return "minutes"
-    elif "second" in name_lower or "seconds" in name_lower or "_s_" in name_lower:
-        return "seconds"
-    
-    # If no explicit unit, estimate from value magnitude
-    if value is not None:
-        try:
-            if value > 86400 * 2:  # More than 2 days
-                unit = "days"
-            elif value > 3600 * 2:  # More than 2 hours
-                unit = "hours"
-            elif value > 60 * 2:  # More than 2 minutes
-                unit = "minutes"
-        except (ValueError, TypeError):
-            pass
-    
-    return unit
 
 def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None, 
                 is_cell_sensor: bool = False) -> Any:
