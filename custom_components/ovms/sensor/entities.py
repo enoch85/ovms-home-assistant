@@ -13,7 +13,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
-from .parsers import parse_value, process_json_payload, parse_comma_separated_values, requires_numeric_value, is_special_state_value, calculate_median
+from .parsers import parse_value, process_json_payload, parse_comma_separated_values, requires_numeric_value, is_special_state_value, calculate_median, detect_duration_unit
 from .factory import determine_sensor_type, add_device_specific_attributes, create_cell_sensors
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -171,12 +171,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_native_unit_of_measurement = sensor_type["native_unit_of_measurement"]
         self._attr_entity_category = sensor_type["entity_category"]
         self._attr_icon = sensor_type["icon"]
-        
-        # For duration sensors, we need to ensure values are in seconds
-        # Let Home Assistant handle the formatting
-        if self._attr_device_class == SensorDeviceClass.DURATION:
-            # Home Assistant expects duration in seconds without a unit
-            self._attr_native_unit_of_measurement = None
 
         # Flag to indicate if this is a cell sensor
         self._is_cell_sensor = (
@@ -193,16 +187,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         elif "voltage" in self._internal_name.lower():
             self._stat_type = "voltage"
 
-        # Only set native value after attributes are initialized - with truncation if needed
-        parsed_value = parse_value(
-            initial_state, 
-            self._attr_device_class,
-            self._attr_state_class,
-            self._is_cell_sensor,
-            self._topic,
-            self._attr_extra_state_attributes
-        )
-        self._attr_native_value = truncate_state_value(parsed_value)
+        # Special handling for duration sensors
+        if self._attr_device_class == SensorDeviceClass.DURATION:
+            self._handle_duration_sensor(initial_state)
+        else:
+            # Only set native value after attributes are initialized - with truncation if needed
+            parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
+            self._attr_native_value = truncate_state_value(parsed_value)
 
         # Try to extract additional attributes from initial state if it's JSON or cell values
         if self._is_cell_sensor and isinstance(initial_state, str) and "," in initial_state:
@@ -226,6 +217,54 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._cell_sensors_created = False
         self._cell_sensors = []
 
+    def _handle_duration_sensor(self, value: Any) -> None:
+        """Handle a duration sensor value and process it correctly.
+        
+        For duration sensors, we store the raw value as an attribute
+        and detect the appropriate unit based on the name and topic.
+        """
+        try:
+            # First try to convert to float
+            numeric_value = None
+            if isinstance(value, (int, float)):
+                numeric_value = float(value)
+            else:
+                try:
+                    numeric_value = float(value)
+                except (ValueError, TypeError):
+                    # Try to parse as JSON
+                    try:
+                        json_data = json.loads(value)
+                        if isinstance(json_data, (int, float)):
+                            numeric_value = float(json_data)
+                        elif isinstance(json_data, dict) and any(k in json_data for k in ["value", "state"]):
+                            # Try to extract value from JSON object
+                            for key in ["value", "state"]:
+                                if key in json_data and isinstance(json_data[key], (int, float)):
+                                    numeric_value = float(json_data[key])
+                                    break
+                    except (ValueError, json.JSONDecodeError):
+                        pass
+
+            if numeric_value is not None:
+                # Store raw value in attributes
+                self._attr_extra_state_attributes["raw_value"] = numeric_value
+                
+                # Detect appropriate time unit
+                unit = detect_duration_unit(self._topic, self._internal_name, numeric_value)
+                self._attr_extra_state_attributes["unit"] = unit
+                
+                # Store value in seconds
+                self._attr_native_value = numeric_value
+            else:
+                # If conversion fails, still store the original value
+                self._attr_native_value = None
+                if value is not None:
+                    self._attr_extra_state_attributes["original_value"] = value
+        except Exception as ex:
+            _LOGGER.exception("Error handling duration sensor: %s", ex)
+            self._attr_native_value = None
+
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
         await super().async_added_to_hass()
@@ -247,16 +286,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         @callback
         def update_state(payload: str) -> None:
             """Update the sensor state."""
-            # Parse value and apply truncation if needed
-            parsed_value = parse_value(
-                payload, 
-                self._attr_device_class, 
-                self._attr_state_class, 
-                self._is_cell_sensor,
-                self._topic,
-                self._attr_extra_state_attributes
-            )
-            self._attr_native_value = truncate_state_value(parsed_value)
+            # Special handling for duration sensors
+            if self._attr_device_class == SensorDeviceClass.DURATION:
+                self._handle_duration_sensor(payload)
+            else:
+                # Parse value and apply truncation if needed
+                parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
+                self._attr_native_value = truncate_state_value(parsed_value)
 
             # Update timestamp attribute
             now = dt_util.utcnow()
@@ -289,127 +325,3 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 update_state,
             )
         )
-
-    def _handle_cell_values(self, payload: str) -> None:
-        """Handle cell values in payload.
-        
-        Adds cell data as attributes to this sensor.
-        Uses descriptive attribute names (voltage/temp) rather than generic "cell".
-        """
-        try:
-            # Parse comma-separated values
-            values = [float(part.strip()) for part in payload.split(",") if part.strip()]
-            if not values:
-                return
-                
-            # Add the cell values to the attributes - use only one attribute name for the array 
-            # based on the type of sensor (remove legacy/duplicate array names)
-            self._attr_extra_state_attributes[f"{self._stat_type}_values"] = values
-            self._attr_extra_state_attributes["count"] = len(values)
-            
-            # REMOVE legacy/duplicate names to avoid duplication
-            if "cell_values" in self._attr_extra_state_attributes and self._stat_type != "cell":
-                del self._attr_extra_state_attributes["cell_values"]
-            if "values" in self._attr_extra_state_attributes:
-                del self._attr_extra_state_attributes["values"]
-            if "cell_count" in self._attr_extra_state_attributes:
-                del self._attr_extra_state_attributes["cell_count"]
-
-            # Calculate and store statistics
-            median_value = calculate_median(values)
-            avg_value = sum(values) / len(values)
-            min_value = min(values)
-            max_value = max(values)
-
-            # Store statistics as attributes
-            self._attr_extra_state_attributes["median"] = median_value
-            self._attr_extra_state_attributes["min"] = min_value
-            self._attr_extra_state_attributes["max"] = max_value
-            
-            # REMOVE duplicate stats attributes to avoid duplication
-            for legacy_key in ["min_value", "max_value", "mean_value", "median_value"]:
-                if legacy_key in self._attr_extra_state_attributes:
-                    del self._attr_extra_state_attributes[legacy_key]
-
-            # Store individual values with descriptive names only
-            # First clear any existing cell_N attributes to prevent duplicates
-            for key in list(self._attr_extra_state_attributes.keys()):
-                # Remove both old "cell_N" and potentially existing "voltage_N" attributes 
-                # to ensure no duplication of previous attributes
-                if (key.startswith("cell_") or key.startswith("voltage_") or 
-                    key.startswith("temp_") or key.startswith("value_")):
-                    if key.split("_")[1].isdigit():
-                        del self._attr_extra_state_attributes[key]
-            
-            # Now add with the proper type
-            for i, val in enumerate(values):
-                self._attr_extra_state_attributes[f"{self._stat_type}_{i+1}"] = val
-
-            # Update existing cell sensors if they exist and are enabled
-            if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created and CREATE_INDIVIDUAL_CELL_SENSORS:
-                self._update_cell_sensor_values(values)
-        except Exception as ex:
-            _LOGGER.exception("Error handling cell values: %s", ex)
-
-    def _update_cell_sensor_values(self, cell_values: List[float]) -> None:
-        """Update the values of existing cell sensors."""
-        if not self.hass or not hasattr(self, '_cell_sensors'):
-            return
-
-        # Update each cell sensor with its new value
-        for i, value in enumerate(cell_values):
-            if i < len(self._cell_sensors):
-                cell_id = self._cell_sensors[i]
-                # Use the dispatcher to signal an update
-                async_dispatcher_send(
-                    self.hass,
-                    f"{SIGNAL_UPDATE_ENTITY}_{cell_id}",
-                    value,
-                )
-
-    def _create_cell_sensors(self, cell_values: List[float]) -> None:
-        """Create individual sensors for each cell value."""
-        # Skip creating individual sensors if the flag is set
-        if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created:
-            return
-
-        # Skip if no hass instance
-        if not self.hass:
-            return
-            
-        # Extract vehicle_id from unique_id
-        vehicle_id = self.unique_id.split('_')[0]
-        
-        # Create cell sensor configurations using factory function
-        sensor_configs = create_cell_sensors(
-            self._topic,
-            cell_values,
-            vehicle_id,
-            self.unique_id,
-            self.device_info,
-            {
-                "name": self.name,
-                "category": self._attr_extra_state_attributes.get("category", "battery"),
-                "device_class": self._attr_device_class,
-                "unit_of_measurement": self._attr_native_unit_of_measurement,
-            },
-            CREATE_INDIVIDUAL_CELL_SENSORS
-        )
-        
-        # Store cell sensor IDs
-        self._cell_sensors = [config["unique_id"] for config in sensor_configs]
-        
-        # Flag cells as created
-        self._cell_sensors_created = True
-        
-        # Create and add entities through the entity discovery mechanism if we have configs
-        if sensor_configs:
-            async_dispatcher_send(
-                self.hass,
-                SIGNAL_ADD_ENTITIES,
-                {
-                    "entity_type": "sensor",
-                    "cell_sensors": sensor_configs,
-                    "parent_entity": self.entity_id,
-                }
-            )
