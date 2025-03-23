@@ -199,78 +199,21 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
             result["icon"] = metric_info["icon"]
         return result
 
-    # Additional forced device class mappings for specific types
-    name_lower = internal_name.lower()
-    topic_lower = topic.lower()
-    
-    # Expanded list of time-related keywords to catch more duration sensors
-    # Be more specific to avoid capturing timestamp sensors like "gps_time"
-    time_keywords = [
-        "duration", "drivetime", "parktime", "charging_time", 
-        "drive_time", "park_time", "charge_time", "uptime", "runtime",
-        "idle_time", "idletime", "active_time", "activetime",
-        "timer", "timeout", "charge_time", "trip_time"
-    ]
-    
-    # Keywords that indicate a timestamp, not a duration
-    timestamp_keywords = [
-        "gpstime", "gps_time", "utc_time", "timestamp", "last_updated", 
-        "update_time", "creation_time", "modified", "service_date", 
-        "serv/time", "serv.time", "date", "scheduled", "maintenance/service"
-    ]
-    
-    # First check if this is a timestamp sensor - don't apply duration formatting
-    for timestamp_keyword in timestamp_keywords:
-        if timestamp_keyword in name_lower or timestamp_keyword in topic_lower:
-            # For GPS time sensors, set appropriate device class
-            if "gps" in name_lower or "gps" in topic_lower:
-                _LOGGER.debug("Setting timestamp device class for GPS Time sensor: %s", internal_name)
-                result["device_class"] = SensorDeviceClass.TIMESTAMP
-                result["icon"] = "mdi:clock"
-                return result
-            # For service date/time sensors
-            if "serv" in name_lower or "serv" in topic_lower or "maintenance" in name_lower:
-                _LOGGER.debug("Setting timestamp device class for Service Date sensor: %s", internal_name)
-                result["device_class"] = SensorDeviceClass.TIMESTAMP
-                result["icon"] = "mdi:calendar-clock"
-                return result
-            # Generic timestamp
-            result["device_class"] = SensorDeviceClass.TIMESTAMP
-            result["icon"] = "mdi:clock"
-            return result
-    
-    # Force duration device class for time-related sensors
-    for time_keyword in time_keywords:
-        if time_keyword in name_lower or time_keyword in topic_lower:
-            # Skip if this is likely a cell sensor
-            if (
-                ("cell" in name_lower or "voltage" in name_lower or "temp" in name_lower) and
-                attributes.get("category") == "battery"
-            ):
-                _LOGGER.debug("Skipping duration classification for cell sensor: %s", internal_name)
-                continue
-                
-            _LOGGER.info("Forcing DURATION device class for %s", internal_name)
+    # Check if this is specifically a duration sensor by name
+    if not result["device_class"]:
+        name_lower = internal_name.lower()
+        topic_lower = topic.lower()
+        
+        # Only detect specific duration sensors to avoid false positives
+        if (("duration" in name_lower and "timestamp" not in name_lower) or 
+            ("parktime" in name_lower) or ("drivetime" in name_lower) or
+            "run_time" in name_lower or "runtime" in name_lower):
             result["device_class"] = SensorDeviceClass.DURATION
-            
-            # Check if this is likely a days-based duration sensor
-            is_days_sensor = (
-                "day" in name_lower or 
-                "days" in name_lower or 
-                "day" in topic_lower
-            )
-            
-            # Set appropriate unit based on sensor nature
-            if is_days_sensor:
-                result["native_unit_of_measurement"] = "days"
-            else:
-                result["native_unit_of_measurement"] = "s"  # Default to seconds
-                
-            if "state_class" not in result or not result["state_class"]:
+            result["native_unit_of_measurement"] = "s"  # Set seconds as the unit
+            if not result["state_class"]:
                 result["state_class"] = SensorStateClass.MEASUREMENT
-            if "icon" not in result or not result["icon"]:
+            if not result["icon"]:
                 result["icon"] = "mdi:timer"
-            break
 
     # If no metric info was found, use the original pattern matching as fallback
     for key, sensor_type in SENSOR_TYPES.items():
