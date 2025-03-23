@@ -21,6 +21,29 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 # Default setting for creating individual cell sensors - matching original behavior
 CREATE_INDIVIDUAL_CELL_SENSORS = False
 
+def format_duration(seconds):
+    """Format duration in a compact format like 5h 30m."""
+    if seconds is None:
+        return None
+        
+    try:
+        seconds = float(seconds)
+    except (ValueError, TypeError):
+        return None
+        
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    parts = []
+    if hours > 0:
+        parts.append(f"{int(hours)}h")
+    if minutes > 0:
+        parts.append(f"{int(minutes)}m")
+    if seconds > 0 and not parts:  # Only show seconds if no hours/minutes
+        parts.append(f"{int(seconds)}s")
+    
+    return " ".join(parts) if parts else "0s"
+
 class CellVoltageSensor(SensorEntity, RestoreEntity):
     """Representation of a cell voltage sensor."""
 
@@ -207,17 +230,36 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Parse raw numeric value for the sensor
         parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
         
-        # Set the native value - ensuring numeric types for appropriate sensors
-        if self._attr_device_class in [SensorDeviceClass.DURATION] or requires_numeric_value(self._attr_device_class, self._attr_state_class):
+        # Special handling for duration sensors - use formatted value as main display
+        if self._attr_device_class == SensorDeviceClass.DURATION:
             if parsed_value is not None:
                 try:
-                    self._attr_native_value = float(parsed_value)
+                    # Store raw seconds as attribute
+                    seconds_value = float(parsed_value)
+                    self._attr_extra_state_attributes["duration_seconds"] = seconds_value
+                    
+                    # Format the duration
+                    formatted = format_duration(seconds_value)
+                    
+                    # Use formatted value as the main value - raw seconds will still be in attributes
+                    self._attr_native_value = seconds_value
+                    self._attr_extra_state_attributes["duration_formatted"] = formatted
                 except (ValueError, TypeError):
                     self._attr_native_value = None
             else:
                 self._attr_native_value = None
         else:
-            self._attr_native_value = truncate_state_value(parsed_value)
+            # Normal processing for non-duration sensors
+            if self._attr_device_class in [SensorDeviceClass.DURATION] or requires_numeric_value(self._attr_device_class, self._attr_state_class):
+                if parsed_value is not None:
+                    try:
+                        self._attr_native_value = float(parsed_value)
+                    except (ValueError, TypeError):
+                        self._attr_native_value = None
+                else:
+                    self._attr_native_value = None
+            else:
+                self._attr_native_value = truncate_state_value(parsed_value)
 
         # Try to extract additional attributes from initial state if it's JSON or cell values
         if self._is_cell_sensor and isinstance(initial_state, str) and "," in initial_state:
@@ -240,6 +282,16 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Initialize cell sensors tracking
         self._cell_sensors_created = False
         self._cell_sensors = []
+
+    @property
+    def state(self):
+        """Return the state of the entity."""
+        if self.device_class == SensorDeviceClass.DURATION and "duration_formatted" in self._attr_extra_state_attributes:
+            # Return the formatted duration directly
+            return self._attr_extra_state_attributes["duration_formatted"]
+        
+        # Default to the parent class behavior for other sensors
+        return super().state
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -265,17 +317,36 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Parse value and ensure proper numeric types
             parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
             
-            # Set the native value - ensuring numeric types for appropriate sensors
-            if self._attr_device_class in [SensorDeviceClass.DURATION] or requires_numeric_value(self._attr_device_class, self._attr_state_class):
+            # Special handling for duration sensors - use formatted value as main display
+            if self._attr_device_class == SensorDeviceClass.DURATION:
                 if parsed_value is not None:
                     try:
-                        self._attr_native_value = float(parsed_value)
+                        # Store raw seconds as attribute
+                        seconds_value = float(parsed_value)
+                        self._attr_extra_state_attributes["duration_seconds"] = seconds_value
+                        
+                        # Format the duration
+                        formatted = format_duration(seconds_value)
+                        
+                        # Use formatted value as the main value - raw seconds will still be in attributes
+                        self._attr_native_value = seconds_value
+                        self._attr_extra_state_attributes["duration_formatted"] = formatted
                     except (ValueError, TypeError):
                         self._attr_native_value = None
                 else:
                     self._attr_native_value = None
             else:
-                self._attr_native_value = truncate_state_value(parsed_value)
+                # Normal processing for non-duration sensors
+                if self._attr_device_class in [SensorDeviceClass.DURATION] or requires_numeric_value(self._attr_device_class, self._attr_state_class):
+                    if parsed_value is not None:
+                        try:
+                            self._attr_native_value = float(parsed_value)
+                        except (ValueError, TypeError):
+                            self._attr_native_value = None
+                    else:
+                        self._attr_native_value = None
+                else:
+                    self._attr_native_value = truncate_state_value(parsed_value)
 
             # Update timestamp attribute
             now = dt_util.utcnow()
