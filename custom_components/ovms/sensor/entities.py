@@ -274,6 +274,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
     def state(self):
         """Return the state of the entity."""
         if self.device_class == SensorDeviceClass.DURATION and "duration_formatted" in self._attr_extra_state_attributes:
+            # When showing formatted duration, don't show a unit
+            self._attr_native_unit_of_measurement = None
             # Return the formatted duration directly
             return self._attr_extra_state_attributes["duration_formatted"]
         
