@@ -64,14 +64,21 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         if requires_numeric_value(self._attr_device_class, self._attr_state_class) and is_special_state_value(initial_state):
             self._attr_native_value = None
         elif self._attr_device_class == SensorDeviceClass.DURATION:
-            # Store the original seconds value as an attribute
+            # For duration sensors, keep the numeric value in seconds as the native value
             if initial_state is not None:
                 try:
                     seconds_value = float(initial_state)
-                    self._attr_extra_state_attributes["duration_seconds"] = seconds_value
+                    self._attr_native_value = seconds_value
+                    # Set seconds as the unit
+                    self._attr_native_unit_of_measurement = "s"
+                    # Store formatted string as an attribute for display purposes
+                    self._attr_extra_state_attributes["duration_formatted"] = format_duration(initial_state)
                 except (ValueError, TypeError):
-                    pass
-            self._attr_native_value = format_duration(initial_state)
+                    self._attr_native_value = None
+                    self._attr_native_unit_of_measurement = "s"
+            else:
+                self._attr_native_value = None
+                self._attr_native_unit_of_measurement = "s"
         else:
             self._attr_native_value = truncate_state_value(initial_state)
 
@@ -108,14 +115,17 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             if requires_numeric_value(self._attr_device_class, self._attr_state_class) and is_special_state_value(payload):
                 self._attr_native_value = None
             elif self._attr_device_class == SensorDeviceClass.DURATION:
-                # Store the original seconds value as an attribute
+                # For duration sensors, keep the numeric value
                 if payload is not None:
                     try:
-                        seconds_value = float(payload)
-                        self._attr_extra_state_attributes["duration_seconds"] = seconds_value
+                        self._attr_native_value = float(payload)
+                        self._attr_native_unit_of_measurement = "s"
+                        # Store formatted string as an attribute
+                        self._attr_extra_state_attributes["duration_formatted"] = format_duration(payload)
                     except (ValueError, TypeError):
-                        pass
-                self._attr_native_value = format_duration(payload)
+                        self._attr_native_value = None
+                else:
+                    self._attr_native_value = None
             else:
                 try:
                     value = float(payload)
@@ -212,16 +222,23 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         if self._attr_device_class == SensorDeviceClass.DURATION:
             _LOGGER.info("Processing DURATION sensor: %s - value type: %s, value: %s", 
                          self._internal_name, type(parsed_value), parsed_value)
-            # Store the original seconds value as an attribute
+            # Store the original seconds value as the native value
             if parsed_value is not None:
                 try:
                     seconds_value = float(parsed_value)
-                    self._attr_extra_state_attributes["duration_seconds"] = seconds_value
+                    self._attr_native_value = seconds_value
+                    # Set seconds as the unit
+                    self._attr_native_unit_of_measurement = "s"
+                    # Store formatted duration as an attribute
+                    formatted_value = format_duration(parsed_value)
+                    self._attr_extra_state_attributes["duration_formatted"] = formatted_value
+                    _LOGGER.info("Formatted value for %s: %s", self._internal_name, formatted_value)
                 except (ValueError, TypeError):
-                    pass
-            formatted_value = format_duration(parsed_value)
-            _LOGGER.info("Formatted value for %s: %s", self._internal_name, formatted_value)
-            self._attr_native_value = formatted_value
+                    self._attr_native_value = None
+                    self._attr_native_unit_of_measurement = "s"
+            else:
+                self._attr_native_value = None
+                self._attr_native_unit_of_measurement = "s"
         else:
             self._attr_native_value = truncate_state_value(parsed_value)
 
@@ -273,14 +290,19 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             
             # Apply duration formatting for time-based sensors
             if self._attr_device_class == SensorDeviceClass.DURATION:
-                # Store the original seconds value as an attribute
+                # Store the original seconds value as the native value
                 if parsed_value is not None:
                     try:
                         seconds_value = float(parsed_value)
-                        self._attr_extra_state_attributes["duration_seconds"] = seconds_value
+                        self._attr_native_value = seconds_value
+                        # Set seconds as the unit
+                        self._attr_native_unit_of_measurement = "s"
+                        # Store formatted string as an attribute
+                        self._attr_extra_state_attributes["duration_formatted"] = format_duration(parsed_value)
                     except (ValueError, TypeError):
-                        pass
-                self._attr_native_value = format_duration(parsed_value)
+                        self._attr_native_value = None
+                else:
+                    self._attr_native_value = None
             else:
                 self._attr_native_value = truncate_state_value(parsed_value)
 
