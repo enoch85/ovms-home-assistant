@@ -325,3 +325,126 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 update_state,
             )
         )
+def _handle_cell_values(self, payload: str) -> None:
+        """Handle cell values in payload.
+        
+        Adds cell data as attributes to this sensor.
+        Uses descriptive attribute names (voltage/temp) rather than generic "cell".
+        """
+        try:
+            # Parse comma-separated values
+            values = [float(part.strip()) for part in payload.split(",") if part.strip()]
+            if not values:
+                return
+                
+            # Add the cell values to the attributes - use only one attribute name for the array 
+            # based on the type of sensor (remove legacy/duplicate array names)
+            self._attr_extra_state_attributes[f"{self._stat_type}_values"] = values
+            self._attr_extra_state_attributes["count"] = len(values)
+            
+            # REMOVE legacy/duplicate names to avoid duplication
+            if "cell_values" in self._attr_extra_state_attributes and self._stat_type != "cell":
+                del self._attr_extra_state_attributes["cell_values"]
+            if "values" in self._attr_extra_state_attributes:
+                del self._attr_extra_state_attributes["values"]
+            if "cell_count" in self._attr_extra_state_attributes:
+                del self._attr_extra_state_attributes["cell_count"]
+
+            # Calculate and store statistics
+            median_value = calculate_median(values)
+            avg_value = sum(values) / len(values)
+            min_value = min(values)
+            max_value = max(values)
+
+            # Store statistics as attributes
+            self._attr_extra_state_attributes["median"] = median_value
+            self._attr_extra_state_attributes["min"] = min_value
+            self._attr_extra_state_attributes["max"] = max_value
+            
+            # REMOVE duplicate stats attributes to avoid duplication
+            for legacy_key in ["min_value", "max_value", "mean_value", "median_value"]:
+                if legacy_key in self._attr_extra_state_attributes:
+                    del self._attr_extra_state_attributes[legacy_key]
+
+            # Store individual values with descriptive names only
+            # First clear any existing cell_N attributes to prevent duplicates
+            for key in list(self._attr_extra_state_attributes.keys()):
+                # Remove both old "cell_N" and potentially existing "voltage_N" attributes 
+                # to ensure no duplication of previous attributes
+                if (key.startswith("cell_") or key.startswith("voltage_") or 
+                    key.startswith("temp_") or key.startswith("value_")):
+                    if key.split("_")[1].isdigit():
+                        del self._attr_extra_state_attributes[key]
+            
+            # Now add with the proper type
+            for i, val in enumerate(values):
+                self._attr_extra_state_attributes[f"{self._stat_type}_{i+1}"] = val
+
+            # Update existing cell sensors if they exist and are enabled
+            if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created and CREATE_INDIVIDUAL_CELL_SENSORS:
+                self._update_cell_sensor_values(values)
+        except Exception as ex:
+            _LOGGER.exception("Error handling cell values: %s", ex)
+
+    def _update_cell_sensor_values(self, cell_values: List[float]) -> None:
+        """Update the values of existing cell sensors."""
+        if not self.hass or not hasattr(self, '_cell_sensors'):
+            return
+
+        # Update each cell sensor with its new value
+        for i, value in enumerate(cell_values):
+            if i < len(self._cell_sensors):
+                cell_id = self._cell_sensors[i]
+                # Use the dispatcher to signal an update
+                async_dispatcher_send(
+                    self.hass,
+                    f"{SIGNAL_UPDATE_ENTITY}_{cell_id}",
+                    value,
+                )
+
+    def _create_cell_sensors(self, cell_values: List[float]) -> None:
+        """Create individual sensors for each cell value."""
+        # Skip creating individual sensors if the flag is set
+        if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created:
+            return
+
+        # Skip if no hass instance
+        if not self.hass:
+            return
+            
+        # Extract vehicle_id from unique_id
+        vehicle_id = self.unique_id.split('_')[0]
+        
+        # Create cell sensor configurations using factory function
+        sensor_configs = create_cell_sensors(
+            self._topic,
+            cell_values,
+            vehicle_id,
+            self.unique_id,
+            self.device_info,
+            {
+                "name": self.name,
+                "category": self._attr_extra_state_attributes.get("category", "battery"),
+                "device_class": self._attr_device_class,
+                "unit_of_measurement": self._attr_native_unit_of_measurement,
+            },
+            CREATE_INDIVIDUAL_CELL_SENSORS
+        )
+        
+        # Store cell sensor IDs
+        self._cell_sensors = [config["unique_id"] for config in sensor_configs]
+        
+        # Flag cells as created
+        self._cell_sensors_created = True
+        
+        # Create and add entities through the entity discovery mechanism if we have configs
+        if sensor_configs:
+            async_dispatcher_send(
+                self.hass,
+                SIGNAL_ADD_ENTITIES,
+                {
+                    "entity_type": "sensor",
+                    "cell_sensors": sensor_configs,
+                    "parent_entity": self.entity_id,
+                }
+            )
