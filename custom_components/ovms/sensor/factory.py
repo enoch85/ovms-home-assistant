@@ -197,19 +197,6 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
             result["icon"] = metric_info["icon"]
         return result
 
-    # Additional forced device class mappings for specific types
-    name_lower = internal_name.lower()
-    topic_lower = topic.lower()
-    
-    # Force duration device class for time-related sensors
-    for time_keyword in ["time", "duration", "drivetime", "parktime", "charging_time"]:
-        if time_keyword in name_lower or time_keyword in topic_lower:
-            _LOGGER.info("Forcing DURATION device class for %s", internal_name)
-            result["device_class"] = SensorDeviceClass.DURATION
-            if "state_class" not in result or not result["state_class"]:
-                result["state_class"] = SensorStateClass.MEASUREMENT
-            break
-
     # If no metric info was found, use the original pattern matching as fallback
     for key, sensor_type in SENSOR_TYPES.items():
         if key in internal_name.lower() or key in topic.lower():
