@@ -203,28 +203,37 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
     name_lower = internal_name.lower()
     topic_lower = topic.lower()
     
+    # Expanded list of time-related keywords to catch more duration sensors
+    time_keywords = [
+        "time", "duration", "drivetime", "parktime", "charging_time", 
+        "drive_time", "park_time", "charge_time", "uptime", "runtime",
+        "idle_time", "idletime", "active_time", "activetime"
+    ]
+    
     # Force duration device class for time-related sensors
-    for time_keyword in ["time", "duration", "drivetime", "parktime", "charging_time"]:
+    for time_keyword in time_keywords:
         if time_keyword in name_lower or time_keyword in topic_lower:
             _LOGGER.info("Forcing DURATION device class for %s", internal_name)
             result["device_class"] = SensorDeviceClass.DURATION
             result["native_unit_of_measurement"] = "s"  # Set seconds as the unit
             if "state_class" not in result or not result["state_class"]:
                 result["state_class"] = SensorStateClass.MEASUREMENT
+            if "icon" not in result or not result["icon"]:
+                result["icon"] = "mdi:timer"
             break
 
     # If no metric info was found, use the original pattern matching as fallback
     for key, sensor_type in SENSOR_TYPES.items():
         if key in internal_name.lower() or key in topic.lower():
-            if "device_class" in sensor_type:
+            if "device_class" in sensor_type and not result["device_class"]:
                 result["device_class"] = sensor_type["device_class"]
-            if "state_class" in sensor_type:
+            if "state_class" in sensor_type and not result["state_class"]:
                 result["state_class"] = sensor_type["state_class"]
-            if "unit" in sensor_type:
+            if "unit" in sensor_type and not result["native_unit_of_measurement"]:
                 result["native_unit_of_measurement"] = sensor_type["unit"]
-            if "entity_category" in sensor_type:
+            if "entity_category" in sensor_type and not result["entity_category"]:
                 result["entity_category"] = sensor_type["entity_category"]
-            if "icon" in sensor_type:
+            if "icon" in sensor_type and not result["icon"]:
                 result["icon"] = sensor_type["icon"]
             break
 
