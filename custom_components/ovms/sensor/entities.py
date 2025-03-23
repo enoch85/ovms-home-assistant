@@ -230,36 +230,23 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Parse raw numeric value for the sensor
         parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
         
-        # Special handling for duration sensors - use formatted value as main display
-        if self._attr_device_class == SensorDeviceClass.DURATION:
+        # Set the native value - ensuring numeric types for appropriate sensors
+        if self._attr_device_class in [SensorDeviceClass.DURATION] or requires_numeric_value(self._attr_device_class, self._attr_state_class):
             if parsed_value is not None:
                 try:
-                    # Store raw seconds as attribute
-                    seconds_value = float(parsed_value)
-                    self._attr_extra_state_attributes["duration_seconds"] = seconds_value
-                    
-                    # Format the duration
-                    formatted = format_duration(seconds_value)
-                    
-                    # Use formatted value as the main value - raw seconds will still be in attributes
-                    self._attr_native_value = seconds_value
-                    self._attr_extra_state_attributes["duration_formatted"] = formatted
+                    self._attr_native_value = float(parsed_value)
                 except (ValueError, TypeError):
                     self._attr_native_value = None
             else:
                 self._attr_native_value = None
         else:
-            # Normal processing for non-duration sensors
-            if self._attr_device_class in [SensorDeviceClass.DURATION] or requires_numeric_value(self._attr_device_class, self._attr_state_class):
-                if parsed_value is not None:
-                    try:
-                        self._attr_native_value = float(parsed_value)
-                    except (ValueError, TypeError):
-                        self._attr_native_value = None
-                else:
-                    self._attr_native_value = None
-            else:
-                self._attr_native_value = truncate_state_value(parsed_value)
+            self._attr_native_value = truncate_state_value(parsed_value)
+
+        # Special handling for duration sensors - store formatted value and raw seconds
+        if self._attr_device_class == SensorDeviceClass.DURATION and self._attr_native_value is not None:
+            formatted = format_duration(self._attr_native_value)
+            self._attr_extra_state_attributes["duration_seconds"] = self._attr_native_value
+            self._attr_extra_state_attributes["duration_formatted"] = formatted
 
         # Try to extract additional attributes from initial state if it's JSON or cell values
         if self._is_cell_sensor and isinstance(initial_state, str) and "," in initial_state:
@@ -317,36 +304,23 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Parse value and ensure proper numeric types
             parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
             
-            # Special handling for duration sensors - use formatted value as main display
-            if self._attr_device_class == SensorDeviceClass.DURATION:
+            # Set the native value - ensuring numeric types for appropriate sensors
+            if self._attr_device_class in [SensorDeviceClass.DURATION] or requires_numeric_value(self._attr_device_class, self._attr_state_class):
                 if parsed_value is not None:
                     try:
-                        # Store raw seconds as attribute
-                        seconds_value = float(parsed_value)
-                        self._attr_extra_state_attributes["duration_seconds"] = seconds_value
-                        
-                        # Format the duration
-                        formatted = format_duration(seconds_value)
-                        
-                        # Use formatted value as the main value - raw seconds will still be in attributes
-                        self._attr_native_value = seconds_value
-                        self._attr_extra_state_attributes["duration_formatted"] = formatted
+                        self._attr_native_value = float(parsed_value)
                     except (ValueError, TypeError):
                         self._attr_native_value = None
                 else:
                     self._attr_native_value = None
             else:
-                # Normal processing for non-duration sensors
-                if self._attr_device_class in [SensorDeviceClass.DURATION] or requires_numeric_value(self._attr_device_class, self._attr_state_class):
-                    if parsed_value is not None:
-                        try:
-                            self._attr_native_value = float(parsed_value)
-                        except (ValueError, TypeError):
-                            self._attr_native_value = None
-                    else:
-                        self._attr_native_value = None
-                else:
-                    self._attr_native_value = truncate_state_value(parsed_value)
+                self._attr_native_value = truncate_state_value(parsed_value)
+
+            # Special handling for duration sensors - store formatted value and raw seconds
+            if self._attr_device_class == SensorDeviceClass.DURATION and self._attr_native_value is not None:
+                formatted = format_duration(self._attr_native_value)
+                self._attr_extra_state_attributes["duration_seconds"] = self._attr_native_value
+                self._attr_extra_state_attributes["duration_formatted"] = formatted
 
             # Update timestamp attribute
             now = dt_util.utcnow()
