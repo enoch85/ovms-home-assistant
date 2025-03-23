@@ -3,7 +3,10 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorStateClass,
+)
 from homeassistant.util import dt as dt_util
 
 from ..const import LOGGER_NAME, MAX_STATE_LENGTH, truncate_state_value
@@ -68,29 +71,10 @@ def detect_duration_unit(topic: str, name: str, value: Optional[float]) -> str:
     Returns:
         The detected unit (seconds, minutes, hours, days)
     """
-    # Default to seconds - this is what Home Assistant duration sensors expect
+    # Default to seconds
     unit = "seconds"
     
-    # Check for clues in the topic or name
-    topic_lower = topic.lower()
-    name_lower = name.lower()
-    
-    # Check for specific metric patterns that indicate units
-    if any(x in topic_lower for x in ["/v/c/time", "/v/c/duration", "/v/e/drivetime", "/v/e/parktime", "/v/g/time"]):
-        # These are typical time metrics in OVMS - by default they use seconds
-        return "seconds"
-    
-    # Check for explicit unit indicators in the name
-    if "day" in name_lower or "days" in name_lower:
-        return "days"
-    elif "hour" in name_lower or "hours" in name_lower or "_h_" in name_lower:
-        return "hours"
-    elif "minute" in name_lower or "minutes" in name_lower or "mins" in name_lower or "_m_" in name_lower:
-        return "minutes"
-    elif "second" in name_lower or "seconds" in name_lower or "_s_" in name_lower:
-        return "seconds"
-    
-    # If no explicit unit, estimate from value magnitude if we have a value
+    # If no explicit unit, estimate from value magnitude
     if value is not None:
         try:
             if value > 86400 * 2:  # More than 2 days in seconds
