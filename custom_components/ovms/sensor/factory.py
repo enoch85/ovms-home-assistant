@@ -199,22 +199,6 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
             result["icon"] = metric_info["icon"]
         return result
 
-    # Check if this is specifically a duration sensor by name
-    if not result["device_class"]:
-        name_lower = internal_name.lower()
-        topic_lower = topic.lower()
-        
-        # Only detect specific duration sensors to avoid false positives
-        if (("duration" in name_lower and "timestamp" not in name_lower) or 
-            ("parktime" in name_lower) or ("drivetime" in name_lower) or
-            "run_time" in name_lower or "runtime" in name_lower):
-            result["device_class"] = SensorDeviceClass.DURATION
-            result["native_unit_of_measurement"] = "s"  # Set seconds as the unit
-            if not result["state_class"]:
-                result["state_class"] = SensorStateClass.MEASUREMENT
-            if not result["icon"]:
-                result["icon"] = "mdi:timer"
-
     # If no metric info was found, use the original pattern matching as fallback
     for key, sensor_type in SENSOR_TYPES.items():
         if key in internal_name.lower() or key in topic.lower():
