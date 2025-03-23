@@ -250,20 +250,27 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 # Store raw value in attributes
                 self._attr_extra_state_attributes["raw_value"] = numeric_value
                 
-                # Detect appropriate time unit
-                unit = detect_duration_unit(self._topic, self._internal_name, numeric_value)
-                self._attr_extra_state_attributes["detected_unit"] = unit
+                # Detect appropriate time unit for informational purposes
+                detected_unit = detect_duration_unit(self._topic, self._internal_name, numeric_value)
+                self._attr_extra_state_attributes["detected_unit"] = detected_unit
                 
                 # For duration sensors, HA expects:
-                # 1. Value in seconds
-                # 2. Unit set to seconds
-                # 3. Device class set to DURATION
+                # 1. Device class set to DURATION
+                # 2. Native unit of measurement set to a valid time unit (s, min, h, days)
+                # 3. Native value in the unit specified
                 
-                # Always use seconds as the native unit for proper formatting
+                # Set device class
+                self._attr_device_class = SensorDeviceClass.DURATION
+                
+                # Always use seconds as the native unit for proper formatting by Home Assistant
                 self._attr_native_unit_of_measurement = "s"
                 
                 # Set the native value in seconds
                 self._attr_native_value = numeric_value
+                
+                # Remove any old "unit" attribute to avoid confusion with native_unit_of_measurement
+                if "unit" in self._attr_extra_state_attributes:
+                    del self._attr_extra_state_attributes["unit"]
                 
                 # Ensure we have the proper state class for statistics
                 self._attr_state_class = SensorStateClass.MEASUREMENT
