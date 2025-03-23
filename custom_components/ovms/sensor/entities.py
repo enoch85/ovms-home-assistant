@@ -12,7 +12,7 @@ from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
+from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value, format_duration
 from .parsers import parse_value, process_json_payload, parse_comma_separated_values, requires_numeric_value, is_special_state_value, calculate_median
 from .factory import determine_sensor_type, add_device_specific_attributes, create_cell_sensors
 
@@ -64,7 +64,6 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         if requires_numeric_value(self._attr_device_class, self._attr_state_class) and is_special_state_value(initial_state):
             self._attr_native_value = None
         elif self._attr_device_class == SensorDeviceClass.DURATION:
-            from ..const import format_duration
             # Store the original seconds value as an attribute
             if initial_state is not None:
                 try:
@@ -109,7 +108,6 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             if requires_numeric_value(self._attr_device_class, self._attr_state_class) and is_special_state_value(payload):
                 self._attr_native_value = None
             elif self._attr_device_class == SensorDeviceClass.DURATION:
-                from ..const import format_duration
                 # Store the original seconds value as an attribute
                 if payload is not None:
                     try:
@@ -212,7 +210,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         
         # Apply duration formatting for time-based sensors
         if self._attr_device_class == SensorDeviceClass.DURATION:
-            from ..const import format_duration
+            _LOGGER.info("Processing DURATION sensor: %s - value type: %s, value: %s", 
+                         self._internal_name, type(parsed_value), parsed_value)
             # Store the original seconds value as an attribute
             if parsed_value is not None:
                 try:
@@ -220,7 +219,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     self._attr_extra_state_attributes["duration_seconds"] = seconds_value
                 except (ValueError, TypeError):
                     pass
-            self._attr_native_value = format_duration(parsed_value)
+            formatted_value = format_duration(parsed_value)
+            _LOGGER.info("Formatted value for %s: %s", self._internal_name, formatted_value)
+            self._attr_native_value = formatted_value
         else:
             self._attr_native_value = truncate_state_value(parsed_value)
 
@@ -272,7 +273,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             
             # Apply duration formatting for time-based sensors
             if self._attr_device_class == SensorDeviceClass.DURATION:
-                from ..const import format_duration
                 # Store the original seconds value as an attribute
                 if parsed_value is not None:
                     try:
