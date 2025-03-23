@@ -370,9 +370,9 @@ The integration supports these MQTT topic structures:
 4. Entities are created or updated based on the incoming data
 5. Commands are sent via MQTT and responses are tracked
 
-![OVMS-Read-Flow](/assets/ovms-data-flow-svg)
+![OVMS-Read-Flow](/assets/ovms-data-flow.svg)
 
-![OVMS-Write-Flow](/assets/ovms-command-flow-svg)
+![OVMS-Write-Flow](/assets/ovms-command-flow.svg)
 
 ### Entity Classification
 
