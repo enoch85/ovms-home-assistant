@@ -221,7 +221,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         """Handle a duration sensor value and process it correctly.
         
         For duration sensors, we store the raw value as an attribute
-        and detect the appropriate unit based on the name and topic.
+        and set the native value in seconds with proper unit for Home Assistant's formatting.
         """
         try:
             # First try to convert to float
@@ -252,10 +252,21 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 
                 # Detect appropriate time unit
                 unit = detect_duration_unit(self._topic, self._internal_name, numeric_value)
-                self._attr_extra_state_attributes["unit"] = unit
+                self._attr_extra_state_attributes["detected_unit"] = unit
                 
-                # Store value in seconds
+                # For duration sensors, HA expects:
+                # 1. Value in seconds
+                # 2. Unit set to seconds
+                # 3. Device class set to DURATION
+                
+                # Always use seconds as the native unit for proper formatting
+                self._attr_native_unit_of_measurement = "s"
+                
+                # Set the native value in seconds
                 self._attr_native_value = numeric_value
+                
+                # Ensure we have the proper state class for statistics
+                self._attr_state_class = SensorStateClass.MEASUREMENT
             else:
                 # If conversion fails, still store the original value
                 self._attr_native_value = None
@@ -325,6 +336,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 update_state,
             )
         )
+
     def _handle_cell_values(self, payload: str) -> None:
         """Handle cell values in payload.
         
