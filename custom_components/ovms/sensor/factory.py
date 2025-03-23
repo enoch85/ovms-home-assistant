@@ -184,15 +184,6 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         result["state_class"] = SensorStateClass.MEASUREMENT
         return result
 
-    # Special handling for duration related sensors
-    if any(x in name_lower for x in ["duration", "time_to", "charge_time", "drive_time", "runtime", "uptime", "parktime"]) or "time" in topic.lower():
-        if "timestamp" not in name_lower and not any(x in name_lower for x in ["datetime", "date_time"]):
-            result["device_class"] = SensorDeviceClass.DURATION
-            result["state_class"] = SensorStateClass.MEASUREMENT
-            result["native_unit_of_measurement"] = UnitOfTime.SECONDS
-            result["icon"] = "mdi:timer"
-            return result
-
     # Try to find matching metric by converting topic to dot notation
     topic_suffix = topic
     if topic.count('/') >= 3:  # Skip the prefix part
