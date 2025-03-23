@@ -325,8 +325,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 update_state,
             )
         )
-        
-        def _handle_cell_values(self, payload: str) -> None:
+    def _handle_cell_values(self, payload: str) -> None:
         """Handle cell values in payload.
         
         Adds cell data as attributes to this sensor.
