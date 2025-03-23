@@ -21,43 +21,25 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 # Default setting for creating individual cell sensors - matching original behavior
 CREATE_INDIVIDUAL_CELL_SENSORS = False
 
-def format_duration(value, unit="seconds"):
-    """Format duration in a compact format like 5h 30m or 3d.
-    
-    Args:
-        value: The duration value to format
-        unit: The unit of the input value ("seconds", "minutes", "hours", "days")
-    """
-    if value is None:
+def format_duration(seconds):
+    """Format duration in a compact format like 5h 30m."""
+    if seconds is None:
         return None
         
     try:
-        value = float(value)
+        seconds = float(seconds)
     except (ValueError, TypeError):
         return None
         
-    # Convert everything to seconds first
-    seconds = value
-    if unit == "minutes":
-        seconds = value * 60
-    elif unit == "hours":
-        seconds = value * 3600
-    elif unit == "days":
-        seconds = value * 86400  # 24 * 60 * 60
-        
-    # Format appropriately
-    days, remainder = divmod(seconds, 86400)
-    hours, remainder = divmod(remainder, 3600)
-    minutes, remainder = divmod(remainder, 60)
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
     
     parts = []
-    if days > 0:
-        parts.append(f"{int(days)}d")
-    if hours > 0 and days < 10:  # Only show hours for modest day values
+    if hours > 0:
         parts.append(f"{int(hours)}h")
-    if minutes > 0 and days == 0:  # Only show minutes if less than a day
+    if minutes > 0:
         parts.append(f"{int(minutes)}m")
-    if seconds > 0 and hours == 0 and days == 0 and not parts:  # Only show seconds if less than an hour
+    if seconds > 0 and not parts:  # Only show seconds if no hours/minutes
         parts.append(f"{int(seconds)}s")
     
     return " ".join(parts) if parts else "0s"
@@ -261,25 +243,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_native_value = truncate_state_value(parsed_value)
 
         # Special handling for duration sensors - store formatted value and raw seconds
-        if (
-            self._attr_device_class == SensorDeviceClass.DURATION and 
-            self._attr_native_value is not None and 
-            not self._is_cell_sensor  # Skip for cell sensors
-        ):
-            # Determine if this is likely a days-based duration sensor
-            is_days_sensor = (
-                "day" in self._internal_name.lower() or 
-                "days" in self._internal_name.lower() or
-                self._attr_native_unit_of_measurement in ["days", "day"] or
-                "day" in self._topic.lower()
-            )
-            
-            # Determine unit based on context clues
-            unit = "days" if is_days_sensor else "seconds"
-            
-            formatted = format_duration(self._attr_native_value, unit)
-            self._attr_extra_state_attributes["duration_value"] = self._attr_native_value
-            self._attr_extra_state_attributes["duration_unit"] = unit
+        if self._attr_device_class == SensorDeviceClass.DURATION and self._attr_native_value is not None:
+            formatted = format_duration(self._attr_native_value)
+            self._attr_extra_state_attributes["duration_seconds"] = self._attr_native_value
             self._attr_extra_state_attributes["duration_formatted"] = formatted
 
         # Try to extract additional attributes from initial state if it's JSON or cell values
@@ -307,11 +273,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
     @property
     def state(self):
         """Return the state of the entity."""
-        if (
-            self.device_class == SensorDeviceClass.DURATION and 
-            "duration_formatted" in self._attr_extra_state_attributes and 
-            not self._is_cell_sensor
-        ):
+        if self.device_class == SensorDeviceClass.DURATION and "duration_formatted" in self._attr_extra_state_attributes:
             # When showing formatted duration, don't show a unit
             self._attr_native_unit_of_measurement = None
             # Return the formatted duration directly
@@ -357,25 +319,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 self._attr_native_value = truncate_state_value(parsed_value)
 
             # Special handling for duration sensors - store formatted value and raw seconds
-            if (
-                self._attr_device_class == SensorDeviceClass.DURATION and 
-                self._attr_native_value is not None and 
-                not self._is_cell_sensor  # Skip for cell sensors
-            ):
-                # Determine if this is likely a days-based duration sensor
-                is_days_sensor = (
-                    "day" in self._internal_name.lower() or 
-                    "days" in self._internal_name.lower() or
-                    self._attr_native_unit_of_measurement in ["days", "day"] or
-                    "day" in self._topic.lower()
-                )
-                
-                # Determine unit based on context clues
-                unit = "days" if is_days_sensor else "seconds"
-                
-                formatted = format_duration(self._attr_native_value, unit)
-                self._attr_extra_state_attributes["duration_value"] = self._attr_native_value
-                self._attr_extra_state_attributes["duration_unit"] = unit
+            if self._attr_device_class == SensorDeviceClass.DURATION and self._attr_native_value is not None:
+                formatted = format_duration(self._attr_native_value)
+                self._attr_extra_state_attributes["duration_seconds"] = self._attr_native_value
                 self._attr_extra_state_attributes["duration_formatted"] = formatted
 
             # Update timestamp attribute
