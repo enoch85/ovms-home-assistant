@@ -4,7 +4,7 @@ import hashlib
 import json
 from typing import Any, Dict, Optional, List
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import SensorEntity, SensorStateClass, SensorDeviceClass
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.entity import DeviceInfo
@@ -63,6 +63,16 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         # Only set native value after attributes are initialized
         if requires_numeric_value(self._attr_device_class, self._attr_state_class) and is_special_state_value(initial_state):
             self._attr_native_value = None
+        elif self._attr_device_class == SensorDeviceClass.DURATION:
+            from ..const import format_duration
+            # Store the original seconds value as an attribute
+            if initial_state is not None:
+                try:
+                    seconds_value = float(initial_state)
+                    self._attr_extra_state_attributes["duration_seconds"] = seconds_value
+                except (ValueError, TypeError):
+                    pass
+            self._attr_native_value = format_duration(initial_state)
         else:
             self._attr_native_value = truncate_state_value(initial_state)
 
@@ -98,6 +108,16 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             # Parse the value appropriately for the sensor type
             if requires_numeric_value(self._attr_device_class, self._attr_state_class) and is_special_state_value(payload):
                 self._attr_native_value = None
+            elif self._attr_device_class == SensorDeviceClass.DURATION:
+                from ..const import format_duration
+                # Store the original seconds value as an attribute
+                if payload is not None:
+                    try:
+                        seconds_value = float(payload)
+                        self._attr_extra_state_attributes["duration_seconds"] = seconds_value
+                    except (ValueError, TypeError):
+                        pass
+                self._attr_native_value = format_duration(payload)
             else:
                 try:
                     value = float(payload)
@@ -189,7 +209,20 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
         # Only set native value after attributes are initialized - with truncation if needed
         parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
-        self._attr_native_value = truncate_state_value(parsed_value)
+        
+        # Apply duration formatting for time-based sensors
+        if self._attr_device_class == SensorDeviceClass.DURATION:
+            from ..const import format_duration
+            # Store the original seconds value as an attribute
+            if parsed_value is not None:
+                try:
+                    seconds_value = float(parsed_value)
+                    self._attr_extra_state_attributes["duration_seconds"] = seconds_value
+                except (ValueError, TypeError):
+                    pass
+            self._attr_native_value = format_duration(parsed_value)
+        else:
+            self._attr_native_value = truncate_state_value(parsed_value)
 
         # Try to extract additional attributes from initial state if it's JSON or cell values
         if self._is_cell_sensor and isinstance(initial_state, str) and "," in initial_state:
@@ -234,9 +267,22 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         @callback
         def update_state(payload: str) -> None:
             """Update the sensor state."""
-            # Parse value and apply truncation if needed
+            # Parse value and apply formatting if needed
             parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
-            self._attr_native_value = truncate_state_value(parsed_value)
+            
+            # Apply duration formatting for time-based sensors
+            if self._attr_device_class == SensorDeviceClass.DURATION:
+                from ..const import format_duration
+                # Store the original seconds value as an attribute
+                if parsed_value is not None:
+                    try:
+                        seconds_value = float(parsed_value)
+                        self._attr_extra_state_attributes["duration_seconds"] = seconds_value
+                    except (ValueError, TypeError):
+                        pass
+                self._attr_native_value = format_duration(parsed_value)
+            else:
+                self._attr_native_value = truncate_state_value(parsed_value)
 
             # Update timestamp attribute
             now = dt_util.utcnow()
