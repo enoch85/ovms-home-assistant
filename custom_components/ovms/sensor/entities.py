@@ -171,23 +171,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_native_unit_of_measurement = sensor_type["native_unit_of_measurement"]
         self._attr_entity_category = sensor_type["entity_category"]
         self._attr_icon = sensor_type["icon"]
-
-        # For duration sensors, set the appropriate unit of measurement to help HA format correctly
+        
+        # For duration sensors, we need to ensure values are in seconds
+        # Let Home Assistant handle the formatting
         if self._attr_device_class == SensorDeviceClass.DURATION:
-            # HA expects duration values in seconds
-            self._attr_native_unit_of_measurement = "s"
-            
-            # Look for unit hints in the topic or attributes
-            topic_lower = self._topic.lower()
-            if "min" in topic_lower or "minute" in topic_lower:
-                # Store original unit for reference
-                self._attr_extra_state_attributes["original_unit"] = "min"
-            elif "hour" in topic_lower or "hr" in topic_lower:
-                self._attr_extra_state_attributes["original_unit"] = "h"
-            elif "day" in topic_lower:
-                self._attr_extra_state_attributes["original_unit"] = "d"
-            elif "second" in topic_lower or "sec" in topic_lower:
-                self._attr_extra_state_attributes["original_unit"] = "s"
+            # Home Assistant expects duration in seconds without a unit
+            self._attr_native_unit_of_measurement = None
 
         # Flag to indicate if this is a cell sensor
         self._is_cell_sensor = (
@@ -205,8 +194,14 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._stat_type = "voltage"
 
         # Only set native value after attributes are initialized - with truncation if needed
-        parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, 
-                                 self._is_cell_sensor, self._attr_extra_state_attributes)
+        parsed_value = parse_value(
+            initial_state, 
+            self._attr_device_class,
+            self._attr_state_class,
+            self._is_cell_sensor,
+            self._topic,
+            self._attr_extra_state_attributes
+        )
         self._attr_native_value = truncate_state_value(parsed_value)
 
         # Try to extract additional attributes from initial state if it's JSON or cell values
@@ -253,8 +248,14 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         def update_state(payload: str) -> None:
             """Update the sensor state."""
             # Parse value and apply truncation if needed
-            parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, 
-                                     self._is_cell_sensor, self._attr_extra_state_attributes)
+            parsed_value = parse_value(
+                payload, 
+                self._attr_device_class, 
+                self._attr_state_class, 
+                self._is_cell_sensor,
+                self._topic,
+                self._attr_extra_state_attributes
+            )
             self._attr_native_value = truncate_state_value(parsed_value)
 
             # Update timestamp attribute
