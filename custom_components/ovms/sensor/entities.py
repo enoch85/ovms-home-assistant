@@ -4,7 +4,7 @@ import hashlib
 import json
 from typing import Any, Dict, Optional, List
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import SensorEntity, SensorStateClass, SensorDeviceClass
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.entity import DeviceInfo
@@ -13,13 +13,47 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
-from .parsers import parse_value, process_json_payload, parse_comma_separated_values, requires_numeric_value, is_special_state_value, calculate_median
+from .parsers import parse_value, process_json_payload, parse_comma_separated_values, requires_numeric_value, is_special_state_value, calculate_median, detect_duration_unit
 from .factory import determine_sensor_type, add_device_specific_attributes, create_cell_sensors
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 # Default setting for creating individual cell sensors - matching original behavior
 CREATE_INDIVIDUAL_CELL_SENSORS = False
+
+def format_duration(seconds: float) -> str:
+    """Convert seconds to human-readable format.
+    
+    Format: Xd Yh Zm (days, hours, minutes)
+    - Only show days if > 24 hours
+    - Only show hours if > 60 minutes
+    
+    Args:
+        seconds: Duration in seconds
+        
+    Returns:
+        Formatted duration string
+    """
+    try:
+        # Calculate days, hours, minutes
+        total_seconds = int(seconds)
+        days = total_seconds // (24 * 3600)
+        remainder = total_seconds % (24 * 3600)
+        hours = remainder // 3600
+        remainder %= 3600
+        minutes = remainder // 60
+        
+        # Build the formatted string
+        parts = []
+        if days > 0:
+            parts.append(f"{days}d")
+        if hours > 0 or days > 0:
+            parts.append(f"{hours}h")
+        parts.append(f"{minutes}m")
+        
+        return " ".join(parts)
+    except (ValueError, TypeError):
+        return str(seconds)
 
 class CellVoltageSensor(SensorEntity, RestoreEntity):
     """Representation of a cell voltage sensor."""
@@ -122,6 +156,146 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         )
 
 
+class OVMSDurationSensor(SensorEntity, RestoreEntity):
+    """Representation of an OVMS duration sensor with formatted display."""
+
+    def __init__(
+        self,
+        unique_id: str,
+        name: str,
+        topic: str,
+        initial_state: str,
+        device_info: DeviceInfo,
+        attributes: Dict[str, Any],
+        friendly_name: Optional[str] = None,
+        hass: Optional[HomeAssistant] = None,
+    ) -> None:
+        """Initialize the sensor."""
+        self._attr_unique_id = unique_id
+        self._internal_name = name
+
+        # Set the entity name that will display in UI
+        if friendly_name:
+            self._attr_name = friendly_name
+        else:
+            self._attr_name = name.replace("_", " ").title()
+
+        self._topic = topic
+        self._attr_device_info = device_info or {}
+        self._attr_extra_state_attributes = {
+            **attributes,
+            "topic": topic,
+            "last_updated": dt_util.utcnow().isoformat(),
+        }
+        self.hass = hass
+
+        # Explicitly set entity_id
+        if hass:
+            self.entity_id = async_generate_entity_id(
+                "sensor.{}",
+                name.lower(),
+                hass=hass,
+            )
+
+        # Set duration-specific attributes
+        self._attr_device_class = None  # Don't use HA's built-in duration formatting
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = None  # No unit since we're using formatted string
+        self._attr_icon = "mdi:timer"
+        
+        # Process initial state
+        self._handle_duration_value(initial_state)
+
+    def _handle_duration_value(self, value: Any) -> None:
+        """Handle a duration value and format it for display."""
+        try:
+            # First try to convert to float
+            numeric_value = None
+            if isinstance(value, (int, float)):
+                numeric_value = float(value)
+            else:
+                try:
+                    numeric_value = float(value)
+                except (ValueError, TypeError):
+                    # Try to parse as JSON
+                    try:
+                        json_data = json.loads(value)
+                        if isinstance(json_data, (int, float)):
+                            numeric_value = float(json_data)
+                        elif isinstance(json_data, dict) and any(k in json_data for k in ["value", "state"]):
+                            # Extract value from JSON object
+                            for key in ["value", "state"]:
+                                if key in json_data and isinstance(json_data[key], (int, float)):
+                                    numeric_value = float(json_data[key])
+                                    break
+                    except (ValueError, json.JSONDecodeError):
+                        pass
+
+            if numeric_value is not None:
+                # Store raw value in attributes
+                self._attr_extra_state_attributes["raw_value"] = numeric_value
+                
+                # Detect appropriate time unit
+                detected_unit = detect_duration_unit(self._topic, self._internal_name, numeric_value)
+                self._attr_extra_state_attributes["unit"] = detected_unit
+                
+                # Format the value for display
+                formatted_value = format_duration(numeric_value)
+                
+                # Use the formatted value as the native value
+                self._attr_native_value = formatted_value
+            else:
+                # If conversion fails, still store the original value
+                if value is not None:
+                    self._attr_native_value = str(value)
+                    self._attr_extra_state_attributes["original_value"] = value
+        except Exception as ex:
+            _LOGGER.exception("Error handling duration sensor: %s", ex)
+            self._attr_native_value = str(value) if value is not None else None
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to updates."""
+        await super().async_added_to_hass()
+
+        # Restore previous state if available
+        if (state := await self.async_get_last_state()) is not None:
+            if state.state not in ["unavailable", "unknown", None]:
+                self._attr_native_value = state.state
+            if state.attributes:
+                saved_attributes = {
+                    k: v for k, v in state.attributes.items()
+                    if k not in ["device_class", "state_class", "unit_of_measurement"]
+                }
+                self._attr_extra_state_attributes.update(saved_attributes)
+
+        @callback
+        def update_state(payload: str) -> None:
+            """Update the sensor state."""
+            self._handle_duration_value(payload)
+            
+            # Update timestamp attribute
+            now = dt_util.utcnow()
+            self._attr_extra_state_attributes["last_updated"] = now.isoformat()
+            
+            # Update other attributes from JSON if applicable
+            updated_attrs = process_json_payload(
+                payload, 
+                self._attr_extra_state_attributes,
+                self._internal_name
+            )
+            self._attr_extra_state_attributes.update(updated_attrs)
+
+            self.async_write_ha_state()
+
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
+                update_state,
+            )
+        )
+
+
 class OVMSSensor(SensorEntity, RestoreEntity):
     """Representation of an OVMS sensor."""
 
@@ -187,9 +361,14 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         elif "voltage" in self._internal_name.lower():
             self._stat_type = "voltage"
 
-        # Only set native value after attributes are initialized - with truncation if needed
-        parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
-        self._attr_native_value = truncate_state_value(parsed_value)
+        # Special handling for duration sensors - now just save the raw value
+        # and the formatted value display is handled by OVMSDurationSensor
+        if self._attr_device_class == SensorDeviceClass.DURATION:
+            self._handle_duration_sensor(initial_state)
+        else:
+            # Only set native value after attributes are initialized - with truncation if needed
+            parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
+            self._attr_native_value = truncate_state_value(parsed_value)
 
         # Try to extract additional attributes from initial state if it's JSON or cell values
         if self._is_cell_sensor and isinstance(initial_state, str) and "," in initial_state:
@@ -213,6 +392,75 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._cell_sensors_created = False
         self._cell_sensors = []
 
+    def _handle_duration_sensor(self, value: Any) -> None:
+        """Handle a duration sensor value and process it correctly.
+        
+        For duration sensors, we store the raw value and add a formatted value.
+        """
+        try:
+            # First try to convert to float
+            numeric_value = None
+            if isinstance(value, (int, float)):
+                numeric_value = float(value)
+            else:
+                try:
+                    numeric_value = float(value)
+                except (ValueError, TypeError):
+                    # Try to parse as JSON
+                    try:
+                        json_data = json.loads(value)
+                        if isinstance(json_data, (int, float)):
+                            numeric_value = float(json_data)
+                        elif isinstance(json_data, dict) and any(k in json_data for k in ["value", "state"]):
+                            # Try to extract value from JSON object
+                            for key in ["value", "state"]:
+                                if key in json_data and isinstance(json_data[key], (int, float)):
+                                    numeric_value = float(json_data[key])
+                                    break
+                    except (ValueError, json.JSONDecodeError):
+                        pass
+
+            if numeric_value is not None:
+                # Store raw value in attributes
+                self._attr_extra_state_attributes["raw_value"] = numeric_value
+                
+                # Detect appropriate time unit for informational purposes
+                detected_unit = detect_duration_unit(self._topic, self._internal_name, numeric_value)
+                self._attr_extra_state_attributes["detected_unit"] = detected_unit
+                
+                # Format the value for display as an attribute
+                formatted_value = format_duration(numeric_value)
+                self._attr_extra_state_attributes["formatted_value"] = formatted_value
+                
+                # For duration sensors, HA expects:
+                # 1. Device class set to DURATION
+                # 2. Native unit of measurement set to a valid time unit (s, min, h, days)
+                # 3. Native value in the unit specified
+                
+                # Set device class
+                self._attr_device_class = SensorDeviceClass.DURATION
+                
+                # Always use seconds as the native unit for proper formatting by Home Assistant
+                self._attr_native_unit_of_measurement = "s"
+                
+                # Set the native value in seconds
+                self._attr_native_value = numeric_value
+                
+                # Remove any old "unit" attribute to avoid confusion with native_unit_of_measurement
+                if "unit" in self._attr_extra_state_attributes:
+                    del self._attr_extra_state_attributes["unit"]
+                
+                # Ensure we have the proper state class for statistics
+                self._attr_state_class = SensorStateClass.MEASUREMENT
+            else:
+                # If conversion fails, still store the original value
+                self._attr_native_value = None
+                if value is not None:
+                    self._attr_extra_state_attributes["original_value"] = value
+        except Exception as ex:
+            _LOGGER.exception("Error handling duration sensor: %s", ex)
+            self._attr_native_value = None
+
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
         await super().async_added_to_hass()
@@ -234,9 +482,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         @callback
         def update_state(payload: str) -> None:
             """Update the sensor state."""
-            # Parse value and apply truncation if needed
-            parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
-            self._attr_native_value = truncate_state_value(parsed_value)
+            # Special handling for duration sensors
+            if self._attr_device_class == SensorDeviceClass.DURATION:
+                self._handle_duration_sensor(payload)
+            else:
+                # Parse value and apply truncation if needed
+                parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
+                self._attr_native_value = truncate_state_value(parsed_value)
 
             # Update timestamp attribute
             now = dt_util.utcnow()

@@ -8,7 +8,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dis
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from ..const import LOGGER_NAME, SIGNAL_ADD_ENTITIES
-from .entities import OVMSSensor, CellVoltageSensor
+from .entities import OVMSSensor, CellVoltageSensor, OVMSDurationSensor
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -53,16 +53,42 @@ async def async_setup_entry(
             return
 
         try:
-            sensor = OVMSSensor(
-                data.get("unique_id", ""),
-                data.get("name", "unknown"),
-                data.get("topic", ""),
-                data.get("payload", ""),
-                data.get("device_info", {}),
-                data.get("attributes", {}),
-                data.get("friendly_name"),
-                hass,
-            )
+            # Check if this is a duration sensor that should use formatted display
+            topic = data.get("topic", "").lower()
+            name = data.get("name", "").lower()
+            
+            # Detect if this should be a duration sensor with formatted display
+            is_duration = False
+            if any(x in name for x in ["duration", "time_to", "charge_time", "drive_time", "runtime", "uptime", "parktime"]):
+                if "timestamp" not in name and not any(x in name for x in ["datetime", "date_time"]):
+                    is_duration = True
+            elif any(x in topic for x in ["/v/c/time", "/v/c/duration", "/v/e/drivetime", "/v/e/parktime", "/v/g/time"]):
+                is_duration = True
+                
+            if is_duration:
+                # Create a formatted duration sensor
+                sensor = OVMSDurationSensor(
+                    data.get("unique_id", ""),
+                    data.get("name", "unknown"),
+                    data.get("topic", ""),
+                    data.get("payload", ""),
+                    data.get("device_info", {}),
+                    data.get("attributes", {}),
+                    data.get("friendly_name"),
+                    hass,
+                )
+            else:
+                # Create a regular sensor
+                sensor = OVMSSensor(
+                    data.get("unique_id", ""),
+                    data.get("name", "unknown"),
+                    data.get("topic", ""),
+                    data.get("payload", ""),
+                    data.get("device_info", {}),
+                    data.get("attributes", {}),
+                    data.get("friendly_name"),
+                    hass,
+                )
 
             async_add_entities([sensor])
         except Exception as ex:
