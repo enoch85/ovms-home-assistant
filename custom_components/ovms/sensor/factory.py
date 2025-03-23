@@ -213,9 +213,30 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
     # Force duration device class for time-related sensors
     for time_keyword in time_keywords:
         if time_keyword in name_lower or time_keyword in topic_lower:
+            # Skip if this is likely a cell sensor
+            if (
+                ("cell" in name_lower or "voltage" in name_lower or "temp" in name_lower) and
+                attributes.get("category") == "battery"
+            ):
+                _LOGGER.debug("Skipping duration classification for cell sensor: %s", internal_name)
+                continue
+                
             _LOGGER.info("Forcing DURATION device class for %s", internal_name)
             result["device_class"] = SensorDeviceClass.DURATION
-            result["native_unit_of_measurement"] = "s"  # Set seconds as the unit
+            
+            # Check if this is likely a days-based duration sensor
+            is_days_sensor = (
+                "day" in name_lower or 
+                "days" in name_lower or 
+                "day" in topic_lower
+            )
+            
+            # Set appropriate unit based on sensor nature
+            if is_days_sensor:
+                result["native_unit_of_measurement"] = "days"
+            else:
+                result["native_unit_of_measurement"] = "s"  # Default to seconds
+                
             if "state_class" not in result or not result["state_class"]:
                 result["state_class"] = SensorStateClass.MEASUREMENT
             if "icon" not in result or not result["icon"]:
