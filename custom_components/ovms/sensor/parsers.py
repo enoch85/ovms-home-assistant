@@ -1,20 +1,9 @@
 """OVMS sensor state parsers."""
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
-from homeassistant.const import (
-    PERCENTAGE,
-    UnitOfElectricCurrent,
-    UnitOfElectricPotential,
-    UnitOfEnergy,
-    UnitOfLength,
-    UnitOfPower,
-    UnitOfSpeed,
-    UnitOfTemperature,
-    UnitOfTime,
-)
 from homeassistant.util import dt as dt_util
 
 from ..const import LOGGER_NAME, MAX_STATE_LENGTH, truncate_state_value
@@ -32,7 +21,7 @@ NUMERIC_DEVICE_CLASSES = [
     SensorDeviceClass.VOLTAGE,
     SensorDeviceClass.DISTANCE,
     SensorDeviceClass.SPEED,
-    SensorDeviceClass.DURATION,  # Added duration to numeric device classes
+    SensorDeviceClass.DURATION,  # Duration sensors need numeric values
 ]
 
 # Special string values that should be converted to None for numeric sensors
@@ -106,30 +95,60 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
         pass
     return None
 
+def detect_duration_unit(topic: str, name: str, value: Optional[float]) -> str:
+    """Detect the unit of a duration value based on name, topic and value magnitude.
+    
+    Args:
+        topic: The sensor topic
+        name: The sensor name
+        value: The numeric value
+    
+    Returns:
+        The detected unit (seconds, minutes, hours, days)
+    """
+    # Default to seconds
+    unit = "seconds"
+    
+    # Check for clues in the topic or name
+    topic_lower = topic.lower()
+    name_lower = name.lower()
+    
+    # Check for specific metric patterns that indicate units
+    if any(x in topic_lower for x in ["/v/c/time", "/v/c/duration", "/v/e/drivetime", "/v/e/parktime", "/v/g/time"]):
+        # These are typical time metrics in OVMS
+        if "_c_time" in topic_lower or "_c_duration" in topic_lower:
+            return "seconds"
+    
+    # Check for explicit unit indicators in the name
+    if "day" in name_lower or "days" in name_lower:
+        return "days"
+    elif "hour" in name_lower or "hours" in name_lower or "_h_" in name_lower:
+        return "hours"
+    elif "minute" in name_lower or "minutes" in name_lower or "mins" in name_lower or "_m_" in name_lower:
+        return "minutes"
+    elif "second" in name_lower or "seconds" in name_lower or "_s_" in name_lower:
+        return "seconds"
+    
+    # If no explicit unit, estimate from value magnitude
+    if value is not None:
+        try:
+            if value > 86400 * 2:  # More than 2 days
+                unit = "days"
+            elif value > 3600 * 2:  # More than 2 hours
+                unit = "hours"
+            elif value > 60 * 2:  # More than 2 minutes
+                unit = "minutes"
+        except (ValueError, TypeError):
+            pass
+    
+    return unit
+
 def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None, 
                 is_cell_sensor: bool = False) -> Any:
     """Parse the value from the payload."""
     # Handle special state values for numeric sensors
     if requires_numeric_value(device_class, state_class) and is_special_state_value(value):
         return None
-
-    # Special handling for duration values - convert to seconds for HA
-    if device_class == SensorDeviceClass.DURATION:
-        # Extract numeric value - could be direct or in JSON
-        numeric_value = _extract_numeric_value(value)
-        if numeric_value is not None:
-            # Look for unit hints in the payload
-            unit_hint = _get_unit_hint(value)
-            
-            # Convert to seconds based on unit hint
-            if unit_hint == UnitOfTime.MINUTES:
-                return numeric_value * 60
-            elif unit_hint == UnitOfTime.HOURS:
-                return numeric_value * 3600
-            elif unit_hint == UnitOfTime.DAYS:
-                return numeric_value * 86400
-            # Default to seconds if no unit hint or already in seconds
-            return numeric_value
 
     # Special handling for yes/no values in numeric sensors
     if requires_numeric_value(device_class, state_class) and isinstance(value, str):
@@ -228,81 +247,6 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
                 return None
             # Otherwise return as string with truncation if needed
             return truncate_state_value(value)
-
-def _extract_numeric_value(value: Any) -> Optional[float]:
-    """Extract a numeric value from various input formats."""
-    # Direct numeric value
-    if isinstance(value, (int, float)):
-        return float(value)
-    
-    # String value that can be converted directly
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except (ValueError, TypeError):
-            pass
-            
-    # JSON encoded value
-    try:
-        if isinstance(value, str):
-            json_val = json.loads(value)
-            if isinstance(json_val, (int, float)):
-                return float(json_val)
-            elif isinstance(json_val, dict):
-                for key in ['value', 'state', 'duration']:
-                    if key in json_val and isinstance(json_val[key], (int, float)):
-                        return float(json_val[key])
-    except (ValueError, json.JSONDecodeError):
-        pass
-        
-    return None
-
-def _get_unit_hint(value: Any) -> Optional[str]:
-    """Try to determine the time unit from the payload."""
-    # Check for unit in JSON
-    try:
-        if isinstance(value, str):
-            json_val = json.loads(value)
-            if isinstance(json_val, dict):
-                # Look for unit field
-                if 'unit' in json_val:
-                    unit = str(json_val['unit']).lower()
-                    if 'min' in unit:
-                        return UnitOfTime.MINUTES
-                    elif 'hour' in unit or 'hr' in unit:
-                        return UnitOfTime.HOURS
-                    elif 'day' in unit:
-                        return UnitOfTime.DAYS
-                    elif 'sec' in unit:
-                        return UnitOfTime.SECONDS
-                        
-                # Check field names for hints
-                for key in json_val.keys():
-                    key_lower = key.lower()
-                    if 'minute' in key_lower or 'min' in key_lower:
-                        return UnitOfTime.MINUTES
-                    elif 'hour' in key_lower or 'hr' in key_lower:
-                        return UnitOfTime.HOURS
-                    elif 'day' in key_lower:
-                        return UnitOfTime.DAYS
-                    elif 'second' in key_lower or 'sec' in key_lower:
-                        return UnitOfTime.SECONDS
-    except (ValueError, json.JSONDecodeError):
-        pass
-    
-    # Check for unit hints in string form
-    if isinstance(value, str):
-        if 'min' in value.lower():
-            return UnitOfTime.MINUTES
-        elif 'hour' in value.lower() or 'hr' in value.lower():
-            return UnitOfTime.HOURS
-        elif 'day' in value.lower():
-            return UnitOfTime.DAYS
-        elif 'sec' in value.lower():
-            return UnitOfTime.SECONDS
-            
-    # Default to seconds as most metrics use this
-    return UnitOfTime.SECONDS
 
 def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: str = "", 
                         is_cell_sensor: bool = False, stat_type: str = "cell") -> Dict[str, Any]:
