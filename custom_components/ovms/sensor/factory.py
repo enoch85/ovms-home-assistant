@@ -139,36 +139,13 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
     # Check if attributes specify a category
     if "category" in attributes:
         category = attributes["category"]
-        # Also apply diagnostic entity category to network and system sensors
         if category in ["diagnostic", "network", "system"]:
             result["entity_category"] = EntityCategory.DIAGNOSTIC
-            if category != "diagnostic":  # Don't return for network/system to allow further processing
-                _LOGGER.debug(
-                    "Setting EntityCategory.DIAGNOSTIC for %s category: %s",
-                    category, internal_name
-                )
 
-    # Special check for timer mode sensors
-    if "timermode" in internal_name.lower() or "timer_mode" in internal_name.lower():
-        result["icon"] = "mdi:timer-outline"
-        return result
-
-    # Special handling for GPS coordinates
-    name_lower = internal_name.lower()
-    if "latitude" in name_lower or "lat" in name_lower:
-        result["icon"] = "mdi:latitude"
-        result["state_class"] = SensorStateClass.MEASUREMENT
-        return result
-    elif "longitude" in name_lower or "lon" in name_lower or "lng" in name_lower:
-        result["icon"] = "mdi:longitude"
-        result["state_class"] = SensorStateClass.MEASUREMENT
-        return result
-
-    # Try to find matching metric by converting topic to dot notation
+    # Extract metric path from topic
     topic_suffix = topic
-    if topic.count('/') >= 3:  # Skip the prefix part
+    if topic.count('/') >= 3:
         parts = topic.split('/')
-        # Find where the actual metric path starts
         for i, part in enumerate(parts):
             if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
                 topic_suffix = '/'.join(parts[i:])
@@ -199,7 +176,35 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
             result["icon"] = metric_info["icon"]
         return result
 
-    # If no metric info was found, use the original pattern matching as fallback
+    # Special handling for GPS coordinates
+    name_lower = internal_name.lower()
+    if "latitude" in name_lower or "lat" in name_lower:
+        result["icon"] = "mdi:latitude"
+        result["state_class"] = SensorStateClass.MEASUREMENT
+        return result
+    elif "longitude" in name_lower or "lon" in name_lower or "lng" in name_lower:
+        result["icon"] = "mdi:longitude"
+        result["state_class"] = SensorStateClass.MEASUREMENT
+        return result
+
+    # Duration detection based purely on unit
+    unit = attributes.get("unit_of_measurement", "").lower()
+    if unit in ["s", "sec", "second", "seconds", 
+                "m", "min", "minute", "minutes", 
+                "h", "hr", "hour", "hours", 
+                "d", "day", "days"]:
+        result["device_class"] = SensorDeviceClass.DURATION
+        result["state_class"] = SensorStateClass.MEASUREMENT
+        result["icon"] = "mdi:timer"
+        # Keep original unit
+        if not result["native_unit_of_measurement"]:
+            result["native_unit_of_measurement"] = unit
+        return result
+
+    # Force duration device class for time-related sensors is removed
+    # Now we rely purely on metrics definitions and unit detection
+
+    # For other cases, use sensor types pattern matching as fallback
     for key, sensor_type in SENSOR_TYPES.items():
         if key in internal_name.lower() or key in topic.lower():
             if "device_class" in sensor_type and not result["device_class"]:
