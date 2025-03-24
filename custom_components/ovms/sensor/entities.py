@@ -168,9 +168,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         sensor_type = determine_sensor_type(self._internal_name, self._topic, self._attr_extra_state_attributes)
         self._attr_device_class = sensor_type["device_class"]
         self._attr_state_class = sensor_type["state_class"]
-        self._attr_native_unit_of_measurement = sensor_type["native_unit_of_measurement"] or attributes.get("unit")
+        self._attr_native_unit_of_measurement = sensor_type["native_unit_of_measurement"]
         self._attr_entity_category = sensor_type["entity_category"]
         self._attr_icon = sensor_type["icon"]
+        
+        # Add unit to attributes for better tracking
+        if self._attr_native_unit_of_measurement and "unit" not in self._attr_extra_state_attributes:
+            self._attr_extra_state_attributes["unit"] = self._attr_native_unit_of_measurement
 
         # Flag to indicate if this is a cell sensor
         self._is_cell_sensor = (
