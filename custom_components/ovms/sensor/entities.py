@@ -14,7 +14,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
-from .parsers import parse_value, process_json_payload, parse_comma_separated_values, requires_numeric_value, is_special_state_value, calculate_median, detect_duration_unit
+from .parsers import parse_value, process_json_payload, parse_comma_separated_values, requires_numeric_value, is_special_state_value, calculate_median
 from .factory import determine_sensor_type, add_device_specific_attributes, create_cell_sensors
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -208,53 +208,53 @@ class OVMSDurationSensor(SensorEntity, RestoreEntity):
         self._handle_duration_value(initial_state)
 
     def _handle_duration_value(self, value: Any) -> None:
-        """Handle a duration value and format it for display."""
+        """Process duration value to human-readable format."""
+        _LOGGER.debug("Duration sensor [%s] processing value: %s (type: %s)", 
+                     self._internal_name, value, type(value).__name__)
         try:
-            # First try to convert to float
-            numeric_value = None
+            # Extract numeric value with minimal logic
+            number = None
             if isinstance(value, (int, float)):
-                numeric_value = float(value)
-            else:
+                number = float(value)
+                _LOGGER.debug("Duration value is numeric: %s", number)
+            elif isinstance(value, str):
+                _LOGGER.debug("Duration value is string, attempting conversion")
                 try:
-                    numeric_value = float(value)
-                except (ValueError, TypeError):
-                    # Try to parse as JSON
+                    number = float(value)
+                    _LOGGER.debug("Successfully converted string to number: %s", number)
+                except ValueError:
+                    _LOGGER.debug("Not a simple numeric string, trying JSON")
                     try:
-                        json_data = json.loads(value)
-                        if isinstance(json_data, (int, float)):
-                            numeric_value = float(json_data)
-                        elif isinstance(json_data, dict) and any(k in json_data for k in ["value", "state"]):
-                            # Extract value from JSON object
-                            for key in ["value", "state"]:
-                                if key in json_data and isinstance(json_data[key], (int, float)):
-                                    numeric_value = float(json_data[key])
+                        data = json.loads(value)
+                        _LOGGER.debug("Parsed JSON: %s (type: %s)", data, type(data).__name__)
+                        if isinstance(data, (int, float)):
+                            number = float(data)
+                            _LOGGER.debug("JSON contained numeric value: %s", number)
+                        elif isinstance(data, dict):
+                            _LOGGER.debug("JSON is dictionary, looking for value key")
+                            for key in ["value", "state", "data"]:
+                                if key in data and isinstance(data[key], (int, float)):
+                                    number = float(data[key])
+                                    _LOGGER.debug("Found number %s in key '%s'", number, key)
                                     break
-                    except (ValueError, json.JSONDecodeError):
-                        pass
-
-            if numeric_value is not None:
-                # Store raw value in attributes
-                self._attr_extra_state_attributes["raw_value"] = numeric_value
-                
-                # Detect appropriate time unit
-                detected_unit = detect_duration_unit(self._topic, self._internal_name, numeric_value)
-                self._attr_extra_state_attributes["unit"] = detected_unit
-                
-                # Format the value for display
-                formatted_value = format_duration(numeric_value)
-                
-                # Use the formatted value as the native value
-                self._attr_native_value = formatted_value
-                # Clear the unit of measurement since format includes units
+                    except (ValueError, json.JSONDecodeError) as e:
+                        _LOGGER.debug("Failed to parse as JSON: %s", e)
+            
+            if number is not None:
+                # Store raw value and set formatted display value
+                self._attr_extra_state_attributes["raw_value"] = number
+                formatted = format_duration(number)
+                _LOGGER.debug("Formatting duration %s → %s", number, formatted)
+                self._attr_native_value = formatted
                 self._attr_native_unit_of_measurement = None
             else:
-                # If conversion fails, still store the original value
-                if value is not None:
-                    self._attr_native_value = str(value)
-                    self._attr_extra_state_attributes["original_value"] = value
+                _LOGGER.debug("Could not extract numeric value, using raw string")
+                self._attr_native_value = str(value) if value is not None else None
         except Exception as ex:
-            _LOGGER.exception("Error handling duration sensor: %s", ex)
+            _LOGGER.exception("Error formatting duration: %s", ex)
             self._attr_native_value = str(value) if value is not None else None
+        
+        _LOGGER.debug("Final duration sensor value: %s", self._attr_native_value)
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -367,21 +367,11 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Only set native value after attributes are initialized - with truncation if needed
         parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
         
-        # Ensure timestamp values are properly formatted as strings
-        if self._attr_device_class == SensorDeviceClass.TIMESTAMP and parsed_value is not None:
-            if isinstance(parsed_value, (int, float)):
-                # Convert numeric timestamp to ISO format
-                try:
-                    dt = datetime.fromtimestamp(float(parsed_value))
-                    aware_dt = dt_util.as_utc(dt)
-                    self._attr_native_value = aware_dt.isoformat()
-                except (ValueError, OverflowError, TypeError):
-                    self._attr_native_value = truncate_state_value(parsed_value)
-            else:
-                # Ensure the timestamp is a string
-                self._attr_native_value = str(parsed_value)
+        if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
+            _LOGGER.debug("Setting timestamp value for %s: %s", self._internal_name, parsed_value)
+            self._attr_native_value = parsed_value
         else:
-            # Normal handling for non-timestamp sensors
+            _LOGGER.debug("Setting non-timestamp value for %s: %s", self._internal_name, parsed_value)
             self._attr_native_value = truncate_state_value(parsed_value)
 
         # Try to extract additional attributes from initial state if it's JSON or cell values
@@ -430,21 +420,11 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Parse value and apply truncation if needed
             parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
             
-            # Ensure timestamp values are properly formatted as strings
-            if self._attr_device_class == SensorDeviceClass.TIMESTAMP and parsed_value is not None:
-                if isinstance(parsed_value, (int, float)):
-                    # Convert numeric timestamp to ISO format
-                    try:
-                        dt = datetime.fromtimestamp(float(parsed_value))
-                        aware_dt = dt_util.as_utc(dt)
-                        self._attr_native_value = aware_dt.isoformat()
-                    except (ValueError, OverflowError, TypeError):
-                        self._attr_native_value = truncate_state_value(parsed_value)
-                else:
-                    # Ensure the timestamp is a string
-                    self._attr_native_value = str(parsed_value)
+            if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
+                _LOGGER.debug("Setting timestamp value for %s: %s", self._internal_name, parsed_value)
+                self._attr_native_value = parsed_value
             else:
-                # Normal handling for non-timestamp sensors
+                _LOGGER.debug("Setting non-timestamp value for %s: %s", self._internal_name, parsed_value)
                 self._attr_native_value = truncate_state_value(parsed_value)
 
             # Update timestamp attribute
