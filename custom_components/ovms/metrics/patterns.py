@@ -47,6 +47,15 @@ TOPIC_PATTERNS = {
         "unit": UnitOfTemperature.CELSIUS,
         "category": "climate",
     },
+    # Also match "temperature" for consistency with SENSOR_TYPES
+    "temperature": {
+        "name": "Temperature",
+        "icon": "mdi:thermometer",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+        "category": "climate",
+    },
     "voltage": {
         "name": "Voltage",
         "icon": "mdi:flash",
@@ -110,6 +119,7 @@ TOPIC_PATTERNS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": "dBm",
         "category": "network",
+        "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "door": {
         "name": "Door",
@@ -133,6 +143,7 @@ TOPIC_PATTERNS = {
         "name": "Climate Control",
         "icon": "mdi:air-conditioner",
         "category": "climate",
+        "state_class": SensorStateClass.MEASUREMENT,
     },
     "fan": {
         "name": "Fan",
@@ -167,6 +178,7 @@ TOPIC_PATTERNS = {
         "name": "Status",
         "icon": "mdi:information-outline",
         "category": "system",
+        "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "alert": {
         "name": "Alert",
@@ -174,6 +186,7 @@ TOPIC_PATTERNS = {
         "device_class": BinarySensorDeviceClass.PROBLEM,
         "category": "diagnostic",
     },
+    # Vehicle-specific patterns
     "xvu": {
         "name": "VW eUP!",
         "icon": "mdi:car-electric",
@@ -194,7 +207,7 @@ TOPIC_PATTERNS = {
         "icon": "mdi:car-electric",
         "category": "nissan_leaf",
     },
-    # Add specific patterns for our problematic metrics
+    # Custom patterns
     "egpio_input": {
         "name": "GPIO Input Ports",
         "icon": "mdi:integrated-circuit-chip",
@@ -225,7 +238,7 @@ TOPIC_PATTERNS = {
         "name": "Frequency",
         "icon": "mdi:sine-wave",
         "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfFrequency.HERTZ,  # Added unit for frequency
+        "unit": UnitOfFrequency.HERTZ,
         "category": "system",
     },
     "torque": {
@@ -282,5 +295,49 @@ TOPIC_PATTERNS = {
         "icon": "mdi:battery-charging",
         "state_class": SensorStateClass.MEASUREMENT,
         "category": "nissan_leaf",
+    },
+    # New additions from SENSOR_TYPES
+    "efficiency": {
+        "name": "Efficiency",
+        "icon": "mdi:leaf",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "battery",
+    },
+    "charging_time": {
+        "name": "Charging Time",
+        "icon": "mdi:timer",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "device_class": SensorDeviceClass.DURATION,
+        "category": "charging",
+    },
+    "hvac": {
+        "name": "HVAC",
+        "icon": "mdi:air-conditioner",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "climate",
+    },
+    "motor": {
+        "name": "Motor",
+        "icon": "mdi:engine",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "motor",
+    },
+    "trip": {
+        "name": "Trip",
+        "icon": "mdi:map-marker-path",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "category": "trip",
+    },
+    "firmware": {
+        "name": "Firmware",
+        "icon": "mdi:package-up",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+        "category": "system",
+    },
+    "task": {
+        "name": "Task",
+        "icon": "mdi:list-status",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+        "category": "system",
     },
 }
