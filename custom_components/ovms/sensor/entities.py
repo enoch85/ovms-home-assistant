@@ -367,10 +367,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Only set native value after attributes are initialized - with truncation if needed
         parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
         
+        # For timestamp device class, use the value directly without additional processing
         if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
             _LOGGER.debug("Setting timestamp value for %s: %s", self._internal_name, parsed_value)
             self._attr_native_value = parsed_value
         else:
+            # For all other sensor types, apply truncation if needed
             _LOGGER.debug("Setting non-timestamp value for %s: %s", self._internal_name, parsed_value)
             self._attr_native_value = truncate_state_value(parsed_value)
 
@@ -420,10 +422,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Parse value and apply truncation if needed
             parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
             
+            # For timestamp device class, use the value directly without additional processing
             if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
                 _LOGGER.debug("Setting timestamp value for %s: %s", self._internal_name, parsed_value)
                 self._attr_native_value = parsed_value
             else:
+                # For all other sensor types, apply truncation if needed
                 _LOGGER.debug("Setting non-timestamp value for %s: %s", self._internal_name, parsed_value)
                 self._attr_native_value = truncate_state_value(parsed_value)
 
