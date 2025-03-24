@@ -91,6 +91,27 @@ SENSOR_TYPES = {
         "unit": UnitOfTime.SECONDS,
         "icon": "mdi:timer-outline",
     },
+    # Timestamp sensors
+    "timestamp": {
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "icon": "mdi:clock",
+    },
+    "date": {
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "icon": "mdi:calendar",
+    },
+    "utc": {
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "icon": "mdi:clock-time-twelve-outline",
+    },
+    "gpstime": {
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "icon": "mdi:crosshairs-gps",
+    },
+    "serv.time": {
+        "device_class": SensorDeviceClass.TIMESTAMP, 
+        "icon": "mdi:wrench-clock",
+    },
     # Additional icons for EV-specific metrics
     "odometer": {
         "icon": "mdi:counter",
@@ -182,6 +203,13 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
     elif "longitude" in name_lower or "lon" in name_lower or "lng" in name_lower:
         result["icon"] = "mdi:longitude"
         result["state_class"] = SensorStateClass.MEASUREMENT
+        return result
+
+    # Special handling for timestamp sensors
+    if any(term in topic.lower() or term in internal_name.lower() for term in 
+           ["time.utc", "gpstime", "timestamp", "serv.time", "timerstart"]):
+        result["device_class"] = SensorDeviceClass.TIMESTAMP
+        result["icon"] = "mdi:clock"
         return result
 
     # Try to find matching metric by converting topic to dot notation
