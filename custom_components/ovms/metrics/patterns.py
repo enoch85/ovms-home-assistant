@@ -18,6 +18,7 @@ from homeassistant.const import (
     UnitOfSpeed,
     UnitOfTemperature,
     UnitOfFrequency,
+    UnitOfTime,
 )
 from homeassistant.helpers.entity import EntityCategory
 
@@ -166,6 +167,7 @@ TOPIC_PATTERNS = {
         "name": "Timer",
         "icon": "mdi:timer",
         "device_class": SensorDeviceClass.DURATION,
+        "unit": UnitOfTime.SECONDS,
         "category": "system",
     },
     "version": {
@@ -308,7 +310,16 @@ TOPIC_PATTERNS = {
         "icon": "mdi:timer",
         "state_class": SensorStateClass.MEASUREMENT,
         "device_class": SensorDeviceClass.DURATION,
+        "unit": UnitOfTime.SECONDS,
         "category": "charging",
+    },
+    "parktime": {
+        "name": "Park Time",
+        "icon": "mdi:timer",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "device_class": SensorDeviceClass.DURATION,
+        "unit": UnitOfTime.SECONDS,
+        "category": "trip",
     },
     "hvac": {
         "name": "HVAC",
@@ -338,6 +349,14 @@ TOPIC_PATTERNS = {
         "name": "Task",
         "icon": "mdi:list-status",
         "entity_category": EntityCategory.DIAGNOSTIC,
+        "category": "system",
+    },
+    "duration": {
+        "name": "Duration",
+        "icon": "mdi:timer-outline",
+        "device_class": SensorDeviceClass.DURATION,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTime.SECONDS,
         "category": "system",
     },
 }
