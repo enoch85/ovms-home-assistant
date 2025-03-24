@@ -66,101 +66,48 @@ def calculate_median(values: List[float]) -> Optional[float]:
         return (sorted_values[n//2 - 1] + sorted_values[n//2]) / 2
     return sorted_values[n//2]
 
-def detect_duration_unit(topic: str, name: str, value: Optional[float]) -> str:
-    """Detect the unit of a duration value based on name, topic and value magnitude.
+def parse_timestamp_to_iso(value: Any) -> Any:
+    """Convert timestamp to ISO format."""
+    _LOGGER.debug("Timestamp parsing input: %s (type: %s)", value, type(value).__name__)
     
-    Args:
-        topic: The sensor topic
-        name: The sensor name
-        value: The numeric value
+    if value is None:
+        _LOGGER.debug("Timestamp value is None, returning None")
+        return None
     
-    Returns:
-        The detected unit (seconds, minutes, hours, days)
-    """
-    # Default to seconds
-    unit = "seconds"
-    
-    # If no explicit unit, estimate from value magnitude
-    if value is not None:
-        try:
-            if value > 86400 * 2:  # More than 2 days in seconds
-                unit = "days"
-            elif value > 3600 * 2:  # More than 2 hours in seconds
-                unit = "hours" 
-            elif value > 60 * 2:  # More than 2 minutes in seconds
-                unit = "minutes"
-        except (ValueError, TypeError):
-            pass
-    
-    return unit
-
-def parse_timestamp_to_iso(value: Any) -> str:
-    """Parse various timestamp formats into ISO 8601 format.
-    
-    Args:
-        value: The timestamp value to parse
-        
-    Returns:
-        ISO 8601 formatted timestamp string or original value if parsing fails
-    """
-    if not value:
-        return value
-        
-    # Return if already in ISO format
-    if isinstance(value, str) and re.match(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}', value):
-        return value
-        
     try:
-        # Convert numeric timestamp (seconds since epoch)
-        if isinstance(value, (int, float)) or (isinstance(value, str) and value.isdigit()):
-            try:
-                numeric_value = float(value)
-                dt = datetime.fromtimestamp(numeric_value)
-                aware_dt = dt_util.as_utc(dt)
-                return aware_dt.isoformat()
-            except (ValueError, OverflowError):
-                pass
+        # Already ISO format
+        if isinstance(value, str) and re.match(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}', value):
+            _LOGGER.debug("Value already in ISO format: %s", value)
+            return value
             
-        # First try parsing with Home Assistant's datetime parser
-        dt = dt_util.parse_datetime(value)
-        if dt:
-            return dt.isoformat()
+        # Handle numeric timestamp (epoch seconds)
+        if isinstance(value, (int, float)):
+            _LOGGER.debug("Converting numeric timestamp: %s", value)
+            dt = datetime.fromtimestamp(float(value))
+            iso = dt_util.as_utc(dt).isoformat()
+            _LOGGER.debug("Converted to ISO: %s", iso)
+            return iso
+        elif isinstance(value, str) and value.replace('.', '', 1).isdigit():
+            _LOGGER.debug("Converting numeric string timestamp: %s", value)
+            dt = datetime.fromtimestamp(float(value))
+            iso = dt_util.as_utc(dt).isoformat()
+            _LOGGER.debug("Converted to ISO: %s", iso)
+            return iso
             
-        # Try common timestamp formats
+        # Use HA's parser as fallback
         if isinstance(value, str):
-            # Handle format: "YYYY-MM-DD HH:MM:SS [TIMEZONE]"
-            # This handles any timezone abbreviation of any length
-            match = re.match(r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(?:\s+([A-Z]{1,6}))?', value)
-            if match:
-                dt_str = match.group(1)
-                try:
-                    # Parse just the datetime part without timezone
-                    dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
-                    # Convert to timezone-aware datetime in UTC
-                    aware_dt = dt_util.as_utc(dt)
-                    return aware_dt.isoformat()
-                except ValueError:
-                    pass
-                
-            # Try format: "March 24, 2025"
-            try:
-                dt = datetime.strptime(value, "%B %d, %Y")
-                aware_dt = dt_util.as_utc(dt)
-                return aware_dt.isoformat()
-            except ValueError:
-                pass
-                
-            # Try format: "Mar 24, 2025"
-            try:
-                dt = datetime.strptime(value, "%b %d, %Y")
-                aware_dt = dt_util.as_utc(dt)
-                return aware_dt.isoformat()
-            except ValueError:
-                pass
-    except Exception as ex:
-        _LOGGER.debug(f"Error parsing timestamp: {ex}")
-    
-    # Return original value if parsing fails
+            _LOGGER.debug("Trying HA datetime parser for: %s", value)
+            dt = dt_util.parse_datetime(value)
+            if dt:
+                iso = dt.isoformat()
+                _LOGGER.debug("HA parser succeeded: %s", iso)
+                return iso
+            else:
+                _LOGGER.debug("HA parser failed to parse timestamp")
+    except Exception as e:
+        _LOGGER.debug("Error parsing timestamp: %s", e)
+        
+    _LOGGER.debug("Returning original timestamp value: %s", value)
     return value
 
 def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sensor: bool = False, stat_type: str = "cell") -> Optional[Dict[str, Any]]:
@@ -206,7 +153,10 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
     """Parse the value from the payload."""
     # Special handling for timestamp device class - given highest priority
     if device_class == SensorDeviceClass.TIMESTAMP:
-        return parse_timestamp_to_iso(value)
+        _LOGGER.debug("Parsing timestamp value: %s", value)
+        result = parse_timestamp_to_iso(value)
+        _LOGGER.debug("Parsed timestamp result: %s", result)
+        return result
     
     # Handle special state values for numeric sensors
     if requires_numeric_value(device_class, state_class) and is_special_state_value(value):
