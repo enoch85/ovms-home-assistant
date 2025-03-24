@@ -78,11 +78,27 @@ SENSOR_TYPES = {
         "unit": UnitOfTime.SECONDS,
         "icon": "mdi:timer",
     },
-    "time": {
+    "charging_time": {
         "device_class": SensorDeviceClass.DURATION,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfTime.SECONDS,
         "icon": "mdi:timer-outline",
+    },
+    "drive_time": {
+        "device_class": SensorDeviceClass.DURATION,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTime.SECONDS,
+        "icon": "mdi:timer-outline",
+    },
+    "park_time": {
+        "device_class": SensorDeviceClass.DURATION,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTime.SECONDS,
+        "icon": "mdi:timer-outline",
+    },
+    "timestamp": {
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "icon": "mdi:clock",
     },
     # Additional icons for EV-specific metrics
     "odometer": {
@@ -270,21 +286,30 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
                     pass
 
         elif device_class == SensorDeviceClass.DURATION:
-            # Make sure the unit is set for duration sensors
+            # Only add unit if not already defined
             if "unit_of_measurement" not in updated_attrs and "unit" not in updated_attrs:
-                # Add default unit based on the name
-                name_lower = str(updated_attrs.get("topic", "")).lower()
-                if "minute" in name_lower or "min" in name_lower:
-                    updated_attrs["unit"] = UnitOfTime.MINUTES
-                elif "second" in name_lower or "sec" in name_lower:
-                    updated_attrs["unit"] = UnitOfTime.SECONDS
-                elif "hour" in name_lower or "hr" in name_lower:
-                    updated_attrs["unit"] = UnitOfTime.HOURS
-                elif "day" in name_lower:
-                    updated_attrs["unit"] = UnitOfTime.DAYS
-                else:
-                    # Default to seconds as fallback
-                    updated_attrs["unit"] = UnitOfTime.SECONDS
+                # Check topic for the specific metric to determine unit
+                topic = str(updated_attrs.get("topic", ""))
+                
+                # Extract the metric path for lookup
+                topic_suffix = topic
+                if topic.count('/') >= 3:
+                    parts = topic.split('/')
+                    for i, part in enumerate(parts):
+                        if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
+                            topic_suffix = '/'.join(parts[i:])
+                            break
+                metric_path = topic_suffix.replace("/", ".")
+                
+                # Try to get duration unit from metric definition
+                from ..metrics import get_metric_by_path
+                metric_info = get_metric_by_path(metric_path)
+                
+                if metric_info and "unit" in metric_info:
+                    # Use unit from metric definition
+                    updated_attrs["unit"] = metric_info["unit"]
+                    
+    return updated_attrs
                     
     return updated_attrs
 
