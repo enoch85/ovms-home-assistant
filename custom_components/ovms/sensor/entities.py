@@ -3,6 +3,7 @@ import logging
 import hashlib
 import json
 from typing import Any, Dict, Optional, List
+from datetime import datetime
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass, SensorDeviceClass
 from homeassistant.core import HomeAssistant, callback
@@ -365,7 +366,23 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
         # Only set native value after attributes are initialized - with truncation if needed
         parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
-        self._attr_native_value = truncate_state_value(parsed_value)
+        
+        # Ensure timestamp values are properly formatted as strings
+        if self._attr_device_class == SensorDeviceClass.TIMESTAMP and parsed_value is not None:
+            if isinstance(parsed_value, (int, float)):
+                # Convert numeric timestamp to ISO format
+                try:
+                    dt = datetime.fromtimestamp(float(parsed_value))
+                    aware_dt = dt_util.as_utc(dt)
+                    self._attr_native_value = aware_dt.isoformat()
+                except (ValueError, OverflowError, TypeError):
+                    self._attr_native_value = truncate_state_value(parsed_value)
+            else:
+                # Ensure the timestamp is a string
+                self._attr_native_value = str(parsed_value)
+        else:
+            # Normal handling for non-timestamp sensors
+            self._attr_native_value = truncate_state_value(parsed_value)
 
         # Try to extract additional attributes from initial state if it's JSON or cell values
         if self._is_cell_sensor and isinstance(initial_state, str) and "," in initial_state:
@@ -412,7 +429,23 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             """Update the sensor state."""
             # Parse value and apply truncation if needed
             parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
-            self._attr_native_value = truncate_state_value(parsed_value)
+            
+            # Ensure timestamp values are properly formatted as strings
+            if self._attr_device_class == SensorDeviceClass.TIMESTAMP and parsed_value is not None:
+                if isinstance(parsed_value, (int, float)):
+                    # Convert numeric timestamp to ISO format
+                    try:
+                        dt = datetime.fromtimestamp(float(parsed_value))
+                        aware_dt = dt_util.as_utc(dt)
+                        self._attr_native_value = aware_dt.isoformat()
+                    except (ValueError, OverflowError, TypeError):
+                        self._attr_native_value = truncate_state_value(parsed_value)
+                else:
+                    # Ensure the timestamp is a string
+                    self._attr_native_value = str(parsed_value)
+            else:
+                # Normal handling for non-timestamp sensors
+                self._attr_native_value = truncate_state_value(parsed_value)
 
             # Update timestamp attribute
             now = dt_util.utcnow()
