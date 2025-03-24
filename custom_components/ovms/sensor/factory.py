@@ -91,6 +91,27 @@ SENSOR_TYPES = {
         "unit": UnitOfTime.SECONDS,
         "icon": "mdi:timer-outline",
     },
+    # Timestamp sensors
+    "timestamp": {
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "icon": "mdi:clock",
+    },
+    "date": {
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "icon": "mdi:calendar",
+    },
+    "utc": {
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "icon": "mdi:clock-time-twelve-outline",
+    },
+    "gpstime": {
+        "device_class": SensorDeviceClass.TIMESTAMP,
+        "icon": "mdi:crosshairs-gps",
+    },
+    "serv.time": {
+        "device_class": SensorDeviceClass.TIMESTAMP, 
+        "icon": "mdi:wrench-clock",
+    },
     # Additional icons for EV-specific metrics
     "odometer": {
         "icon": "mdi:counter",
@@ -183,6 +204,9 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         result["icon"] = "mdi:longitude"
         result["state_class"] = SensorStateClass.MEASUREMENT
         return result
+
+    # We're not relying on keyword detection for timestamp sensors anymore
+    # The device class should be determined by the metrics definition
 
     # Try to find matching metric by converting topic to dot notation
     topic_suffix = topic

@@ -1,7 +1,9 @@
 """OVMS sensor state parsers."""
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+import re
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -92,6 +94,59 @@ def detect_duration_unit(topic: str, name: str, value: Optional[float]) -> str:
     
     return unit
 
+def parse_timestamp_to_iso(value: Any) -> str:
+    """Parse various timestamp formats into ISO 8601 format.
+    
+    Args:
+        value: The timestamp value to parse
+        
+    Returns:
+        ISO 8601 formatted timestamp string or original value if parsing fails
+    """
+    if not value:
+        return value
+        
+    # Return if already in ISO format
+    if isinstance(value, str) and re.match(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}', value):
+        return value
+        
+    try:
+        # First try parsing with Home Assistant's datetime parser
+        dt = dt_util.parse_datetime(value)
+        if dt:
+            return dt.isoformat()
+            
+        # Try common timestamp formats
+        if isinstance(value, str):
+            # Try format: "2025-03-24 07:27:45 CET"
+            match = re.match(r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(?:\s+([A-Z]+))?', value)
+            if match:
+                dt_str = match.group(1)
+                try:
+                    dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+                    return dt.isoformat()
+                except ValueError:
+                    pass
+                
+            # Try format: "March 24, 2025"
+            try:
+                dt = datetime.strptime(value, "%B %d, %Y")
+                return dt.isoformat()
+            except ValueError:
+                pass
+                
+            # Try format: "Mar 24, 2025"
+            try:
+                dt = datetime.strptime(value, "%b %d, %Y")
+                return dt.isoformat()
+            except ValueError:
+                pass
+    except Exception as ex:
+        _LOGGER.debug(f"Error parsing timestamp: {ex}")
+    
+    # Return original value if parsing fails
+    return value
+
 def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sensor: bool = False, stat_type: str = "cell") -> Optional[Dict[str, Any]]:
     """Parse comma-separated values into a dictionary with statistics.
     
@@ -133,6 +188,10 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
 def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None, 
                 is_cell_sensor: bool = False) -> Any:
     """Parse the value from the payload."""
+    # Special handling for timestamp device class - given highest priority
+    if device_class == SensorDeviceClass.TIMESTAMP:
+        return parse_timestamp_to_iso(value)
+    
     # Handle special state values for numeric sensors
     if requires_numeric_value(device_class, state_class) and is_special_state_value(value):
         return None
