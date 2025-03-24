@@ -205,7 +205,7 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         name_parts = internal_name.split('_')
         metric_info = get_metric_by_pattern(topic_parts) or get_metric_by_pattern(name_parts)
 
-    # Apply metric info if found
+    # Apply metric info if found - this takes priority over all other logic
     if metric_info:
         if "device_class" in metric_info:
             result["device_class"] = metric_info["device_class"]
