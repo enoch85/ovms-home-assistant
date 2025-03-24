@@ -13,6 +13,7 @@ from homeassistant.const import (
     UnitOfPower,
     UnitOfSpeed,
     UnitOfTemperature,
+    UnitOfTime,
 )
 from homeassistant.helpers.entity import EntityCategory
 
@@ -70,6 +71,18 @@ SENSOR_TYPES = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfSpeed.KILOMETERS_PER_HOUR,
         "icon": "mdi:speedometer",
+    },
+    "duration": {
+        "device_class": SensorDeviceClass.DURATION,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTime.SECONDS,
+        "icon": "mdi:timer",
+    },
+    "time": {
+        "device_class": SensorDeviceClass.DURATION,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTime.SECONDS,
+        "icon": "mdi:timer-outline",
     },
     # Additional icons for EV-specific metrics
     "odometer": {
@@ -255,6 +268,23 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
                             updated_attrs["temperature_level"] = "hot"
                 except (ValueError, TypeError):
                     pass
+
+        elif device_class == SensorDeviceClass.DURATION:
+            # Make sure the unit is set for duration sensors
+            if "unit_of_measurement" not in updated_attrs and "unit" not in updated_attrs:
+                # Add default unit based on the name
+                name_lower = str(updated_attrs.get("topic", "")).lower()
+                if "minute" in name_lower or "min" in name_lower:
+                    updated_attrs["unit"] = UnitOfTime.MINUTES
+                elif "second" in name_lower or "sec" in name_lower:
+                    updated_attrs["unit"] = UnitOfTime.SECONDS
+                elif "hour" in name_lower or "hr" in name_lower:
+                    updated_attrs["unit"] = UnitOfTime.HOURS
+                elif "day" in name_lower:
+                    updated_attrs["unit"] = UnitOfTime.DAYS
+                else:
+                    # Default to seconds as fallback
+                    updated_attrs["unit"] = UnitOfTime.SECONDS
                     
     return updated_attrs
 
