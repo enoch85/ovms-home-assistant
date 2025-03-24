@@ -33,6 +33,10 @@ SPECIAL_STATE_VALUES = ["unavailable", "unknown", "none", "", "null", "nan"]
 
 def requires_numeric_value(device_class: Any, state_class: Any) -> bool:
     """Check if this sensor requires a numeric value based on its device class."""
+    # Timestamp sensors should never require numeric values
+    if device_class == SensorDeviceClass.TIMESTAMP:
+        return False
+        
     return (
         device_class in NUMERIC_DEVICE_CLASSES or
         state_class in [
