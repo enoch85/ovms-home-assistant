@@ -56,13 +56,24 @@ async def async_setup_entry(
         try:
             # Check if the sensor has DURATION device class defined in the metrics
             device_class = None
+            topic = data.get("topic", "")
             if "attributes" in data and isinstance(data["attributes"], dict):
                 device_class = data["attributes"].get("device_class")
+                
+            # If we have a GPS time sensor, ensure it uses timestamp class
+            if "gpstime" in topic:
+                _LOGGER.debug("Detected GPS time sensor from topic %s, ensuring timestamp class", topic)
+                device_class = SensorDeviceClass.TIMESTAMP
+                # Update the data too to ensure consistency
+                if "attributes" in data and isinstance(data["attributes"], dict):
+                    data["attributes"]["device_class"] = SensorDeviceClass.TIMESTAMP
             
+            _LOGGER.debug("Sensor %s has device class %s from metrics", data.get("name"), device_class)
             is_duration = device_class == SensorDeviceClass.DURATION
                 
             if is_duration:
                 # Create a formatted duration sensor
+                _LOGGER.debug("Creating duration sensor %s", data.get("name"))
                 sensor = OVMSDurationSensor(
                     data.get("unique_id", ""),
                     data.get("name", "unknown"),
@@ -75,6 +86,8 @@ async def async_setup_entry(
                 )
             else:
                 # Create a regular sensor
+                _LOGGER.debug("Creating standard sensor %s with device class %s", 
+                             data.get("name"), device_class)
                 sensor = OVMSSensor(
                     data.get("unique_id", ""),
                     data.get("name", "unknown"),
