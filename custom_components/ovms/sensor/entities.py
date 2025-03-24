@@ -361,14 +361,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         elif "voltage" in self._internal_name.lower():
             self._stat_type = "voltage"
 
-        # Special handling for duration sensors - now just save the raw value
-        # and the formatted value display is handled by OVMSDurationSensor
-        if self._attr_device_class == SensorDeviceClass.DURATION:
-            self._handle_duration_sensor(initial_state)
-        else:
-            # Only set native value after attributes are initialized - with truncation if needed
-            parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
-            self._attr_native_value = truncate_state_value(parsed_value)
+        # Only set native value after attributes are initialized - with truncation if needed
+        parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
+        self._attr_native_value = truncate_state_value(parsed_value)
 
         # Try to extract additional attributes from initial state if it's JSON or cell values
         if self._is_cell_sensor and isinstance(initial_state, str) and "," in initial_state:
@@ -392,75 +387,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._cell_sensors_created = False
         self._cell_sensors = []
 
-    def _handle_duration_sensor(self, value: Any) -> None:
-        """Handle a duration sensor value and process it correctly.
-        
-        For duration sensors, we store the raw value and add a formatted value.
-        """
-        try:
-            # First try to convert to float
-            numeric_value = None
-            if isinstance(value, (int, float)):
-                numeric_value = float(value)
-            else:
-                try:
-                    numeric_value = float(value)
-                except (ValueError, TypeError):
-                    # Try to parse as JSON
-                    try:
-                        json_data = json.loads(value)
-                        if isinstance(json_data, (int, float)):
-                            numeric_value = float(json_data)
-                        elif isinstance(json_data, dict) and any(k in json_data for k in ["value", "state"]):
-                            # Try to extract value from JSON object
-                            for key in ["value", "state"]:
-                                if key in json_data and isinstance(json_data[key], (int, float)):
-                                    numeric_value = float(json_data[key])
-                                    break
-                    except (ValueError, json.JSONDecodeError):
-                        pass
-
-            if numeric_value is not None:
-                # Store raw value in attributes
-                self._attr_extra_state_attributes["raw_value"] = numeric_value
-                
-                # Detect appropriate time unit for informational purposes
-                detected_unit = detect_duration_unit(self._topic, self._internal_name, numeric_value)
-                self._attr_extra_state_attributes["detected_unit"] = detected_unit
-                
-                # Format the value for display as an attribute
-                formatted_value = format_duration(numeric_value)
-                self._attr_extra_state_attributes["formatted_value"] = formatted_value
-                
-                # For duration sensors, HA expects:
-                # 1. Device class set to DURATION
-                # 2. Native unit of measurement set to a valid time unit (s, min, h, days)
-                # 3. Native value in the unit specified
-                
-                # Set device class
-                self._attr_device_class = SensorDeviceClass.DURATION
-                
-                # Always use seconds as the native unit for proper formatting by Home Assistant
-                self._attr_native_unit_of_measurement = "s"
-                
-                # Set the native value in seconds
-                self._attr_native_value = numeric_value
-                
-                # Remove any old "unit" attribute to avoid confusion with native_unit_of_measurement
-                if "unit" in self._attr_extra_state_attributes:
-                    del self._attr_extra_state_attributes["unit"]
-                
-                # Ensure we have the proper state class for statistics
-                self._attr_state_class = SensorStateClass.MEASUREMENT
-            else:
-                # If conversion fails, still store the original value
-                self._attr_native_value = None
-                if value is not None:
-                    self._attr_extra_state_attributes["original_value"] = value
-        except Exception as ex:
-            _LOGGER.exception("Error handling duration sensor: %s", ex)
-            self._attr_native_value = None
-
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
         await super().async_added_to_hass()
@@ -482,13 +408,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         @callback
         def update_state(payload: str) -> None:
             """Update the sensor state."""
-            # Special handling for duration sensors
-            if self._attr_device_class == SensorDeviceClass.DURATION:
-                self._handle_duration_sensor(payload)
-            else:
-                # Parse value and apply truncation if needed
-                parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
-                self._attr_native_value = truncate_state_value(parsed_value)
+            # Parse value and apply truncation if needed
+            parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
+            self._attr_native_value = truncate_state_value(parsed_value)
 
             # Update timestamp attribute
             now = dt_util.utcnow()

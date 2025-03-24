@@ -6,6 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.components.sensor import SensorDeviceClass
 
 from ..const import LOGGER_NAME, SIGNAL_ADD_ENTITIES
 from .entities import OVMSSensor, CellVoltageSensor, OVMSDurationSensor
@@ -53,17 +54,12 @@ async def async_setup_entry(
             return
 
         try:
-            # Check if this is a duration sensor that should use formatted display
-            topic = data.get("topic", "").lower()
-            name = data.get("name", "").lower()
+            # Check if the sensor has DURATION device class defined in the metrics
+            device_class = None
+            if "attributes" in data and isinstance(data["attributes"], dict):
+                device_class = data["attributes"].get("device_class")
             
-            # Detect if this should be a duration sensor with formatted display
-            is_duration = False
-            if any(x in name for x in ["duration", "time_to", "charge_time", "drive_time", "runtime", "uptime", "parktime"]):
-                if "timestamp" not in name and not any(x in name for x in ["datetime", "date_time"]):
-                    is_duration = True
-            elif any(x in topic for x in ["/v/c/time", "/v/c/duration", "/v/e/drivetime", "/v/e/parktime", "/v/g/time"]):
-                is_duration = True
+            is_duration = device_class == SensorDeviceClass.DURATION
                 
             if is_duration:
                 # Create a formatted duration sensor
