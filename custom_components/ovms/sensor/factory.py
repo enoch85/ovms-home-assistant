@@ -68,10 +68,20 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
                 topic_suffix = '/'.join(parts[i:])
                 break
 
+    # Create both standard and alternative metric paths for matching
     metric_path = topic_suffix.replace("/", ".")
+    alt_metric_path = None
+    
+    # Handle "metric/" prefix - remove it for better matching with definitions
+    if metric_path.startswith("metric."):
+        alt_metric_path = metric_path[7:]  # Remove "metric."
 
     # Try exact match first
     metric_info = get_metric_by_path(metric_path)
+    
+    # If no match and we have an alternative path, try that
+    if not metric_info and alt_metric_path:
+        metric_info = get_metric_by_path(alt_metric_path)
 
     # Try alternative path formats for vehicle-specific metrics
     if not metric_info and "xvu" in metric_path:
@@ -155,16 +165,12 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
                     pass
 
         elif device_class == SensorDeviceClass.DURATION:
-            # Only add unit if not already defined
+            # Only add unit if not already defined and if there's an exact metric definition
             if "unit_of_measurement" not in updated_attrs and "unit" not in updated_attrs:
-                # Check topic for the specific metric to determine unit
+                # Get the metric info from metrics definitions
                 topic = str(updated_attrs.get("topic", ""))
-                
-                # Try different variations of the topic path
-                metric_paths = []
-                
-                # Extract the metric path for lookup
                 topic_suffix = topic
+                
                 if topic.count('/') >= 3:
                     parts = topic.split('/')
                     for i, part in enumerate(parts):
@@ -172,32 +178,28 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
                             topic_suffix = '/'.join(parts[i:])
                             break
                 
-                # Add standard conversion
-                metric_paths.append(topic_suffix.replace("/", "."))
+                metric_path = topic_suffix.replace("/", ".")
+                alt_metric_path = None
                 
-                # For top-level metrics (m/, s/, v/)
-                parts = topic_suffix.split('/')
-                if parts and parts[0] in ['m', 's', 'v', 't']:
-                    metric_paths.append('.'.join(parts))
+                # Handle "metric/" prefix for better matching with definitions
+                if metric_path.startswith("metric."):
+                    alt_metric_path = metric_path[7:]  # Remove "metric."
                 
-                # Import METRIC_DEFINITIONS if needed
+                # Import definitions if needed
                 if METRIC_DEFINITIONS is None:
-                    # Import only when needed
                     from .. import METRIC_DEFINITIONS as MD
                     METRIC_DEFINITIONS = MD
                 
-                # Try all path variations
-                for path in metric_paths:
-                    if path in METRIC_DEFINITIONS:
-                        metric_info = METRIC_DEFINITIONS[path]
-                        if "unit" in metric_info:
-                            # Use unit from metric definition
-                            updated_attrs["unit"] = metric_info["unit"]
-                            _LOGGER.debug(
-                                "Applied unit %s to duration sensor from metric path: %s",
-                                metric_info["unit"], path
-                            )
-                            break
+                # Check if this exact path exists in definitions
+                if metric_path in METRIC_DEFINITIONS:
+                    metric_info = METRIC_DEFINITIONS[metric_path]
+                    if "unit" in metric_info:
+                        updated_attrs["unit"] = metric_info["unit"]
+                # If no match and we have an alternative path, try that
+                elif alt_metric_path and alt_metric_path in METRIC_DEFINITIONS:
+                    metric_info = METRIC_DEFINITIONS[alt_metric_path]
+                    if "unit" in metric_info:
+                        updated_attrs["unit"] = metric_info["unit"]
                 
     return updated_attrs
 
