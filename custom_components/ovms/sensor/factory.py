@@ -205,12 +205,8 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         result["state_class"] = SensorStateClass.MEASUREMENT
         return result
 
-    # Special handling for timestamp sensors
-    if any(term in topic.lower() or term in internal_name.lower() for term in 
-           ["time.utc", "gpstime", "timestamp", "serv.time", "timerstart"]):
-        result["device_class"] = SensorDeviceClass.TIMESTAMP
-        result["icon"] = "mdi:clock"
-        return result
+    # We're not relying on keyword detection for timestamp sensors anymore
+    # The device class should be determined by the metrics definition
 
     # Try to find matching metric by converting topic to dot notation
     topic_suffix = topic
