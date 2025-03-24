@@ -109,10 +109,6 @@ SENSOR_TYPES = {
         "icon": "mdi:leaf",
         "state_class": SensorStateClass.MEASUREMENT,
     },
-    "charging_time": {
-        "icon": "mdi:timer",
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
     "climate": {
         "icon": "mdi:fan",
         "state_class": SensorStateClass.MEASUREMENT,
@@ -165,17 +161,19 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         "icon": None,
     }
 
-    # Check if attributes specify a category
-    if "category" in attributes:
-        category = attributes["category"]
-        # Also apply diagnostic entity category to network and system sensors
-        if category in ["diagnostic", "network", "system"]:
-            result["entity_category"] = EntityCategory.DIAGNOSTIC
-            if category != "diagnostic":  # Don't return for network/system to allow further processing
-                _LOGGER.debug(
-                    "Setting EntityCategory.DIAGNOSTIC for %s category: %s",
-                    category, internal_name
-                )
+    # Special handling for known duration sensors
+    if "parktime" in topic or "drivetime" in topic or ("time" in topic and "v/c/time" in topic) or "monotonic" in topic:
+        result["device_class"] = SensorDeviceClass.DURATION
+        result["state_class"] = SensorStateClass.MEASUREMENT
+        result["native_unit_of_measurement"] = UnitOfTime.SECONDS
+        result["icon"] = "mdi:timer"
+        
+    # Special handling for duration.* sensors
+    if "duration" in topic and any(x in topic for x in ["full", "range", "soc"]):
+        result["device_class"] = SensorDeviceClass.DURATION
+        result["state_class"] = SensorStateClass.MEASUREMENT
+        result["native_unit_of_measurement"] = UnitOfTime.MINUTES
+        result["icon"] = "mdi:timer"
 
     # Special check for timer mode sensors
     if "timermode" in internal_name.lower() or "timer_mode" in internal_name.lower():
@@ -192,6 +190,18 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         result["icon"] = "mdi:longitude"
         result["state_class"] = SensorStateClass.MEASUREMENT
         return result
+
+    # Check if attributes specify a category
+    if "category" in attributes:
+        category = attributes["category"]
+        # Also apply diagnostic entity category to network and system sensors
+        if category in ["diagnostic", "network", "system"]:
+            result["entity_category"] = EntityCategory.DIAGNOSTIC
+            if category != "diagnostic":  # Don't return for network/system to allow further processing
+                _LOGGER.debug(
+                    "Setting EntityCategory.DIAGNOSTIC for %s category: %s",
+                    category, internal_name
+                )
 
     # Try to find matching metric by converting topic to dot notation
     topic_suffix = topic
@@ -326,8 +336,6 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
                 if metric_info and "unit" in metric_info:
                     # Use unit from metric definition
                     updated_attrs["unit"] = metric_info["unit"]
-                    
-    return updated_attrs
                     
     return updated_attrs
 
