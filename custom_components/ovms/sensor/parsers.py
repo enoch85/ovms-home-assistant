@@ -26,7 +26,7 @@ NUMERIC_DEVICE_CLASSES = [
     SensorDeviceClass.VOLTAGE,
     SensorDeviceClass.DISTANCE,
     SensorDeviceClass.SPEED,
-    SensorDeviceClass.DURATION,  # Duration sensors need numeric values
+    # SensorDeviceClass.DURATION,  # Duration sensors now use formatted strings
 ]
 
 # Special string values that should be converted to None for numeric sensors
@@ -111,6 +111,16 @@ def parse_timestamp_to_iso(value: Any) -> str:
         return value
         
     try:
+        # Convert numeric timestamp (seconds since epoch)
+        if isinstance(value, (int, float)) or (isinstance(value, str) and value.isdigit()):
+            try:
+                numeric_value = float(value)
+                dt = datetime.fromtimestamp(numeric_value)
+                aware_dt = dt_util.as_utc(dt)
+                return aware_dt.isoformat()
+            except (ValueError, OverflowError):
+                pass
+            
         # First try parsing with Home Assistant's datetime parser
         dt = dt_util.parse_datetime(value)
         if dt:
@@ -118,26 +128,13 @@ def parse_timestamp_to_iso(value: Any) -> str:
             
         # Try common timestamp formats
         if isinstance(value, str):
-            # Try format: "2025-03-24 07:27:45 CET"
-            match = re.match(r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(?:\s+([A-Z]+))?', value)
+            # Handle format: "YYYY-MM-DD HH:MM:SS [TIMEZONE]"
+            # This handles any timezone abbreviation of any length
+            match = re.match(r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(?:\s+([A-Z]{1,6}))?', value)
             if match:
                 dt_str = match.group(1)
                 try:
                     # Parse just the datetime part without timezone
-                    dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
-                    # Convert to timezone-aware datetime in UTC
-                    aware_dt = dt_util.as_utc(dt)
-                    return aware_dt.isoformat()
-                except ValueError:
-                    pass
-                
-            # Try format: "2025-10-11 20:31:28 CEST"
-            # This handles longer timezone names like CEST
-            match = re.match(r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(?:\s+([A-Z]{3,4}))?', value)
-            if match and match.group(2):
-                dt_str = match.group(1)
-                try:
-                    # Parse just the datetime part
                     dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
                     # Convert to timezone-aware datetime in UTC
                     aware_dt = dt_util.as_utc(dt)
