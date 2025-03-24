@@ -155,6 +155,8 @@ SENSOR_TYPES = {
 
 def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
     """Determine the sensor type based on metrics definitions."""
+    from homeassistant.const import UnitOfTime
+    
     result = {
         "device_class": None,
         "state_class": None,
@@ -224,6 +226,22 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
             result["entity_category"] = metric_info["entity_category"]
         if "icon" in metric_info:
             result["icon"] = metric_info["icon"]
+        
+        # Ensure duration sensors always have a unit
+        if result["device_class"] == SensorDeviceClass.DURATION and not result["native_unit_of_measurement"]:
+            # Check standard metrics for known duration sensors
+            if "time" in metric_path or "monotonic" in metric_path:
+                result["native_unit_of_measurement"] = UnitOfTime.SECONDS
+            elif "duration" in metric_path:
+                if "full" in metric_path or "soc" in metric_path or "range" in metric_path:
+                    result["native_unit_of_measurement"] = UnitOfTime.MINUTES
+                else:
+                    result["native_unit_of_measurement"] = UnitOfTime.SECONDS
+            elif "drivetime" in metric_path or "parktime" in metric_path: 
+                result["native_unit_of_measurement"] = UnitOfTime.SECONDS
+            elif "day" in metric_path:
+                result["native_unit_of_measurement"] = UnitOfTime.DAYS
+        
         return result
 
     # If no metric info was found, use the original pattern matching as fallback
