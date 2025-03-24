@@ -244,6 +244,8 @@ class OVMSDurationSensor(SensorEntity, RestoreEntity):
                 
                 # Use the formatted value as the native value
                 self._attr_native_value = formatted_value
+                # Clear the unit of measurement since format includes units
+                self._attr_native_unit_of_measurement = None
             else:
                 # If conversion fails, still store the original value
                 if value is not None:
