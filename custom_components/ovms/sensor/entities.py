@@ -57,7 +57,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         # Initialize device class and other attributes from parent
         self._attr_device_class = attributes.get("device_class")
         self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_unit_of_measurement = attributes.get("unit_of_measurement")
+        self._attr_native_unit_of_measurement = attributes.get("unit_of_measurement") or attributes.get("unit")
         self._attr_icon = attributes.get("icon")
 
         # Only set native value after attributes are initialized
@@ -168,7 +168,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         sensor_type = determine_sensor_type(self._internal_name, self._topic, self._attr_extra_state_attributes)
         self._attr_device_class = sensor_type["device_class"]
         self._attr_state_class = sensor_type["state_class"]
-        self._attr_native_unit_of_measurement = sensor_type["native_unit_of_measurement"]
+        self._attr_native_unit_of_measurement = sensor_type["native_unit_of_measurement"] or attributes.get("unit")
         self._attr_entity_category = sensor_type["entity_category"]
         self._attr_icon = sensor_type["icon"]
 
