@@ -1,335 +1,588 @@
-"""OVMS sensor state parsers."""
-import json
+"""OVMS sensor entities."""
 import logging
-import re
+import hashlib
+import json
+from typing import Any, Dict, Optional, List
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorStateClass,
-)
+from homeassistant.components.sensor import SensorEntity, SensorStateClass, SensorDeviceClass
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity import async_generate_entity_id
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from ..const import LOGGER_NAME, MAX_STATE_LENGTH, truncate_state_value
+from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
+from .parsers import parse_value, process_json_payload, parse_comma_separated_values, requires_numeric_value, is_special_state_value, calculate_median
+from .factory import determine_sensor_type, add_device_specific_attributes, create_cell_sensors
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
-# List of device classes that should have numeric values
-NUMERIC_DEVICE_CLASSES = [
-    SensorDeviceClass.BATTERY,
-    SensorDeviceClass.CURRENT,
-    SensorDeviceClass.ENERGY,
-    SensorDeviceClass.HUMIDITY,
-    SensorDeviceClass.POWER,
-    SensorDeviceClass.TEMPERATURE,
-    SensorDeviceClass.VOLTAGE,
-    SensorDeviceClass.DISTANCE,
-    SensorDeviceClass.SPEED,
-    # SensorDeviceClass.DURATION,  # Duration sensors now use formatted strings
-]
+# Default setting for creating individual cell sensors - matching original behavior
+CREATE_INDIVIDUAL_CELL_SENSORS = False
 
-# Special string values that should be converted to None for numeric sensors
-SPECIAL_STATE_VALUES = ["unavailable", "unknown", "none", "", "null", "nan"]
-
-
-def requires_numeric_value(device_class: Any, state_class: Any) -> bool:
-    """Check if this sensor requires a numeric value based on its device class."""
-    # Timestamp sensors should never require numeric values
-    if device_class == SensorDeviceClass.TIMESTAMP:
-        return False
-        
-    return (
-        device_class in NUMERIC_DEVICE_CLASSES or
-        state_class in [
-            SensorStateClass.MEASUREMENT,
-            SensorStateClass.TOTAL,
-            SensorStateClass.TOTAL_INCREASING
-        ]
-    )
-
-def is_special_state_value(value) -> bool:
-    """Check if a value is a special state value that should be converted to None."""
-    if value is None:
-        return True
-    if isinstance(value, str) and value.lower() in SPECIAL_STATE_VALUES:
-        return True
-    return False
-
-def calculate_median(values: List[float]) -> Optional[float]:
-    """Calculate the median of a list of values."""
-    if not values:
-        return None
-    sorted_values = sorted(values)
-    n = len(sorted_values)
-    if n % 2 == 0:
-        return (sorted_values[n//2 - 1] + sorted_values[n//2]) / 2
-    return sorted_values[n//2]
-
-def parse_timestamp_to_iso(value: Any) -> Any:
-    """Convert timestamp to ISO format."""
-    _LOGGER.debug("Timestamp parsing input: %s (type: %s)", value, type(value).__name__)
+def format_duration(seconds: float) -> str:
+    """Convert seconds to human-readable format.
     
-    if value is None:
-        _LOGGER.debug("Timestamp value is None, returning None")
-        return None
-    
-    try:
-        # Already ISO format
-        if isinstance(value, str) and re.match(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}', value):
-            _LOGGER.debug("Value already in ISO format: %s", value)
-            return value
-            
-        # Handle numeric timestamp (epoch seconds)
-        if isinstance(value, (int, float)):
-            _LOGGER.debug("Converting numeric timestamp: %s", value)
-            dt = datetime.fromtimestamp(float(value))
-            iso = dt_util.as_utc(dt).isoformat()
-            _LOGGER.debug("Converted to ISO: %s", iso)
-            return iso
-        elif isinstance(value, str) and value.replace('.', '', 1).isdigit():
-            _LOGGER.debug("Converting numeric string timestamp: %s", value)
-            dt = datetime.fromtimestamp(float(value))
-            iso = dt_util.as_utc(dt).isoformat()
-            _LOGGER.debug("Converted to ISO: %s", iso)
-            return iso
-            
-        # Use HA's parser as fallback
-        if isinstance(value, str):
-            _LOGGER.debug("Trying HA datetime parser for: %s", value)
-            dt = dt_util.parse_datetime(value)
-            if dt:
-                iso = dt.isoformat()
-                _LOGGER.debug("HA parser succeeded: %s", iso)
-                return iso
-            else:
-                _LOGGER.debug("HA parser failed to parse timestamp")
-    except Exception as e:
-        _LOGGER.debug("Error parsing timestamp: %s", e)
-        
-    _LOGGER.debug("Returning original timestamp value: %s", value)
-    return value
-
-def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sensor: bool = False, stat_type: str = "cell") -> Optional[Dict[str, Any]]:
-    """Parse comma-separated values into a dictionary with statistics.
+    Format: Xd Yh Zm (days, hours, minutes)
+    - Only show days if > 24 hours
+    - Only show hours if > 60 minutes
     
     Args:
-        value: The comma-separated string of values
-        entity_name: The name of the entity for determining attribute type
-        is_cell_sensor: Whether this is a cell-type sensor (battery cells, etc)
-        stat_type: The specific attribute type to use (voltage, temp, etc)
-    """
-    if not is_cell_sensor:
-        return None  # Skip processing if not a cell sensor
+        seconds: Duration in seconds
         
-    result = {}
+    Returns:
+        Formatted duration string
+    """
     try:
-        # Try to parse all parts as floats
-        parts = [float(part.strip()) for part in value.split(",") if part.strip()]
-        if parts:
-            # Store the array in attributes - use only one consistent naming
-            result[f"{stat_type}_values"] = parts
-            result["count"] = len(parts)
+        # Calculate days, hours, minutes
+        total_seconds = int(seconds)
+        days = total_seconds // (24 * 3600)
+        remainder = total_seconds % (24 * 3600)
+        hours = remainder // 3600
+        remainder %= 3600
+        minutes = remainder // 60
+        
+        # Build the formatted string
+        parts = []
+        if days > 0:
+            parts.append(f"{days}d")
+        if hours > 0 or days > 0:
+            parts.append(f"{hours}h")
+        parts.append(f"{minutes}m")
+        
+        return " ".join(parts)
+    except (ValueError, TypeError):
+        return str(seconds)
+
+class CellVoltageSensor(SensorEntity, RestoreEntity):
+    """Representation of a cell voltage sensor."""
+
+    def __init__(
+        self,
+        unique_id: str,
+        name: str,
+        topic: str,
+        initial_state: Any,
+        device_info: DeviceInfo,
+        attributes: Dict[str, Any],
+        friendly_name: Optional[str] = None,
+        hass: Optional[HomeAssistant] = None,
+    ):
+        """Initialize the sensor."""
+        self._attr_unique_id = unique_id
+        self._internal_name = name
+
+        # Use friendly_name when provided
+        if friendly_name:
+            self._attr_name = friendly_name
+        else:
+            self._attr_name = name.replace("_", " ").title()
+
+        self._topic = topic
+        self._attr_device_info = device_info or {}
+        self._attr_extra_state_attributes = {
+            **attributes,
+            "topic": topic,
+            "last_updated": dt_util.utcnow().isoformat(),
+        }
+        self.hass = hass
+
+        # Initialize device class and other attributes from parent
+        self._attr_device_class = attributes.get("device_class")
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = attributes.get("unit_of_measurement")
+        self._attr_icon = attributes.get("icon")
+
+        # Only set native value after attributes are initialized
+        if requires_numeric_value(self._attr_device_class, self._attr_state_class) and is_special_state_value(initial_state):
+            self._attr_native_value = None
+        else:
+            self._attr_native_value = truncate_state_value(initial_state)
+
+        # Explicitly set entity_id - this ensures consistent naming
+        if hass:
+            self.entity_id = async_generate_entity_id(
+                "sensor.{}", name.lower(),
+                hass=hass,
+            )
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to updates."""
+        await super().async_added_to_hass()
+
+        # Restore previous state if available
+        if (state := await self.async_get_last_state()) is not None:
+            if state.state not in ["unavailable", "unknown", None]:
+                # Only restore the state if it's not a special state
+                self._attr_native_value = state.state
+            # Restore attributes if available
+            if state.attributes:
+                # Don't overwrite entity attributes like unit, etc.
+                saved_attributes = {
+                    k: v for k, v in state.attributes.items()
+                    if k not in ["device_class", "state_class", "unit_of_measurement"]
+                }
+                self._attr_extra_state_attributes.update(saved_attributes)
+
+        @callback
+        def update_state(payload: Any) -> None:
+            """Update the sensor state."""
+
+            # Parse the value appropriately for the sensor type
+            if requires_numeric_value(self._attr_device_class, self._attr_state_class) and is_special_state_value(payload):
+                self._attr_native_value = None
+            else:
+                try:
+                    value = float(payload)
+                    self._attr_native_value = value
+                except (ValueError, TypeError):
+                    # Make sure the value is truncated if needed
+                    self._attr_native_value = truncate_state_value(payload)
+
+            # Update timestamp attribute
+            now = dt_util.utcnow()
+            self._attr_extra_state_attributes["last_updated"] = now.isoformat()
+
+            self.async_write_ha_state()
+
+        # Subscribe to updates for this entity
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
+                update_state,
+            )
+        )
+
+
+class OVMSDurationSensor(SensorEntity, RestoreEntity):
+    """Representation of an OVMS duration sensor with formatted display."""
+
+    def __init__(
+        self,
+        unique_id: str,
+        name: str,
+        topic: str,
+        initial_state: str,
+        device_info: DeviceInfo,
+        attributes: Dict[str, Any],
+        friendly_name: Optional[str] = None,
+        hass: Optional[HomeAssistant] = None,
+    ) -> None:
+        """Initialize the sensor."""
+        self._attr_unique_id = unique_id
+        self._internal_name = name
+
+        # Set the entity name that will display in UI
+        if friendly_name:
+            self._attr_name = friendly_name
+        else:
+            self._attr_name = name.replace("_", " ").title()
+
+        self._topic = topic
+        self._attr_device_info = device_info or {}
+        self._attr_extra_state_attributes = {
+            **attributes,
+            "topic": topic,
+            "last_updated": dt_util.utcnow().isoformat(),
+        }
+        self.hass = hass
+
+        # Explicitly set entity_id
+        if hass:
+            self.entity_id = async_generate_entity_id(
+                "sensor.{}",
+                name.lower(),
+                hass=hass,
+            )
+
+        # Set duration-specific attributes
+        self._attr_device_class = None  # Don't use HA's built-in duration formatting
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = None  # No unit since we're using formatted string
+        self._attr_icon = "mdi:timer"
+        
+        # Process initial state
+        self._handle_duration_value(initial_state)
+
+    def _handle_duration_value(self, value: Any) -> None:
+        """Process duration value to human-readable format."""
+        _LOGGER.debug("Duration sensor [%s] processing value: %s (type: %s)", 
+                     self._internal_name, value, type(value).__name__)
+        try:
+            # Extract numeric value with minimal logic
+            number = None
+            if isinstance(value, (int, float)):
+                number = float(value)
+                _LOGGER.debug("Duration value is numeric: %s", number)
+            elif isinstance(value, str):
+                _LOGGER.debug("Duration value is string, attempting conversion")
+                try:
+                    number = float(value)
+                    _LOGGER.debug("Successfully converted string to number: %s", number)
+                except ValueError:
+                    _LOGGER.debug("Not a simple numeric string, trying JSON")
+                    try:
+                        data = json.loads(value)
+                        _LOGGER.debug("Parsed JSON: %s (type: %s)", data, type(data).__name__)
+                        if isinstance(data, (int, float)):
+                            number = float(data)
+                            _LOGGER.debug("JSON contained numeric value: %s", number)
+                        elif isinstance(data, dict):
+                            _LOGGER.debug("JSON is dictionary, looking for value key")
+                            for key in ["value", "state", "data"]:
+                                if key in data and isinstance(data[key], (int, float)):
+                                    number = float(data[key])
+                                    _LOGGER.debug("Found number %s in key '%s'", number, key)
+                                    break
+                    except (ValueError, json.JSONDecodeError) as e:
+                        _LOGGER.debug("Failed to parse as JSON: %s", e)
+            
+            if number is not None:
+                # Store raw value and set formatted display value
+                self._attr_extra_state_attributes["raw_value"] = number
+                formatted = format_duration(number)
+                _LOGGER.debug("Formatting duration %s → %s", number, formatted)
+                self._attr_native_value = formatted
+                self._attr_native_unit_of_measurement = None
+            else:
+                _LOGGER.debug("Could not extract numeric value, using raw string")
+                self._attr_native_value = str(value) if value is not None else None
+        except Exception as ex:
+            _LOGGER.exception("Error formatting duration: %s", ex)
+            self._attr_native_value = str(value) if value is not None else None
+        
+        _LOGGER.debug("Final duration sensor value: %s", self._attr_native_value)
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to updates."""
+        await super().async_added_to_hass()
+
+        # Restore previous state if available
+        if (state := await self.async_get_last_state()) is not None:
+            if state.state not in ["unavailable", "unknown", None]:
+                self._attr_native_value = state.state
+            if state.attributes:
+                saved_attributes = {
+                    k: v for k, v in state.attributes.items()
+                    if k not in ["device_class", "state_class", "unit_of_measurement"]
+                }
+                self._attr_extra_state_attributes.update(saved_attributes)
+
+        @callback
+        def update_state(payload: str) -> None:
+            """Update the sensor state."""
+            self._handle_duration_value(payload)
+            
+            # Update timestamp attribute
+            now = dt_util.utcnow()
+            self._attr_extra_state_attributes["last_updated"] = now.isoformat()
+            
+            # Update other attributes from JSON if applicable
+            updated_attrs = process_json_payload(
+                payload, 
+                self._attr_extra_state_attributes,
+                self._internal_name
+            )
+            self._attr_extra_state_attributes.update(updated_attrs)
+
+            self.async_write_ha_state()
+
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
+                update_state,
+            )
+        )
+
+
+class OVMSSensor(SensorEntity, RestoreEntity):
+    """Representation of an OVMS sensor."""
+
+    def __init__(
+        self,
+        unique_id: str,
+        name: str,
+        topic: str,
+        initial_state: str,
+        device_info: DeviceInfo,
+        attributes: Dict[str, Any],
+        friendly_name: Optional[str] = None,
+        hass: Optional[HomeAssistant] = None,
+    ) -> None:
+        """Initialize the sensor."""
+        self._attr_unique_id = unique_id
+        # Use the entity_id compatible name for internal use
+        self._internal_name = name
+
+        # Set the entity name that will display in UI - ALWAYS use friendly_name when provided
+        if friendly_name:
+            self._attr_name = friendly_name
+        else:
+            self._attr_name = name.replace("_", " ").title()
+
+        self._topic = topic
+        self._attr_device_info = device_info or {}
+        self._attr_extra_state_attributes = {
+            **attributes,
+            "topic": topic,
+            "last_updated": dt_util.utcnow().isoformat(),
+        }
+        self.hass = hass
+
+        # Explicitly set entity_id - this ensures consistent naming
+        if hass:
+            self.entity_id = async_generate_entity_id(
+                "sensor.{}",
+                name.lower(),
+                hass=hass,
+            )
+
+        # Try to determine device class and unit
+        sensor_type = determine_sensor_type(self._internal_name, self._topic, self._attr_extra_state_attributes)
+        self._attr_device_class = sensor_type["device_class"]
+        self._attr_state_class = sensor_type["state_class"]
+        self._attr_native_unit_of_measurement = sensor_type["native_unit_of_measurement"]
+        self._attr_entity_category = sensor_type["entity_category"]
+        self._attr_icon = sensor_type["icon"]
+
+        # Flag to indicate if this is a cell sensor
+        self._is_cell_sensor = (
+            ("cell" in self._topic.lower() or 
+             "voltage" in self._topic.lower() or 
+             "temp" in self._topic.lower()) and
+            self._attr_extra_state_attributes.get("category") == "battery"
+        )
+        
+        # Determine appropriate attribute type name based on the sensor
+        self._stat_type = "cell"  # Default fallback
+        if "temp" in self._internal_name.lower():
+            self._stat_type = "temp"
+        elif "voltage" in self._internal_name.lower():
+            self._stat_type = "voltage"
+
+        # Only set native value after attributes are initialized - with truncation if needed
+        parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
+        
+        # For timestamp device class, use the value directly without additional processing
+        if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
+            _LOGGER.debug("Setting timestamp value for %s: %s", self._internal_name, parsed_value)
+            self._attr_native_value = parsed_value
+        else:
+            # For all other sensor types, apply truncation if needed
+            _LOGGER.debug("Setting non-timestamp value for %s: %s", self._internal_name, parsed_value)
+            self._attr_native_value = truncate_state_value(parsed_value)
+
+        # Try to extract additional attributes from initial state if it's JSON or cell values
+        if self._is_cell_sensor and isinstance(initial_state, str) and "," in initial_state:
+            # Cell values - process directly with our preferred attribute names
+            self._handle_cell_values(initial_state)
+        else:
+            # Not cell values or already handled - process as JSON
+            updated_attrs = process_json_payload(initial_state, self._attr_extra_state_attributes, 
+                                               self._internal_name, self._is_cell_sensor, self._stat_type)
+            self._attr_extra_state_attributes.update(updated_attrs)
+
+        # Add device-specific attributes
+        updated_attrs = add_device_specific_attributes(
+            self._attr_extra_state_attributes,
+            self._attr_device_class,
+            self._attr_native_value
+        )
+        self._attr_extra_state_attributes.update(updated_attrs)
+
+        # Initialize cell sensors tracking
+        self._cell_sensors_created = False
+        self._cell_sensors = []
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to updates."""
+        await super().async_added_to_hass()
+
+        # Restore previous state if available
+        if (state := await self.async_get_last_state()) is not None:
+            if state.state not in ["unavailable", "unknown", None]:
+                # Only restore the state if it's not a special state
+                self._attr_native_value = state.state
+            # Restore attributes if available
+            if state.attributes:
+                # Don't overwrite entity attributes like unit, etc.
+                saved_attributes = {
+                    k: v for k, v in state.attributes.items()
+                    if k not in ["device_class", "state_class", "unit_of_measurement"]
+                }
+                self._attr_extra_state_attributes.update(saved_attributes)
+
+        @callback
+        def update_state(payload: str) -> None:
+            """Update the sensor state."""
+            # Parse value and apply truncation if needed
+            parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
+            
+            # For timestamp device class, use the value directly without additional processing
+            if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
+                _LOGGER.debug("Setting timestamp value for %s: %s", self._internal_name, parsed_value)
+                self._attr_native_value = parsed_value
+            else:
+                # For all other sensor types, apply truncation if needed
+                _LOGGER.debug("Setting non-timestamp value for %s: %s", self._internal_name, parsed_value)
+                self._attr_native_value = truncate_state_value(parsed_value)
+
+            # Update timestamp attribute
+            now = dt_util.utcnow()
+            self._attr_extra_state_attributes["last_updated"] = now.isoformat()
+
+            # Process the payload based on its type
+            if self._is_cell_sensor and isinstance(payload, str) and "," in payload:
+                # Cell values - process directly with our preferred attribute names
+                self._handle_cell_values(payload)
+            else:
+                # Not cell values or already handled - process as JSON
+                updated_attrs = process_json_payload(payload, self._attr_extra_state_attributes, 
+                                                 self._internal_name, self._is_cell_sensor, self._stat_type)
+                self._attr_extra_state_attributes.update(updated_attrs)
+
+            # Add device-specific attributes
+            updated_attrs = add_device_specific_attributes(
+                self._attr_extra_state_attributes,
+                self._attr_device_class,
+                self._attr_native_value
+            )
+            self._attr_extra_state_attributes.update(updated_attrs)
+
+            self.async_write_ha_state()
+
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
+                update_state,
+            )
+        )
+
+    def _handle_cell_values(self, payload: str) -> None:
+        """Handle cell values in payload.
+        
+        Adds cell data as attributes to this sensor.
+        Uses descriptive attribute names (voltage/temp) rather than generic "cell".
+        """
+        try:
+            # Parse comma-separated values
+            values = [float(part.strip()) for part in payload.split(",") if part.strip()]
+            if not values:
+                return
+                
+            # Add the cell values to the attributes - use only one attribute name for the array 
+            # based on the type of sensor (remove legacy/duplicate array names)
+            self._attr_extra_state_attributes[f"{self._stat_type}_values"] = values
+            self._attr_extra_state_attributes["count"] = len(values)
+            
+            # REMOVE legacy/duplicate names to avoid duplication
+            if "cell_values" in self._attr_extra_state_attributes and self._stat_type != "cell":
+                del self._attr_extra_state_attributes["cell_values"]
+            if "values" in self._attr_extra_state_attributes:
+                del self._attr_extra_state_attributes["values"]
+            if "cell_count" in self._attr_extra_state_attributes:
+                del self._attr_extra_state_attributes["cell_count"]
 
             # Calculate and store statistics
-            result["median"] = calculate_median(parts)
-            result["mean"] = sum(parts) / len(parts)
-            result["min"] = min(parts)
-            result["max"] = max(parts)
+            median_value = calculate_median(values)
+            avg_value = sum(values) / len(values)
+            min_value = min(values)
+            max_value = max(values)
 
-            # Store individual values with descriptive names
-            for i, val in enumerate(parts):
-                result[f"{stat_type}_{i+1}"] = val
+            # Store statistics as attributes
+            self._attr_extra_state_attributes["median"] = median_value
+            self._attr_extra_state_attributes["min"] = min_value
+            self._attr_extra_state_attributes["max"] = max_value
+            
+            # REMOVE duplicate stats attributes to avoid duplication
+            for legacy_key in ["min_value", "max_value", "mean_value", "median_value"]:
+                if legacy_key in self._attr_extra_state_attributes:
+                    del self._attr_extra_state_attributes[legacy_key]
 
-            # Return average as the main value, rounded to 4 decimal places
-            result["value"] = round(sum(parts) / len(parts), 4)
-            return result
-    except (ValueError, TypeError):
-        pass
-    return None
+            # Store individual values with descriptive names only
+            # First clear any existing cell_N attributes to prevent duplicates
+            for key in list(self._attr_extra_state_attributes.keys()):
+                # Remove both old "cell_N" and potentially existing "voltage_N" attributes 
+                # to ensure no duplication of previous attributes
+                if (key.startswith("cell_") or key.startswith("voltage_") or 
+                    key.startswith("temp_") or key.startswith("value_")):
+                    if key.split("_")[1].isdigit():
+                        del self._attr_extra_state_attributes[key]
+            
+            # Now add with the proper type
+            for i, val in enumerate(values):
+                self._attr_extra_state_attributes[f"{self._stat_type}_{i+1}"] = val
 
-def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None, 
-                is_cell_sensor: bool = False) -> Any:
-    """Parse the value from the payload."""
-    # Special handling for timestamp device class - given highest priority
-    if device_class == SensorDeviceClass.TIMESTAMP:
-        _LOGGER.debug("Parsing timestamp value: %s", value)
-        result = parse_timestamp_to_iso(value)
-        _LOGGER.debug("Parsed timestamp result: %s", result)
-        return result
-    
-    # Handle special state values for numeric sensors
-    if requires_numeric_value(device_class, state_class) and is_special_state_value(value):
-        return None
+            # Update existing cell sensors if they exist and are enabled
+            if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created and CREATE_INDIVIDUAL_CELL_SENSORS:
+                self._update_cell_sensor_values(values)
+        except Exception as ex:
+            _LOGGER.exception("Error handling cell values: %s", ex)
 
-    # Special handling for yes/no values in numeric sensors
-    if requires_numeric_value(device_class, state_class) and isinstance(value, str):
-        # Convert common boolean strings to numeric values
-        if value.lower() in ["no", "off", "false", "disabled"]:
-            return 0
-        if value.lower() in ["yes", "on", "true", "enabled"]:
-            return 1
+    def _update_cell_sensor_values(self, cell_values: List[float]) -> None:
+        """Update the values of existing cell sensors."""
+        if not self.hass or not hasattr(self, '_cell_sensors'):
+            return
 
-    # Check if this is a comma-separated list of numbers for a cell sensor
-    if is_cell_sensor and isinstance(value, str) and "," in value:
-        # For cell sensors with comma separated values, we'll extract the average
-        # as the state but this will be handled by _handle_cell_values 
-        # for attribute processing
-        try:
-            values = [float(part.strip()) for part in value.split(",") if part.strip()]
-            if values:
-                return round(sum(values) / len(values), 4)
-        except (ValueError, TypeError):
-            pass
+        # Update each cell sensor with its new value
+        for i, value in enumerate(cell_values):
+            if i < len(self._cell_sensors):
+                cell_id = self._cell_sensors[i]
+                # Use the dispatcher to signal an update
+                async_dispatcher_send(
+                    self.hass,
+                    f"{SIGNAL_UPDATE_ENTITY}_{cell_id}",
+                    value,
+                )
 
-    # Try parsing as JSON first
-    try:
-        json_val = json.loads(value)
+    def _create_cell_sensors(self, cell_values: List[float]) -> None:
+        """Create individual sensors for each cell value."""
+        # Skip creating individual sensors if the flag is set
+        if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created:
+            return
 
-        # Handle special JSON values
-        if is_special_state_value(json_val):
-            return None
-
-        # If JSON is a dict, extract likely value
-        if isinstance(json_val, dict):
-            result = None
-            if "value" in json_val:
-                result = json_val["value"]
-            elif "state" in json_val:
-                result = json_val["state"]
-            else:
-                # Return first numeric value found
-                for key, val in json_val.items():
-                    if isinstance(val, (int, float)):
-                        result = val
-                        break
-
-            # Handle special values in result
-            if is_special_state_value(result):
-                return None
-
-            # If we have a result, return it; otherwise fall back to string representation
-            if result is not None:
-                return truncate_state_value(result)
-
-            # If we need a numeric value but couldn't extract one, return None
-            if requires_numeric_value(device_class, state_class):
-                return None
-            return truncate_state_value(str(json_val))
-
-        # If JSON is a scalar, use it directly
-        if isinstance(json_val, (int, float)):
-            return json_val
-
-        if isinstance(json_val, str):
-            # Handle special string values
-            if is_special_state_value(json_val):
-                return None
-
-            # If we need a numeric value but got a string, try to convert it
-            if requires_numeric_value(device_class, state_class):
-                try:
-                    return float(json_val)
-                except (ValueError, TypeError):
-                    return None
-            return truncate_state_value(json_val)
-
-        if isinstance(json_val, bool):
-            # If we need a numeric value, convert bool to int
-            if requires_numeric_value(device_class, state_class):
-                return 1 if json_val else 0
-            return json_val
-
-        # For arrays or other types, convert to string if not numeric
-        if requires_numeric_value(device_class, state_class):
-            return None
-        return truncate_state_value(str(json_val))
-
-    except (ValueError, json.JSONDecodeError):
-        # Not JSON, try numeric
-        try:
-            # Check if it's a float
-            if isinstance(value, str) and "." in value:
-                return float(value)
-            # Check if it's an int
-            return int(value)
-        except (ValueError, TypeError):
-            # If we need a numeric value but couldn't convert, return None
-            if requires_numeric_value(device_class, state_class):
-                return None
-            # Otherwise return as string with truncation if needed
-            return truncate_state_value(value)
-
-def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: str = "", 
-                        is_cell_sensor: bool = False, stat_type: str = "cell") -> Dict[str, Any]:
-    """Process JSON payload to extract additional attributes.
-    
-    Args:
-        payload: The payload to process
-        attributes: Existing attributes to update
-        entity_name: The name of the entity for determining attribute type
-        is_cell_sensor: Whether this is a cell-type sensor (battery cells, etc)
-        stat_type: The specific attribute type to use (voltage, temp, etc)
-    """
-    updated_attributes = attributes.copy()
-
-    try:
-        # Skip cell value processing here - handled by _handle_cell_values instead
-        # to avoid duplication of processing
-        if not (is_cell_sensor and isinstance(payload, str) and "," in payload):
-            # Try to parse as JSON
-            try:
-                json_data = json.loads(payload) if isinstance(payload, str) else payload
-                if isinstance(json_data, dict):
-                    # Add all fields as attributes
-                    for key, value in json_data.items():
-                        if key not in ["value", "state", "data"] and key not in updated_attributes:
-                            updated_attributes[key] = value
-
-                    # If there's a timestamp in the JSON, use it
-                    if "timestamp" in json_data:
-                        updated_attributes["device_timestamp"] = json_data["timestamp"]
-
-                    # If there's a unit in the JSON, use it for native unit
-                    if "unit" in json_data and "unit_of_measurement" not in updated_attributes:
-                        updated_attributes["unit"] = json_data["unit"]
-
-                    # Extract and add any nested attributes
-                    for key, value in json_data.items():
-                        if isinstance(value, dict):
-                            for subkey, subvalue in value.items():
-                                attr_key = f"{key}_{subkey}"
-                                if attr_key not in updated_attributes:
-                                    updated_attributes[attr_key] = subvalue
-
-                # If JSON is an array, add array attributes
-                elif isinstance(json_data, list):
-                    updated_attributes["list_values"] = json_data
-                    updated_attributes["list_length"] = len(json_data)
-
-                    # Try to convert to numbers and add statistics
-                    try:
-                        numeric_values = [float(val) for val in json_data]
-                        updated_attributes["min"] = min(numeric_values)
-                        updated_attributes["max"] = max(numeric_values)
-                        updated_attributes["mean"] = sum(numeric_values) / len(numeric_values)
-                        updated_attributes["median"] = calculate_median(numeric_values)
-                    except (ValueError, TypeError):
-                        # Not all elements are numeric
-                        pass
-
-            except (ValueError, json.JSONDecodeError):
-                # Not JSON, that's fine
-                pass
-
-        # Update timestamp
-        updated_attributes["last_updated"] = dt_util.utcnow().isoformat()
+        # Skip if no hass instance
+        if not self.hass:
+            return
+            
+        # Extract vehicle_id from unique_id
+        vehicle_id = self.unique_id.split('_')[0]
         
-        # Add full topic path for debugging
-        if "topic" in attributes:
-            updated_attributes["full_topic"] = attributes["topic"]
-
-    except Exception as ex:
-        _LOGGER.exception("Error processing attributes: %s", ex)
-
-    return updated_attributes
+        # Create cell sensor configurations using factory function
+        sensor_configs = create_cell_sensors(
+            self._topic,
+            cell_values,
+            vehicle_id,
+            self.unique_id,
+            self.device_info,
+            {
+                "name": self.name,
+                "category": self._attr_extra_state_attributes.get("category", "battery"),
+                "device_class": self._attr_device_class,
+                "unit_of_measurement": self._attr_native_unit_of_measurement,
+            },
+            CREATE_INDIVIDUAL_CELL_SENSORS
+        )
+        
+        # Store cell sensor IDs
+        self._cell_sensors = [config["unique_id"] for config in sensor_configs]
+        
+        # Flag cells as created
+        self._cell_sensors_created = True
+        
+        # Create and add entities through the entity discovery mechanism if we have configs
+        if sensor_configs:
+            async_dispatcher_send(
+                self.hass,
+                SIGNAL_ADD_ENTITIES,
+                {
+                    "entity_type": "sensor",
+                    "cell_sensors": sensor_configs,
+                    "parent_entity": self.entity_id,
+                }
+            )
