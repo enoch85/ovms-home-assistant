@@ -18,7 +18,7 @@ from homeassistant.const import (
 from homeassistant.helpers.entity import EntityCategory
 
 from ..const import LOGGER_NAME
-from ..metrics import get_metric_by_path, get_metric_by_pattern
+from ..metrics import get_metric_by_path, get_metric_by_pattern, METRIC_DEFINITIONS
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -71,30 +71,6 @@ SENSOR_TYPES = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfSpeed.KILOMETERS_PER_HOUR,
         "icon": "mdi:speedometer",
-    },
-    "duration": {
-        "device_class": SensorDeviceClass.DURATION,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTime.SECONDS,
-        "icon": "mdi:timer",
-    },
-    "charging_time": {
-        "device_class": SensorDeviceClass.DURATION,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTime.SECONDS,
-        "icon": "mdi:timer-outline",
-    },
-    "drive_time": {
-        "device_class": SensorDeviceClass.DURATION,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTime.SECONDS,
-        "icon": "mdi:timer-outline",
-    },
-    "park_time": {
-        "device_class": SensorDeviceClass.DURATION,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTime.SECONDS,
-        "icon": "mdi:timer-outline",
     },
     "timestamp": {
         "device_class": SensorDeviceClass.TIMESTAMP,
@@ -149,10 +125,49 @@ SENSOR_TYPES = {
     }
 }
 
-def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
-    """Determine the sensor type based on metrics definitions."""
+# Set of all known duration metric paths for easier lookup
+DURATION_METRIC_PATHS = {
+    k for k, v in METRIC_DEFINITIONS.items() 
+    if v.get("device_class") == SensorDeviceClass.DURATION
+}
+
+def get_duration_metric_unit(metric_path: str) -> Optional[str]:
+    """Find the appropriate unit for a duration metric based on its path.
+    
+    First checks the metric definitions, then applies standard rules for known duration metrics.
+    """
     from homeassistant.const import UnitOfTime
     
+    # Check if this exact path is in metrics definitions
+    if metric_path in METRIC_DEFINITIONS:
+        metric = METRIC_DEFINITIONS[metric_path]
+        if "unit" in metric:
+            return metric["unit"]
+    
+    # Try partial path matches for metrics with device_class = duration
+    for duration_path in DURATION_METRIC_PATHS:
+        if duration_path.endswith(metric_path) or metric_path.endswith(duration_path):
+            metric = METRIC_DEFINITIONS[duration_path]
+            if "unit" in metric:
+                return metric["unit"]
+    
+    # Apply standard rules for different types of duration metrics
+    if any(segment in metric_path for segment in ["drivetime", "parktime", "time", "monotonic"]):
+        return UnitOfTime.SECONDS
+    elif "duration" in metric_path:
+        # Special cases for duration metrics
+        if any(segment in metric_path for segment in ["full", "range", "soc"]):
+            return UnitOfTime.MINUTES
+        else:
+            return UnitOfTime.SECONDS
+    elif "day" in metric_path:
+        return UnitOfTime.DAYS
+        
+    # Default for unknown duration metrics
+    return UnitOfTime.SECONDS
+
+def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
+    """Determine the sensor type based on metrics definitions."""
     result = {
         "device_class": None,
         "state_class": None,
@@ -161,19 +176,17 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         "icon": None,
     }
 
-    # Special handling for known duration sensors
-    if "parktime" in topic or "drivetime" in topic or ("time" in topic and "v/c/time" in topic) or "monotonic" in topic:
-        result["device_class"] = SensorDeviceClass.DURATION
-        result["state_class"] = SensorStateClass.MEASUREMENT
-        result["native_unit_of_measurement"] = UnitOfTime.SECONDS
-        result["icon"] = "mdi:timer"
-        
-    # Special handling for duration.* sensors
-    if "duration" in topic and any(x in topic for x in ["full", "range", "soc"]):
-        result["device_class"] = SensorDeviceClass.DURATION
-        result["state_class"] = SensorStateClass.MEASUREMENT
-        result["native_unit_of_measurement"] = UnitOfTime.MINUTES
-        result["icon"] = "mdi:timer"
+    # Check if attributes specify a category
+    if "category" in attributes:
+        category = attributes["category"]
+        # Also apply diagnostic entity category to network and system sensors
+        if category in ["diagnostic", "network", "system"]:
+            result["entity_category"] = EntityCategory.DIAGNOSTIC
+            if category != "diagnostic":  # Don't return for network/system to allow further processing
+                _LOGGER.debug(
+                    "Setting EntityCategory.DIAGNOSTIC for %s category: %s",
+                    category, internal_name
+                )
 
     # Special check for timer mode sensors
     if "timermode" in internal_name.lower() or "timer_mode" in internal_name.lower():
@@ -190,18 +203,6 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         result["icon"] = "mdi:longitude"
         result["state_class"] = SensorStateClass.MEASUREMENT
         return result
-
-    # Check if attributes specify a category
-    if "category" in attributes:
-        category = attributes["category"]
-        # Also apply diagnostic entity category to network and system sensors
-        if category in ["diagnostic", "network", "system"]:
-            result["entity_category"] = EntityCategory.DIAGNOSTIC
-            if category != "diagnostic":  # Don't return for network/system to allow further processing
-                _LOGGER.debug(
-                    "Setting EntityCategory.DIAGNOSTIC for %s category: %s",
-                    category, internal_name
-                )
 
     # Try to find matching metric by converting topic to dot notation
     topic_suffix = topic
@@ -236,38 +237,33 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
             result["entity_category"] = metric_info["entity_category"]
         if "icon" in metric_info:
             result["icon"] = metric_info["icon"]
+
+    # Check if this looks like a duration sensor by topic pattern
+    duration_keywords = ["drivetime", "parktime", "charging/time", "time", "duration", "monotonic", "g/time"]
+    if result["device_class"] is None and any(keyword in topic for keyword in duration_keywords):
+        result["device_class"] = SensorDeviceClass.DURATION
+        result["state_class"] = SensorStateClass.MEASUREMENT
         
-        # Ensure duration sensors always have a unit
-        if result["device_class"] == SensorDeviceClass.DURATION and not result["native_unit_of_measurement"]:
-            # Check standard metrics for known duration sensors
-            if "time" in metric_path or "monotonic" in metric_path:
-                result["native_unit_of_measurement"] = UnitOfTime.SECONDS
-            elif "duration" in metric_path:
-                if "full" in metric_path or "soc" in metric_path or "range" in metric_path:
-                    result["native_unit_of_measurement"] = UnitOfTime.MINUTES
-                else:
-                    result["native_unit_of_measurement"] = UnitOfTime.SECONDS
-            elif "drivetime" in metric_path or "parktime" in metric_path: 
-                result["native_unit_of_measurement"] = UnitOfTime.SECONDS
-            elif "day" in metric_path:
-                result["native_unit_of_measurement"] = UnitOfTime.DAYS
-        
-        return result
+    # Ensure duration sensors always have a unit 
+    if result["device_class"] == SensorDeviceClass.DURATION and not result["native_unit_of_measurement"]:
+        # Look up the appropriate unit using our helper function
+        result["native_unit_of_measurement"] = get_duration_metric_unit(metric_path)
 
     # If no metric info was found, use the original pattern matching as fallback
-    for key, sensor_type in SENSOR_TYPES.items():
-        if key in internal_name.lower() or key in topic.lower():
-            if "device_class" in sensor_type:
-                result["device_class"] = sensor_type["device_class"]
-            if "state_class" in sensor_type:
-                result["state_class"] = sensor_type["state_class"]
-            if "unit" in sensor_type:
-                result["native_unit_of_measurement"] = sensor_type["unit"]
-            if "entity_category" in sensor_type:
-                result["entity_category"] = sensor_type["entity_category"]
-            if "icon" in sensor_type:
-                result["icon"] = sensor_type["icon"]
-            break
+    if result["device_class"] is None:
+        for key, sensor_type in SENSOR_TYPES.items():
+            if key in internal_name.lower() or key in topic.lower():
+                if "device_class" in sensor_type:
+                    result["device_class"] = sensor_type["device_class"]
+                if "state_class" in sensor_type:
+                    result["state_class"] = sensor_type["state_class"]
+                if "unit" in sensor_type:
+                    result["native_unit_of_measurement"] = sensor_type["unit"]
+                if "entity_category" in sensor_type:
+                    result["entity_category"] = sensor_type["entity_category"]
+                if "icon" in sensor_type:
+                    result["icon"] = sensor_type["icon"]
+                break
 
     return result
 
@@ -329,13 +325,8 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
                             break
                 metric_path = topic_suffix.replace("/", ".")
                 
-                # Try to get duration unit from metric definition
-                from ..metrics import get_metric_by_path
-                metric_info = get_metric_by_path(metric_path)
-                
-                if metric_info and "unit" in metric_info:
-                    # Use unit from metric definition
-                    updated_attrs["unit"] = metric_info["unit"]
+                # Get the appropriate unit based on the metric path
+                updated_attrs["unit"] = get_duration_metric_unit(metric_path)
                     
     return updated_attrs
 
