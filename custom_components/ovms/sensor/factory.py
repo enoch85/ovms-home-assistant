@@ -38,6 +38,25 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         # Apply diagnostic entity category to network and system sensors
         if category in ["diagnostic", "network", "system"]:
             result["entity_category"] = EntityCategory.DIAGNOSTIC
+            if category != "diagnostic":  # Don't return for network/system to allow further processing
+                _LOGGER.debug(
+                    "Setting EntityCategory.DIAGNOSTIC for %s category: %s",
+                    category, internal_name
+                )
+    # Special check for timer mode sensors
+    if "timermode" in internal_name.lower() or "timer_mode" in internal_name.lower():
+        result["icon"] = "mdi:timer-outline"
+        return result
+    # Special handling for GPS coordinates
+    name_lower = internal_name.lower()
+    if "latitude" in name_lower or "lat" in name_lower:
+        result["icon"] = "mdi:latitude"
+        result["state_class"] = SensorStateClass.MEASUREMENT
+        return result
+    elif "longitude" in name_lower or "lon" in name_lower or "lng" in name_lower:
+        result["icon"] = "mdi:longitude"
+        result["state_class"] = SensorStateClass.MEASUREMENT
+        return result
 
     # Extract metric path from topic
     topic_suffix = topic
@@ -90,30 +109,6 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
             result["entity_category"] = metric_info["entity_category"]
         if "icon" in metric_info:
             result["icon"] = metric_info["icon"]
-
-    # Attempt to find a similar metric for duration sensors without a unit
-    if result["device_class"] == SensorDeviceClass.DURATION and not result["native_unit_of_measurement"]:
-        # Find a similar metric that might have the unit defined
-        for defined_path, defined_metric in METRIC_DEFINITIONS.items():
-            # Check for device_class and unit
-            if (defined_metric.get("device_class") == SensorDeviceClass.DURATION and 
-                "unit" in defined_metric):
-                
-                # Check for similar paths by comparing the path structure
-                metric_segments = metric_path.split(".")
-                defined_segments = defined_path.split(".")
-                
-                # Compare the last two segments if both paths have enough segments
-                if (len(metric_segments) >= 2 and len(defined_segments) >= 2 and
-                    metric_segments[-1] == defined_segments[-1] and
-                    metric_segments[-2] == defined_segments[-2]):
-                    
-                    result["native_unit_of_measurement"] = defined_metric["unit"]
-                    _LOGGER.debug(
-                        "Applied unit %s to duration sensor %s based on similar metric %s",
-                        defined_metric["unit"], metric_path, defined_path
-                    )
-                    break
 
     return result
 
@@ -175,13 +170,19 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
                             break
                 metric_path = topic_suffix.replace("/", ".")
                 
-                # Try to get duration unit from metric definition
-                metric_info = get_metric_by_path(metric_path)
+                # Try to get duration unit from exact metric definition only
+                if METRIC_DEFINITIONS is None:
+                    # Import only when needed
+                    from .. import METRIC_DEFINITIONS as MD
+                    METRIC_DEFINITIONS = MD
                 
-                if metric_info and "unit" in metric_info:
-                    # Use unit from metric definition
-                    updated_attrs["unit"] = metric_info["unit"]
-                    
+                # Only use exact path match - no keyword search
+                if metric_path in METRIC_DEFINITIONS:
+                    metric_info = METRIC_DEFINITIONS[metric_path]
+                    if "unit" in metric_info:
+                        # Use unit from metric definition
+                        updated_attrs["unit"] = metric_info["unit"]
+                
     return updated_attrs
 
 def create_cell_sensors(topic: str, cell_values: List[float], 
