@@ -160,6 +160,9 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
                 # Check topic for the specific metric to determine unit
                 topic = str(updated_attrs.get("topic", ""))
                 
+                # Try different variations of the topic path
+                metric_paths = []
+                
                 # Extract the metric path for lookup
                 topic_suffix = topic
                 if topic.count('/') >= 3:
@@ -168,20 +171,33 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
                         if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
                             topic_suffix = '/'.join(parts[i:])
                             break
-                metric_path = topic_suffix.replace("/", ".")
                 
-                # Try to get duration unit from exact metric definition only
+                # Add standard conversion
+                metric_paths.append(topic_suffix.replace("/", "."))
+                
+                # For top-level metrics (m/, s/, v/)
+                parts = topic_suffix.split('/')
+                if parts and parts[0] in ['m', 's', 'v', 't']:
+                    metric_paths.append('.'.join(parts))
+                
+                # Import METRIC_DEFINITIONS if needed
                 if METRIC_DEFINITIONS is None:
                     # Import only when needed
                     from .. import METRIC_DEFINITIONS as MD
                     METRIC_DEFINITIONS = MD
                 
-                # Only use exact path match - no keyword search
-                if metric_path in METRIC_DEFINITIONS:
-                    metric_info = METRIC_DEFINITIONS[metric_path]
-                    if "unit" in metric_info:
-                        # Use unit from metric definition
-                        updated_attrs["unit"] = metric_info["unit"]
+                # Try all path variations
+                for path in metric_paths:
+                    if path in METRIC_DEFINITIONS:
+                        metric_info = METRIC_DEFINITIONS[path]
+                        if "unit" in metric_info:
+                            # Use unit from metric definition
+                            updated_attrs["unit"] = metric_info["unit"]
+                            _LOGGER.debug(
+                                "Applied unit %s to duration sensor from metric path: %s",
+                                metric_info["unit"], path
+                            )
+                            break
                 
     return updated_attrs
 
