@@ -188,7 +188,7 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
 def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None, 
                 is_cell_sensor: bool = False) -> Any:
     """Parse the value from the payload."""
-    # Special handling for timestamp device class
+    # Special handling for timestamp device class - given highest priority
     if device_class == SensorDeviceClass.TIMESTAMP:
         return parse_timestamp_to_iso(value)
     
