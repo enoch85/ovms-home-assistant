@@ -123,22 +123,41 @@ def parse_timestamp_to_iso(value: Any) -> str:
             if match:
                 dt_str = match.group(1)
                 try:
+                    # Parse just the datetime part without timezone
                     dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
-                    return dt.isoformat()
+                    # Convert to timezone-aware datetime in UTC
+                    aware_dt = dt_util.as_utc(dt)
+                    return aware_dt.isoformat()
+                except ValueError:
+                    pass
+                
+            # Try format: "2025-10-11 20:31:28 CEST"
+            # This handles longer timezone names like CEST
+            match = re.match(r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(?:\s+([A-Z]{3,4}))?', value)
+            if match and match.group(2):
+                dt_str = match.group(1)
+                try:
+                    # Parse just the datetime part
+                    dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+                    # Convert to timezone-aware datetime in UTC
+                    aware_dt = dt_util.as_utc(dt)
+                    return aware_dt.isoformat()
                 except ValueError:
                     pass
                 
             # Try format: "March 24, 2025"
             try:
                 dt = datetime.strptime(value, "%B %d, %Y")
-                return dt.isoformat()
+                aware_dt = dt_util.as_utc(dt)
+                return aware_dt.isoformat()
             except ValueError:
                 pass
                 
             # Try format: "Mar 24, 2025"
             try:
                 dt = datetime.strptime(value, "%b %d, %Y")
-                return dt.isoformat()
+                aware_dt = dt_util.as_utc(dt)
+                return aware_dt.isoformat()
             except ValueError:
                 pass
     except Exception as ex:
