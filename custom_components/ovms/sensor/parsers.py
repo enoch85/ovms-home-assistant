@@ -58,7 +58,7 @@ def calculate_median(values: List[float]) -> Optional[float]:
 
 def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sensor: bool = False, stat_type: str = "cell") -> Optional[Dict[str, Any]]:
     """Parse comma-separated values into a dictionary with statistics.
-    
+
     Args:
         value: The comma-separated string of values
         entity_name: The name of the entity for determining attribute type
@@ -67,7 +67,7 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
     """
     if not is_cell_sensor:
         return None  # Skip processing if not a cell sensor
-        
+
     result = {}
     try:
         # Try to parse all parts as floats
@@ -94,9 +94,32 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
         pass
     return None
 
-def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None, 
+def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None,
                 is_cell_sensor: bool = False) -> Any:
     """Parse the value from the payload."""
+    # Handle timestamp device class specifically
+    if device_class == SensorDeviceClass.TIMESTAMP and isinstance(value, str):
+        try:
+            # Try Home Assistant's built-in datetime parser first
+            parsed = dt_util.parse_datetime(value)
+            if parsed:
+                return parsed
+
+            # For OVMS timestamp format, extract just the datetime part
+            import datetime
+            import re
+
+            # Match format "2025-03-25 17:42:57 TIMEZONE" and extract datetime part
+            match = re.match(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', value)
+            if match:
+                dt_str = match.group(1)
+                # Create a datetime object without timezone info
+                dt_obj = datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+                # Home Assistant requires tzinfo, but we'll use local time zone
+                return dt_util.as_local(dt_obj)
+        except Exception:
+            return None
+
     # Handle special state values for numeric sensors
     if requires_numeric_value(device_class, state_class) and is_special_state_value(value):
         return None
@@ -112,7 +135,7 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
     # Check if this is a comma-separated list of numbers for a cell sensor
     if is_cell_sensor and isinstance(value, str) and "," in value:
         # For cell sensors with comma separated values, we'll extract the average
-        # as the state but this will be handled by _handle_cell_values 
+        # as the state but this will be handled by _handle_cell_values
         # for attribute processing
         try:
             values = [float(part.strip()) for part in value.split(",") if part.strip()]
@@ -199,10 +222,10 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             # Otherwise return as string with truncation if needed
             return truncate_state_value(value)
 
-def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: str = "", 
+def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: str = "",
                         is_cell_sensor: bool = False, stat_type: str = "cell") -> Dict[str, Any]:
     """Process JSON payload to extract additional attributes.
-    
+
     Args:
         payload: The payload to process
         attributes: Existing attributes to update
@@ -263,7 +286,7 @@ def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: 
 
         # Update timestamp
         updated_attributes["last_updated"] = dt_util.utcnow().isoformat()
-        
+
         # Add full topic path for debugging
         if "topic" in attributes:
             updated_attributes["full_topic"] = attributes["topic"]

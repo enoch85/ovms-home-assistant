@@ -121,17 +121,17 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
             self._attr_name = name.replace("_", " ").title()
 
         self._topic = topic
-        
+
         # Initialize attributes first, before parsing the state
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
             "last_updated": dt_util.utcnow().isoformat(),
         }
-        
+
         # Try to determine device class (needs to be before _parse_state)
         self._determine_device_class()
-        
+
         # Now parse the state after attributes and device class are set
         self._attr_is_on = self._parse_state(initial_state)
         self._attr_device_info = device_info
@@ -175,7 +175,7 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                     # Ensure payload is properly truncated if it's a string
                     if isinstance(payload, str) and len(payload) > 255:
                         payload = truncate_state_value(payload)
-                        
+
                     self._attr_is_on = self._parse_state(payload)
 
                     # Update timestamp attribute
@@ -203,14 +203,14 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
             invert_state = False
             if hasattr(self, "_attr_extra_state_attributes"):
                 invert_state = self._attr_extra_state_attributes.get("invert_state", False)
-            
+
             # Parse the value to boolean
             result = False
-            
+
             if isinstance(state, str):
                 # Make sure state is truncated if needed
                 state = truncate_state_value(state)
-                
+
                 if state.lower() in ("true", "on", "yes", "1", "open", "locked"):
                     result = True
                 elif state.lower() in ("false", "off", "no", "0", "closed", "unlocked"):
@@ -227,12 +227,12 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                     result = float(state) > 0
                 except (ValueError, TypeError):
                     result = False
-            
+
             # Apply inversion if needed
             if invert_state:
                 return not result
             return result
-            
+
         except Exception as ex:
             _LOGGER.exception("Error parsing state '%s': %s", state, ex)
             return False

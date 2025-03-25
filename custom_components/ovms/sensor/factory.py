@@ -18,111 +18,9 @@ from homeassistant.helpers.entity import EntityCategory
 
 from ..const import LOGGER_NAME
 from ..metrics import get_metric_by_path, get_metric_by_pattern
+from ..metrics.patterns import TOPIC_PATTERNS
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
-
-# A mapping of sensor name patterns to device classes and units
-SENSOR_TYPES = {
-    "soc": {
-        "device_class": SensorDeviceClass.BATTERY,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": PERCENTAGE,
-        "icon": "mdi:battery",
-    },
-    "range": {
-        "device_class": SensorDeviceClass.DISTANCE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfLength.KILOMETERS,
-        "icon": "mdi:map-marker-distance",
-    },
-    "temperature": {
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:thermometer",
-    },
-    "power": {
-        "device_class": SensorDeviceClass.POWER,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfPower.WATT,
-        "icon": "mdi:flash",
-    },
-    "current": {
-        "device_class": SensorDeviceClass.CURRENT,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfElectricCurrent.AMPERE,
-        "icon": "mdi:current-ac",
-    },
-    "voltage": {
-        "device_class": SensorDeviceClass.VOLTAGE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfElectricPotential.VOLT,
-        "icon": "mdi:flash",
-    },
-    "energy": {
-        "device_class": SensorDeviceClass.ENERGY,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
-        "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "icon": "mdi:battery-charging",
-    },
-    "speed": {
-        "device_class": SensorDeviceClass.SPEED,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfSpeed.KILOMETERS_PER_HOUR,
-        "icon": "mdi:speedometer",
-    },
-    # Additional icons for EV-specific metrics
-    "odometer": {
-        "icon": "mdi:counter",
-        "state_class": SensorStateClass.TOTAL_INCREASING,
-    },
-    "efficiency": {
-        "icon": "mdi:leaf",
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    "charging_time": {
-        "icon": "mdi:timer",
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    "climate": {
-        "icon": "mdi:fan",
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    "hvac": {
-        "icon": "mdi:air-conditioner",
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    "motor": {
-        "icon": "mdi:engine",
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    "trip": {
-        "icon": "mdi:map-marker-path",
-        "state_class": SensorStateClass.MEASUREMENT,
-    },
-    # Diagnostic sensors
-    "status": {
-        "entity_category": EntityCategory.DIAGNOSTIC,
-        "icon": "mdi:information-outline",
-    },
-    "signal": {
-        "entity_category": EntityCategory.DIAGNOSTIC,
-        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
-        "icon": "mdi:signal",
-    },
-    "firmware": {
-        "entity_category": EntityCategory.DIAGNOSTIC,
-        "icon": "mdi:package-up",
-    },
-    "version": {
-        "entity_category": EntityCategory.DIAGNOSTIC,
-        "icon": "mdi:tag-text",
-    },
-    "task": {
-        "entity_category": EntityCategory.DIAGNOSTIC,
-        "icon": "mdi:list-status",
-    }
-}
 
 def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
     """Determine the sensor type based on metrics definitions."""
@@ -137,7 +35,7 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
     # Check if attributes specify a category
     if "category" in attributes:
         category = attributes["category"]
-        # Also apply diagnostic entity category to network and system sensors
+        # Apply diagnostic entity category to network and system sensors
         if category in ["diagnostic", "network", "system"]:
             result["entity_category"] = EntityCategory.DIAGNOSTIC
             if category != "diagnostic":  # Don't return for network/system to allow further processing
@@ -162,7 +60,7 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         result["state_class"] = SensorStateClass.MEASUREMENT
         return result
 
-    # Try to find matching metric by converting topic to dot notation
+    # Extract metric path from topic
     topic_suffix = topic
     if topic.count('/') >= 3:  # Skip the prefix part
         parts = topic.split('/')
@@ -172,10 +70,20 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
                 topic_suffix = '/'.join(parts[i:])
                 break
 
+    # Create both standard and alternative metric paths for matching
     metric_path = topic_suffix.replace("/", ".")
+    alt_metric_path = None
+
+    # Handle "metric/" prefix - remove it for better matching with definitions
+    if metric_path.startswith("metric."):
+        alt_metric_path = metric_path[7:]  # Remove "metric."
 
     # Try exact match first
     metric_info = get_metric_by_path(metric_path)
+
+    # If no match and we have an alternative path, try that
+    if not metric_info and alt_metric_path:
+        metric_info = get_metric_by_path(alt_metric_path)
 
     # If no exact match, try by pattern in name and topic
     if not metric_info:
@@ -197,19 +105,19 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
             result["icon"] = metric_info["icon"]
         return result
 
-    # If no metric info was found, use the original pattern matching as fallback
-    for key, sensor_type in SENSOR_TYPES.items():
-        if key in internal_name.lower() or key in topic.lower():
-            if "device_class" in sensor_type:
-                result["device_class"] = sensor_type["device_class"]
-            if "state_class" in sensor_type:
-                result["state_class"] = sensor_type["state_class"]
-            if "unit" in sensor_type:
-                result["native_unit_of_measurement"] = sensor_type["unit"]
-            if "entity_category" in sensor_type:
-                result["entity_category"] = sensor_type["entity_category"]
-            if "icon" in sensor_type:
-                result["icon"] = sensor_type["icon"]
+    # If no metric info found, try matching by pattern from TOPIC_PATTERNS
+    for pattern, pattern_info in TOPIC_PATTERNS.items():
+        if pattern in internal_name.lower() or pattern in topic.lower():
+            if "device_class" in pattern_info:
+                result["device_class"] = pattern_info["device_class"]
+            if "state_class" in pattern_info:
+                result["state_class"] = pattern_info["state_class"]
+            if "unit" in pattern_info:
+                result["native_unit_of_measurement"] = pattern_info["unit"]
+            if "entity_category" in pattern_info:
+                result["entity_category"] = pattern_info["entity_category"]
+            if "icon" in pattern_info:
+                result["icon"] = pattern_info["icon"]
             break
 
     return result
@@ -217,7 +125,7 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
 def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any, native_value: Any) -> Dict[str, Any]:
     """Add attributes based on device class and value."""
     updated_attrs = attributes.copy()
-    
+
     # Add derived attributes based on entity type
     if device_class is not None:
         # Add specific attributes for different device classes
@@ -255,15 +163,15 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
                             updated_attrs["temperature_level"] = "hot"
                 except (ValueError, TypeError):
                     pass
-                    
+
     return updated_attrs
 
-def create_cell_sensors(topic: str, cell_values: List[float], 
-                        vehicle_id: str, parent_unique_id: str, 
+def create_cell_sensors(topic: str, cell_values: List[float],
+                        vehicle_id: str, parent_unique_id: str,
                         device_info: Dict[str, Any], attributes: Dict[str, Any],
                         create_individual_sensors: bool = False) -> List[Dict[str, Any]]:
     """Create configuration for individual cell sensors.
-    
+
     Args:
         create_individual_sensors: If True, create individual sensors for cells.
                                  If False, only add as attributes (original behavior).
@@ -273,7 +181,7 @@ def create_cell_sensors(topic: str, cell_values: List[float],
     # Must be explicitly enabled via configuration
     if not create_individual_sensors:
         return []
-        
+
     # Add topic hash to make unique IDs truly unique
     topic_hash = hashlib.md5(topic.encode()).hexdigest()[:8]
     category = attributes.get("category", "battery")

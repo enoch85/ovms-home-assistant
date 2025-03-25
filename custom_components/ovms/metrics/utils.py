@@ -47,7 +47,7 @@ def get_metric_by_path(metric_path):
         alt_path = metric_path[xvu_index:]
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
-            
+
     # For MG ZS-EV metrics, also try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xmg.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
@@ -60,7 +60,7 @@ def get_metric_by_path(metric_path):
         alt_path = metric_path[xmg_index:]
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
-            
+
     # For Smart ForTwo metrics, also try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xsq.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
@@ -73,7 +73,7 @@ def get_metric_by_path(metric_path):
         alt_path = metric_path[xsq_index:]
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
-            
+
     # For Nissan Leaf metrics, also try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xnl.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
@@ -93,7 +93,7 @@ def get_metric_by_path(metric_path):
 def get_metric_by_pattern(topic_parts):
     """Try to match a metric by pattern in topic parts."""
     global METRIC_DEFINITIONS  # Move the global declaration to the beginning of the function
-    
+
     # First, try to find an exact match of the last path component
     if topic_parts:
         last_part = topic_parts[-1].lower()
@@ -132,7 +132,7 @@ def get_metric_by_pattern(topic_parts):
                     if variation and variation in METRIC_DEFINITIONS:
                         return METRIC_DEFINITIONS[variation]
                 break
-                
+
         # Check for MG ZS-EV metrics specifically
         for part in topic_parts:
             if part == "xmg":
@@ -154,7 +154,7 @@ def get_metric_by_pattern(topic_parts):
                     if variation and variation in METRIC_DEFINITIONS:
                         return METRIC_DEFINITIONS[variation]
                 break
-                
+
         # Check for Smart ForTwo metrics specifically
         for part in topic_parts:
             if part == "xsq":
@@ -176,7 +176,7 @@ def get_metric_by_pattern(topic_parts):
                     if variation and variation in METRIC_DEFINITIONS:
                         return METRIC_DEFINITIONS[variation]
                 break
-                
+
         # Check for Nissan Leaf metrics specifically
         for part in topic_parts:
             if part == "xnl":
@@ -282,19 +282,19 @@ def create_friendly_name(topic_parts, metric_info=None):
         # Format as "VW eUP! Sensor Name"
         last_part = topic_parts[-1].replace("_", " ").title()
         return f"VW eUP! {last_part}"
-    
+
     # Check for MG ZS-EV metrics
     if "xmg" in topic_parts:
         # Format as "MG ZS-EV Sensor Name"
         last_part = topic_parts[-1].replace("_", " ").title()
         return f"MG ZS-EV {last_part}"
-        
+
     # Check for Smart ForTwo metrics
     if "xsq" in topic_parts:
         # Format as "Smart ForTwo Sensor Name"
         last_part = topic_parts[-1].replace("_", " ").title()
         return f"Smart ForTwo {last_part}"
-        
+
     # Check for Nissan Leaf metrics
     if "xnl" in topic_parts:
         # Format as "Nissan Leaf Sensor Name"
