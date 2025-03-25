@@ -13,12 +13,12 @@ from homeassistant.const import (
     UnitOfPower,
     UnitOfSpeed,
     UnitOfTemperature,
-    UnitOfTime,
 )
 from homeassistant.helpers.entity import EntityCategory
 
 from ..const import LOGGER_NAME
-from ..metrics import get_metric_by_path, get_metric_by_pattern, METRIC_DEFINITIONS
+from ..metrics import get_metric_by_path, get_metric_by_pattern
+from ..metrics.patterns import TOPIC_PATTERNS
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -43,10 +43,12 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
                     "Setting EntityCategory.DIAGNOSTIC for %s category: %s",
                     category, internal_name
                 )
+
     # Special check for timer mode sensors
     if "timermode" in internal_name.lower() or "timer_mode" in internal_name.lower():
         result["icon"] = "mdi:timer-outline"
         return result
+
     # Special handling for GPS coordinates
     name_lower = internal_name.lower()
     if "latitude" in name_lower or "lat" in name_lower:
@@ -83,24 +85,6 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
     if not metric_info and alt_metric_path:
         metric_info = get_metric_by_path(alt_metric_path)
 
-    # Try alternative path formats for vehicle-specific metrics
-    if not metric_info and "xvu" in metric_path:
-        alt_path = metric_path.split("xvu.")[-1]
-        if alt_path in METRIC_DEFINITIONS:
-            metric_info = METRIC_DEFINITIONS[alt_path]
-    elif not metric_info and "xsq" in metric_path:
-        alt_path = metric_path.split("xsq.")[-1]
-        if alt_path in METRIC_DEFINITIONS:
-            metric_info = METRIC_DEFINITIONS[alt_path]
-    elif not metric_info and "xmg" in metric_path:
-        alt_path = metric_path.split("xmg.")[-1]
-        if alt_path in METRIC_DEFINITIONS:
-            metric_info = METRIC_DEFINITIONS[alt_path]
-    elif not metric_info and "xnl" in metric_path:
-        alt_path = metric_path.split("xnl.")[-1]
-        if alt_path in METRIC_DEFINITIONS:
-            metric_info = METRIC_DEFINITIONS[alt_path]
-
     # If no exact match, try by pattern in name and topic
     if not metric_info:
         topic_parts = topic_suffix.split('/')
@@ -119,6 +103,22 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
             result["entity_category"] = metric_info["entity_category"]
         if "icon" in metric_info:
             result["icon"] = metric_info["icon"]
+        return result
+
+    # If no metric info found, try matching by pattern from TOPIC_PATTERNS
+    for pattern, pattern_info in TOPIC_PATTERNS.items():
+        if pattern in internal_name.lower() or pattern in topic.lower():
+            if "device_class" in pattern_info:
+                result["device_class"] = pattern_info["device_class"]
+            if "state_class" in pattern_info:
+                result["state_class"] = pattern_info["state_class"]
+            if "unit" in pattern_info:
+                result["native_unit_of_measurement"] = pattern_info["unit"]
+            if "entity_category" in pattern_info:
+                result["entity_category"] = pattern_info["entity_category"]
+            if "icon" in pattern_info:
+                result["icon"] = pattern_info["icon"]
+            break
 
     return result
 
@@ -163,44 +163,7 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
                             updated_attrs["temperature_level"] = "hot"
                 except (ValueError, TypeError):
                     pass
-
-        elif device_class == SensorDeviceClass.DURATION:
-            # Only add unit if not already defined and if there's an exact metric definition
-            if "unit_of_measurement" not in updated_attrs and "unit" not in updated_attrs:
-                # Get the metric info from metrics definitions
-                topic = str(updated_attrs.get("topic", ""))
-                topic_suffix = topic
-                
-                if topic.count('/') >= 3:
-                    parts = topic.split('/')
-                    for i, part in enumerate(parts):
-                        if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
-                            topic_suffix = '/'.join(parts[i:])
-                            break
-                
-                metric_path = topic_suffix.replace("/", ".")
-                alt_metric_path = None
-                
-                # Handle "metric/" prefix for better matching with definitions
-                if metric_path.startswith("metric."):
-                    alt_metric_path = metric_path[7:]  # Remove "metric."
-                
-                # Import definitions if needed
-                if METRIC_DEFINITIONS is None:
-                    from .. import METRIC_DEFINITIONS as MD
-                    METRIC_DEFINITIONS = MD
-                
-                # Check if this exact path exists in definitions
-                if metric_path in METRIC_DEFINITIONS:
-                    metric_info = METRIC_DEFINITIONS[metric_path]
-                    if "unit" in metric_info:
-                        updated_attrs["unit"] = metric_info["unit"]
-                # If no match and we have an alternative path, try that
-                elif alt_metric_path and alt_metric_path in METRIC_DEFINITIONS:
-                    metric_info = METRIC_DEFINITIONS[alt_metric_path]
-                    if "unit" in metric_info:
-                        updated_attrs["unit"] = metric_info["unit"]
-                
+                    
     return updated_attrs
 
 def create_cell_sensors(topic: str, cell_values: List[float], 
