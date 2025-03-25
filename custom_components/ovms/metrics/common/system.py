@@ -17,11 +17,11 @@ from homeassistant.helpers.entity import EntityCategory
 SYSTEM_METRICS = {
     "m.freeram": {
         "name": "Free RAM",
-        "description": "Total amount of free RAM in kilobytes",
+        "description": "Total amount of free RAM in bytes",
         "icon": "mdi:memory",
         "device_class": SensorDeviceClass.DATA_SIZE,
         "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfInformation.KILOBYTES,
+        "unit": UnitOfInformation.BYTES,
         "category": "system",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
