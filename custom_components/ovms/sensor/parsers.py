@@ -8,7 +8,7 @@ def extract_numeric_from_string(value: str, pattern: Optional[str] = None) -> Op
     """Extract numeric value from a string using the provided pattern or default patterns."""
     if not isinstance(value, str):
         return None
-        
+
     # If a specific pattern is provided, use it
     if pattern:
         match = re.search(pattern, value)
@@ -17,7 +17,7 @@ def extract_numeric_from_string(value: str, pattern: Optional[str] = None) -> Op
                 return float(match.group(1))
             except (ValueError, IndexError):
                 pass
-    
+
     # Default patterns for common unit formats
     patterns = [
         r'(-?\d+\.?\d*)dBm',  # Signal strength
@@ -28,7 +28,7 @@ def extract_numeric_from_string(value: str, pattern: Optional[str] = None) -> Op
         r'(-?\d+\.?\d*)km',   # Distance
         r'(-?\d+\.?\d*)Sec',  # Time
     ]
-    
+
     for pat in patterns:
         match = re.search(pat, value)
         if match:
@@ -36,7 +36,7 @@ def extract_numeric_from_string(value: str, pattern: Optional[str] = None) -> Op
                 return float(match.group(1))
             except (ValueError, IndexError):
                 continue
-                
+
     return None
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.util import dt as dt_util
@@ -141,12 +141,12 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             if match:
                 dt_str = match.group(1)
                 timezone = match.group(2) if len(match.groups()) > 1 else None
-                
+
                 # Parse the datetime
                 parsed = dt_util.parse_datetime(dt_str)
                 if parsed:
                     return parsed
-                    
+
                 # Fallback if parse_datetime fails
                 import datetime
                 try:
@@ -154,12 +154,12 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
                     return dt_util.as_local(dt_obj)
                 except ValueError:
                     pass
-            
+
             # Try standard Home Assistant datetime parser
             parsed = dt_util.parse_datetime(value)
             if parsed:
                 return parsed
-                
+
             # Return current time if we can't parse it
             return dt_util.now()
         except Exception as ex:

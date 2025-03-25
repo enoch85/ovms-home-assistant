@@ -250,15 +250,15 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
                     # For timestamp sensors, parse the string back into a datetime object
                     self._attr_native_value = parse_value(
-                        state.state, 
-                        self._attr_device_class, 
+                        state.state,
+                        self._attr_device_class,
                         self._attr_state_class,
                         self._is_cell_sensor
                     )
                 else:
                     # For non-timestamp sensors, use the string state directly
                     self._attr_native_value = state.state
-                    
+
             # Restore attributes if available
             if state.attributes:
                 # Don't overwrite entity attributes like unit, etc.
@@ -335,7 +335,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             for name in legacy_array_names:
                 if name in self._attr_extra_state_attributes and name != f"{self._stat_type}_values":
                     del self._attr_extra_state_attributes[name]
-            
+
             if "cell_count" in self._attr_extra_state_attributes:
                 del self._attr_extra_state_attributes["cell_count"]
 

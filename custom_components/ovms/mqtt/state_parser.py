@@ -157,7 +157,7 @@ class StateParser:
         """Extract a numeric value from a string with units."""
         if not isinstance(value, str):
             return None
-            
+
         # Common patterns for values with units
         patterns = [
             r'(-?\d+\.?\d*)dBm',  # Signal strength
@@ -168,7 +168,7 @@ class StateParser:
             r'(-?\d+\.?\d*)km',   # Distance
             r'(-?\d+\.?\d*)Sec',  # Time
         ]
-        
+
         for pattern in patterns:
             match = re.search(pattern, value)
             if match:
@@ -176,7 +176,7 @@ class StateParser:
                     return float(match.group(1))
                 except (ValueError, IndexError):
                     continue
-                    
+
         return None
 
             # Try numeric comparison
