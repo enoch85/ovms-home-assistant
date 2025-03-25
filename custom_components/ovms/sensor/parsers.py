@@ -97,6 +97,29 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
 def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None, 
                 is_cell_sensor: bool = False) -> Any:
     """Parse the value from the payload."""
+    # Handle timestamp device class specifically
+    if device_class == SensorDeviceClass.TIMESTAMP and isinstance(value, str):
+        try:
+            # Try Home Assistant's built-in datetime parser first
+            parsed = dt_util.parse_datetime(value)
+            if parsed:
+                return parsed
+                
+            # For OVMS timestamp format, extract just the datetime part
+            import datetime
+            import re
+            
+            # Match format "2025-03-25 17:42:57 TIMEZONE" and extract datetime part
+            match = re.match(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', value)
+            if match:
+                dt_str = match.group(1)
+                # Create a datetime object without timezone info
+                dt_obj = datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+                # Home Assistant requires tzinfo, but we'll use local time zone
+                return dt_util.as_local(dt_obj)
+        except Exception:
+            return None
+    
     # Handle special state values for numeric sensors
     if requires_numeric_value(device_class, state_class) and is_special_state_value(value):
         return None
