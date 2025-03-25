@@ -176,12 +176,18 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         if self._attr_native_unit_of_measurement and "unit" not in self._attr_extra_state_attributes:
             self._attr_extra_state_attributes["unit"] = self._attr_native_unit_of_measurement
 
-        # Flag to indicate if this is a cell sensor
+        # Flag to indicate if this is a cell sensor or has cell-like data
         self._is_cell_sensor = (
-            ("cell" in self._topic.lower() or
-             "voltage" in self._topic.lower() or
-             "temp" in self._topic.lower()) and
-            self._attr_extra_state_attributes.get("category") == "battery"
+            # Standard battery cell metrics
+            (("cell" in self._topic.lower() or
+              "voltage" in self._topic.lower() or
+              "temp" in self._topic.lower()) and
+             self._attr_extra_state_attributes.get("category") == "battery") or
+            # Explicitly marked as having cell data
+            self._attr_extra_state_attributes.get("has_cell_data", False) or
+            # Tire health metrics that use comma-separated values
+            ("health" in self._topic.lower() and
+             self._attr_extra_state_attributes.get("category") == "tire")
         )
 
         # Determine appropriate attribute type name based on the sensor

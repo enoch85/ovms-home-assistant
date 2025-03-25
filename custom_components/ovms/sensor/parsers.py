@@ -117,8 +117,12 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
                 dt_obj = datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
                 # Home Assistant requires tzinfo, but we'll use local time zone
                 return dt_util.as_local(dt_obj)
+
+            # Return current time if we can't parse it instead of failing
+            return dt_util.now()
         except Exception:
-            return None
+            # Return current time on parse failure instead of None
+            return dt_util.now()
 
     # Handle special state values for numeric sensors
     if requires_numeric_value(device_class, state_class) and is_special_state_value(value):
