@@ -35,6 +35,9 @@ NETWORK_METRICS = {
         "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": "dBm",
+        "pattern_match": r"(-?\d+\.?\d*)dBm",
+        "pattern_match": r"(-?\d+)dBm",
+        "pattern_match": r"(-?\d+)dBm",
         "category": "network",
     },
     "m.net.provider": {

@@ -18,8 +18,10 @@ from .factory import determine_sensor_type, add_device_specific_attributes, crea
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
-# Default setting for creating individual cell sensors - matching original behavior
-CREATE_INDIVIDUAL_CELL_SENSORS = False
+# Default setting for creating individual cell sensors
+# Set to True to create individual sensors for each cell (voltage/temp)
+# Set to False to only include cell data as attributes on the parent sensor
+CREATE_INDIVIDUAL_CELL_SENSORS = False  # Default behavior is to use attributes only
 
 class CellVoltageSensor(SensorEntity, RestoreEntity):
     """Representation of a cell voltage sensor."""
@@ -53,6 +55,15 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             "last_updated": dt_util.utcnow().isoformat(),
         }
         self.hass = hass
+
+        # Get metric information to check for pattern_match
+        pattern_match = None
+        if "metric_info" in attributes:
+            metric_info = attributes["metric_info"]
+            if metric_info and "pattern_match" in metric_info:
+                pattern_match = metric_info["pattern_match"]
+                # Add pattern_match to attributes for use in state parsing
+                self._attr_extra_state_attributes["pattern_match"] = pattern_match
 
         # Initialize device class and other attributes from parent
         self._attr_device_class = attributes.get("device_class")
@@ -320,10 +331,11 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_extra_state_attributes["count"] = len(values)
 
             # REMOVE legacy/duplicate names to avoid duplication
-            if "cell_values" in self._attr_extra_state_attributes and self._stat_type != "cell":
-                del self._attr_extra_state_attributes["cell_values"]
-            if "values" in self._attr_extra_state_attributes:
-                del self._attr_extra_state_attributes["values"]
+            legacy_array_names = ["cell_values", "values"]
+            for name in legacy_array_names:
+                if name in self._attr_extra_state_attributes and name != f"{self._stat_type}_values":
+                    del self._attr_extra_state_attributes[name]
+            
             if "cell_count" in self._attr_extra_state_attributes:
                 del self._attr_extra_state_attributes["cell_count"]
 
@@ -357,8 +369,11 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             for i, val in enumerate(values):
                 self._attr_extra_state_attributes[f"{self._stat_type}_{i+1}"] = val
 
+            # Create individual cell sensors if enabled and not already created
+            if not self._cell_sensors_created and CREATE_INDIVIDUAL_CELL_SENSORS:
+                self._create_cell_sensors(values)
             # Update existing cell sensors if they exist and are enabled
-            if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created and CREATE_INDIVIDUAL_CELL_SENSORS:
+            elif hasattr(self, '_cell_sensors_created') and self._cell_sensors_created and CREATE_INDIVIDUAL_CELL_SENSORS:
                 self._update_cell_sensor_values(values)
         except Exception as ex:
             _LOGGER.exception("Error handling cell values: %s", ex)

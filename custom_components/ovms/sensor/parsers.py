@@ -3,6 +3,41 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
+
+def extract_numeric_from_string(value: str, pattern: Optional[str] = None) -> Optional[float]:
+    """Extract numeric value from a string using the provided pattern or default patterns."""
+    if not isinstance(value, str):
+        return None
+        
+    # If a specific pattern is provided, use it
+    if pattern:
+        match = re.search(pattern, value)
+        if match:
+            try:
+                return float(match.group(1))
+            except (ValueError, IndexError):
+                pass
+    
+    # Default patterns for common unit formats
+    patterns = [
+        r'(-?\d+\.?\d*)dBm',  # Signal strength
+        r'(-?\d+\.?\d*)V',    # Voltage
+        r'(-?\d+\.?\d*)A',    # Current
+        r'(-?\d+\.?\d*)W',    # Power
+        r'(-?\d+\.?\d*)°C',   # Temperature
+        r'(-?\d+\.?\d*)km',   # Distance
+        r'(-?\d+\.?\d*)Sec',  # Time
+    ]
+    
+    for pat in patterns:
+        match = re.search(pat, value)
+        if match:
+            try:
+                return float(match.group(1))
+            except (ValueError, IndexError):
+                continue
+                
+    return None
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.util import dt as dt_util
 
@@ -100,25 +135,36 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
     # Handle timestamp device class specifically
     if device_class == SensorDeviceClass.TIMESTAMP and isinstance(value, str):
         try:
-            # Try Home Assistant's built-in datetime parser first
+            # Match OVMS timestamp format: "YYYY-MM-DD HH:MM:SS TIMEZONE"
+            ovms_pattern = r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\s+([A-Za-z]+))?'
+            match = re.match(ovms_pattern, value)
+            if match:
+                dt_str = match.group(1)
+                timezone = match.group(2) if len(match.groups()) > 1 else None
+                
+                # Parse the datetime
+                parsed = dt_util.parse_datetime(dt_str)
+                if parsed:
+                    return parsed
+                    
+                # Fallback if parse_datetime fails
+                import datetime
+                try:
+                    dt_obj = datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+                    return dt_util.as_local(dt_obj)
+                except ValueError:
+                    pass
+            
+            # Try standard Home Assistant datetime parser
             parsed = dt_util.parse_datetime(value)
             if parsed:
                 return parsed
-
-            # For OVMS timestamp format, extract just the datetime part
-            import datetime
-            import re
-
-            # Match format "2025-03-25 17:42:57 TIMEZONE" and extract datetime part
-            match = re.match(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', value)
-            if match:
-                dt_str = match.group(1)
-                # Create a datetime object without timezone info
-                dt_obj = datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
-                # Home Assistant requires tzinfo, but we'll use local time zone
-                return dt_util.as_local(dt_obj)
-
-            # Return current time if we can't parse it instead of failing
+                
+            # Return current time if we can't parse it
+            return dt_util.now()
+        except Exception as ex:
+            _LOGGER.debug("Error parsing timestamp: %s", ex)
+            # Return current time on parse failure
             return dt_util.now()
         except Exception:
             # Return current time on parse failure instead of None
@@ -127,6 +173,13 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
     # Handle special state values for numeric sensors
     if requires_numeric_value(device_class, state_class) and is_special_state_value(value):
         return None
+
+    # For signal strength and similar metrics, extract numeric value from unit-included strings
+    if isinstance(value, str) and requires_numeric_value(device_class, state_class):
+        # Check if it contains unit suffix patterns like "dBm", "V", etc.
+        numeric_value = extract_numeric_from_string(value)
+        if numeric_value is not None:
+            return numeric_value
 
     # Special handling for yes/no values in numeric sensors
     if requires_numeric_value(device_class, state_class) and isinstance(value, str):

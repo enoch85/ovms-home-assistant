@@ -66,6 +66,12 @@ class StateParser:
             if StateParser.is_special_state_value(json_val):
                 return None
 
+        # Check if the value has units embedded in the string (like -101dBm)
+        if isinstance(value, str) and any(u in value for u in ["dBm", "V", "A", "W", "°C", "km", "Sec"]):
+            numeric_value = StateParser.extract_numeric_from_string(value)
+            if numeric_value is not None:
+                return numeric_value
+
             # If JSON is a dict, extract likely value
             if isinstance(json_val, dict):
                 result = None
@@ -145,6 +151,33 @@ class StateParser:
                     return True
                 if value.lower() in ("false", "off", "no", "0", "closed", "unlocked"):
                     return False
+
+    @staticmethod
+    def extract_numeric_from_string(value: str) -> Optional[float]:
+        """Extract a numeric value from a string with units."""
+        if not isinstance(value, str):
+            return None
+            
+        # Common patterns for values with units
+        patterns = [
+            r'(-?\d+\.?\d*)dBm',  # Signal strength
+            r'(-?\d+\.?\d*)V',    # Voltage
+            r'(-?\d+\.?\d*)A',    # Current
+            r'(-?\d+\.?\d*)W',    # Power
+            r'(-?\d+\.?\d*)°C',   # Temperature
+            r'(-?\d+\.?\d*)km',   # Distance
+            r'(-?\d+\.?\d*)Sec',  # Time
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, value)
+            if match:
+                try:
+                    return float(match.group(1))
+                except (ValueError, IndexError):
+                    continue
+                    
+        return None
 
             # Try numeric comparison
             try:
