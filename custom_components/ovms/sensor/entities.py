@@ -236,8 +236,18 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Restore previous state if available
         if (state := await self.async_get_last_state()) is not None:
             if state.state not in ["unavailable", "unknown", None]:
-                # Only restore the state if it's not a special state
-                self._attr_native_value = state.state
+                if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
+                    # For timestamp sensors, parse the string back into a datetime object
+                    self._attr_native_value = parse_value(
+                        state.state, 
+                        self._attr_device_class, 
+                        self._attr_state_class,
+                        self._is_cell_sensor
+                    )
+                else:
+                    # For non-timestamp sensors, use the string state directly
+                    self._attr_native_value = state.state
+                    
             # Restore attributes if available
             if state.attributes:
                 # Don't overwrite entity attributes like unit, etc.
