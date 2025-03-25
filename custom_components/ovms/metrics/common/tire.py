@@ -22,9 +22,9 @@ TIRE_METRICS = {
         "name": "Tire Health",
         "description": "TPMS tire health states",
         "icon": "mdi:car-tire-alert",
-        "state_class": SensorStateClass.MEASUREMENT,
         "unit": PERCENTAGE,
         "category": "tire",
+        "has_cell_data": True,
     },
     "v.t.pressure": {
         "name": "Tire Pressure",

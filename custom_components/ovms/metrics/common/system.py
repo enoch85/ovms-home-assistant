@@ -9,6 +9,7 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.const import (
     UnitOfTime,
+    UnitOfInformation,
 )
 from homeassistant.helpers.entity import EntityCategory
 
@@ -18,6 +19,9 @@ SYSTEM_METRICS = {
         "name": "Free RAM",
         "description": "Total amount of free RAM in bytes",
         "icon": "mdi:memory",
+        "device_class": SensorDeviceClass.DATA_SIZE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfInformation.BYTES,
         "category": "system",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
