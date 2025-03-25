@@ -73,14 +73,14 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
     # Create both standard and alternative metric paths for matching
     metric_path = topic_suffix.replace("/", ".")
     alt_metric_path = None
-    
+
     # Handle "metric/" prefix - remove it for better matching with definitions
     if metric_path.startswith("metric."):
         alt_metric_path = metric_path[7:]  # Remove "metric."
 
     # Try exact match first
     metric_info = get_metric_by_path(metric_path)
-    
+
     # If no match and we have an alternative path, try that
     if not metric_info and alt_metric_path:
         metric_info = get_metric_by_path(alt_metric_path)
@@ -125,7 +125,7 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
 def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any, native_value: Any) -> Dict[str, Any]:
     """Add attributes based on device class and value."""
     updated_attrs = attributes.copy()
-    
+
     # Add derived attributes based on entity type
     if device_class is not None:
         # Add specific attributes for different device classes
@@ -163,15 +163,15 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
                             updated_attrs["temperature_level"] = "hot"
                 except (ValueError, TypeError):
                     pass
-                    
+
     return updated_attrs
 
-def create_cell_sensors(topic: str, cell_values: List[float], 
-                        vehicle_id: str, parent_unique_id: str, 
+def create_cell_sensors(topic: str, cell_values: List[float],
+                        vehicle_id: str, parent_unique_id: str,
                         device_info: Dict[str, Any], attributes: Dict[str, Any],
                         create_individual_sensors: bool = False) -> List[Dict[str, Any]]:
     """Create configuration for individual cell sensors.
-    
+
     Args:
         create_individual_sensors: If True, create individual sensors for cells.
                                  If False, only add as attributes (original behavior).
@@ -181,7 +181,7 @@ def create_cell_sensors(topic: str, cell_values: List[float],
     # Must be explicitly enabled via configuration
     if not create_individual_sensors:
         return []
-        
+
     # Add topic hash to make unique IDs truly unique
     topic_hash = hashlib.md5(topic.encode()).hexdigest()[:8]
     category = attributes.get("category", "battery")

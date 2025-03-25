@@ -171,19 +171,19 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_native_unit_of_measurement = sensor_type["native_unit_of_measurement"]
         self._attr_entity_category = sensor_type["entity_category"]
         self._attr_icon = sensor_type["icon"]
-        
+
         # Add unit to attributes for better tracking
         if self._attr_native_unit_of_measurement and "unit" not in self._attr_extra_state_attributes:
             self._attr_extra_state_attributes["unit"] = self._attr_native_unit_of_measurement
 
         # Flag to indicate if this is a cell sensor
         self._is_cell_sensor = (
-            ("cell" in self._topic.lower() or 
-             "voltage" in self._topic.lower() or 
+            ("cell" in self._topic.lower() or
+             "voltage" in self._topic.lower() or
              "temp" in self._topic.lower()) and
             self._attr_extra_state_attributes.get("category") == "battery"
         )
-        
+
         # Determine appropriate attribute type name based on the sensor
         self._stat_type = "cell"  # Default fallback
         if "temp" in self._internal_name.lower():
@@ -193,7 +193,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
         # Only set native value after attributes are initialized - with proper parsing
         parsed_value = parse_value(initial_state, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
-        
+
         # For timestamp sensors, preserve the datetime object
         if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
             self._attr_native_value = parsed_value
@@ -207,7 +207,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._handle_cell_values(initial_state)
         else:
             # Not cell values or already handled - process as JSON
-            updated_attrs = process_json_payload(initial_state, self._attr_extra_state_attributes, 
+            updated_attrs = process_json_payload(initial_state, self._attr_extra_state_attributes,
                                                self._internal_name, self._is_cell_sensor, self._stat_type)
             self._attr_extra_state_attributes.update(updated_attrs)
 
@@ -246,7 +246,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             """Update the sensor state."""
             # Parse value with appropriate handling
             parsed_value = parse_value(payload, self._attr_device_class, self._attr_state_class, self._is_cell_sensor)
-            
+
             # For timestamp sensors, preserve the datetime object - don't convert to string
             if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
                 self._attr_native_value = parsed_value
@@ -264,7 +264,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 self._handle_cell_values(payload)
             else:
                 # Not cell values or already handled - process as JSON
-                updated_attrs = process_json_payload(payload, self._attr_extra_state_attributes, 
+                updated_attrs = process_json_payload(payload, self._attr_extra_state_attributes,
                                                  self._internal_name, self._is_cell_sensor, self._stat_type)
                 self._attr_extra_state_attributes.update(updated_attrs)
 
@@ -288,7 +288,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
     def _handle_cell_values(self, payload: str) -> None:
         """Handle cell values in payload.
-        
+
         Adds cell data as attributes to this sensor.
         Uses descriptive attribute names (voltage/temp) rather than generic "cell".
         """
@@ -297,12 +297,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             values = [float(part.strip()) for part in payload.split(",") if part.strip()]
             if not values:
                 return
-                
-            # Add the cell values to the attributes - use only one attribute name for the array 
+
+            # Add the cell values to the attributes - use only one attribute name for the array
             # based on the type of sensor (remove legacy/duplicate array names)
             self._attr_extra_state_attributes[f"{self._stat_type}_values"] = values
             self._attr_extra_state_attributes["count"] = len(values)
-            
+
             # REMOVE legacy/duplicate names to avoid duplication
             if "cell_values" in self._attr_extra_state_attributes and self._stat_type != "cell":
                 del self._attr_extra_state_attributes["cell_values"]
@@ -321,7 +321,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_extra_state_attributes["median"] = median_value
             self._attr_extra_state_attributes["min"] = min_value
             self._attr_extra_state_attributes["max"] = max_value
-            
+
             # REMOVE duplicate stats attributes to avoid duplication
             for legacy_key in ["min_value", "max_value", "mean_value", "median_value"]:
                 if legacy_key in self._attr_extra_state_attributes:
@@ -330,13 +330,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Store individual values with descriptive names only
             # First clear any existing cell_N attributes to prevent duplicates
             for key in list(self._attr_extra_state_attributes.keys()):
-                # Remove both old "cell_N" and potentially existing "voltage_N" attributes 
+                # Remove both old "cell_N" and potentially existing "voltage_N" attributes
                 # to ensure no duplication of previous attributes
-                if (key.startswith("cell_") or key.startswith("voltage_") or 
+                if (key.startswith("cell_") or key.startswith("voltage_") or
                     key.startswith("temp_") or key.startswith("value_")):
                     if key.split("_")[1].isdigit():
                         del self._attr_extra_state_attributes[key]
-            
+
             # Now add with the proper type
             for i, val in enumerate(values):
                 self._attr_extra_state_attributes[f"{self._stat_type}_{i+1}"] = val
@@ -372,10 +372,10 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Skip if no hass instance
         if not self.hass:
             return
-            
+
         # Extract vehicle_id from unique_id
         vehicle_id = self.unique_id.split('_')[0]
-        
+
         # Create cell sensor configurations using factory function
         sensor_configs = create_cell_sensors(
             self._topic,
@@ -391,13 +391,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             },
             CREATE_INDIVIDUAL_CELL_SENSORS
         )
-        
+
         # Store cell sensor IDs
         self._cell_sensors = [config["unique_id"] for config in sensor_configs]
-        
+
         # Flag cells as created
         self._cell_sensors_created = True
-        
+
         # Create and add entities through the entity discovery mechanism if we have configs
         if sensor_configs:
             async_dispatcher_send(

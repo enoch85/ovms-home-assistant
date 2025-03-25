@@ -171,7 +171,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             # Ensure payload is properly truncated if it's a string
             if isinstance(payload, str) and len(payload) > 255:
                 payload = truncate_state_value(payload)
-                
+
             self._attr_is_on = self._parse_state(payload)
 
             # Update timestamp attribute
@@ -221,7 +221,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         # Make sure state is truncated if needed
         if isinstance(state, str):
             state = truncate_state_value(state)
-            
+
         # Check for boolean-like values in string form
         if isinstance(state, str):
             if state.lower() in ("true", "on", "yes", "1", "enabled", "active"):
@@ -313,7 +313,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             # Ensure payload is properly truncated if it's a string
             if isinstance(payload, str) and len(payload) > 255:
                 payload = truncate_state_value(payload)
-                
+
             json_data = json.loads(payload)
             if isinstance(json_data, dict):
                 # Add useful attributes from the data

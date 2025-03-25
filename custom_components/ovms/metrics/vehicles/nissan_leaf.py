@@ -48,7 +48,7 @@ NISSAN_LEAF_METRICS = {
         "category": "nissan_leaf",
         "has_cell_data": True,
     },
-    
+
     # Climate control metrics
     "xnl.cc.fan.only": {
         "name": "Nissan Leaf Fan Only Mode",
@@ -78,7 +78,7 @@ NISSAN_LEAF_METRICS = {
         "device_class": BinarySensorDeviceClass.RUNNING,
         "category": "nissan_leaf",
     },
-    
+
     # Battery metrics
     "xnl.v.b.charge.limit": {
         "name": "Nissan Leaf Charge Limit",
@@ -228,7 +228,7 @@ NISSAN_LEAF_METRICS = {
         "category": "nissan_leaf",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
-    
+
     # Charging metrics
     "xnl.v.c.chargebars": {
         "name": "Nissan Leaf Charge Bars",
@@ -300,7 +300,7 @@ NISSAN_LEAF_METRICS = {
         "icon": "mdi:battery-charging",
         "category": "nissan_leaf",
     },
-    
+
     # Climate metrics
     "xnl.v.e.hvac.auto": {
         "name": "Nissan Leaf Auto HVAC",
