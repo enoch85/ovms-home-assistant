@@ -1,12 +1,15 @@
 """OVMS sensor state parsers."""
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional
+from datetime import datetime
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.util import dt as dt_util
 
 from ..const import LOGGER_NAME, MAX_STATE_LENGTH, truncate_state_value
+from .duration_formatter import parse_duration
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -57,14 +60,7 @@ def calculate_median(values: List[float]) -> Optional[float]:
     return sorted_values[n//2]
 
 def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sensor: bool = False, stat_type: str = "cell") -> Optional[Dict[str, Any]]:
-    """Parse comma-separated values into a dictionary with statistics.
-
-    Args:
-        value: The comma-separated string of values
-        entity_name: The name of the entity for determining attribute type
-        is_cell_sensor: Whether this is a cell-type sensor (battery cells, etc)
-        stat_type: The specific attribute type to use (voltage, temp, etc)
-    """
+    """Parse comma-separated values into a dictionary with statistics."""
     if not is_cell_sensor:
         return None  # Skip processing if not a cell sensor
 
@@ -124,6 +120,13 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             # Return current time on parse failure instead of None
             return dt_util.now()
 
+    # For duration sensors, use our dedicated parser
+    if device_class == SensorDeviceClass.DURATION:
+        parsed_duration = parse_duration(value)
+        if parsed_duration is not None:
+            return parsed_duration
+        # If parsing fails, continue with standard processing
+
     # Handle special state values for numeric sensors
     if requires_numeric_value(device_class, state_class) and is_special_state_value(value):
         return None
@@ -138,9 +141,7 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
 
     # Check if this is a comma-separated list of numbers for a cell sensor
     if is_cell_sensor and isinstance(value, str) and "," in value:
-        # For cell sensors with comma separated values, we'll extract the average
-        # as the state but this will be handled by _handle_cell_values
-        # for attribute processing
+        # For cell sensors with comma separated values, extract the average
         try:
             values = [float(part.strip()) for part in value.split(",") if part.strip()]
             if values:
@@ -150,7 +151,7 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
 
     # Try parsing as JSON first
     try:
-        json_val = json.loads(value)
+        json_val = json.loads(value) if isinstance(value, str) else value
 
         # Handle special JSON values
         if is_special_state_value(json_val):
@@ -174,14 +175,14 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             if is_special_state_value(result):
                 return None
 
-            # If we have a result, return it; otherwise fall back to string representation
+            # If we have a result, return it
             if result is not None:
-                return truncate_state_value(result)
+                return result
 
             # If we need a numeric value but couldn't extract one, return None
             if requires_numeric_value(device_class, state_class):
                 return None
-            return truncate_state_value(str(json_val))
+            return str(json_val)
 
         # If JSON is a scalar, use it directly
         if isinstance(json_val, (int, float)):
@@ -198,7 +199,7 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
                     return float(json_val)
                 except (ValueError, TypeError):
                     return None
-            return truncate_state_value(json_val)
+            return json_val
 
         if isinstance(json_val, bool):
             # If we need a numeric value, convert bool to int
@@ -209,7 +210,7 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
         # For arrays or other types, convert to string if not numeric
         if requires_numeric_value(device_class, state_class):
             return None
-        return truncate_state_value(str(json_val))
+        return str(json_val)
 
     except (ValueError, json.JSONDecodeError):
         # Not JSON, try numeric
@@ -223,20 +224,12 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             # If we need a numeric value but couldn't convert, return None
             if requires_numeric_value(device_class, state_class):
                 return None
-            # Otherwise return as string with truncation if needed
-            return truncate_state_value(value)
+            # Otherwise return as is
+            return value
 
 def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: str = "",
                         is_cell_sensor: bool = False, stat_type: str = "cell") -> Dict[str, Any]:
-    """Process JSON payload to extract additional attributes.
-
-    Args:
-        payload: The payload to process
-        attributes: Existing attributes to update
-        entity_name: The name of the entity for determining attribute type
-        is_cell_sensor: Whether this is a cell-type sensor (battery cells, etc)
-        stat_type: The specific attribute type to use (voltage, temp, etc)
-    """
+    """Process JSON payload to extract additional attributes."""
     updated_attributes = attributes.copy()
 
     try:
