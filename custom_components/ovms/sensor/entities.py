@@ -25,7 +25,7 @@ def format_sensor_value(value, device_class, attributes):
     """Format sensor value based on device class, returns formatted value."""
     if value is None:
         return None
-        
+
     if device_class == SensorDeviceClass.DURATION:
         # For duration, store raw value as attribute and return formatted string
         attributes["raw_value"] = value
@@ -95,19 +95,19 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         if self._attr_device_class in (SensorDeviceClass.DURATION, SensorDeviceClass.TIMESTAMP):
             # Store metadata in attributes but clear from entity properties
             self._attr_extra_state_attributes["original_device_class"] = self._attr_device_class
-            
+
             if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
                 self._attr_extra_state_attributes["original_state_class"] = "timestamp"
                 self._attr_extra_state_attributes["original_unit"] = "timestamp"
             else:
                 self._attr_extra_state_attributes["original_state_class"] = self._attr_state_class
                 self._attr_extra_state_attributes["original_unit"] = self._attr_native_unit_of_measurement
-            
+
             # Clear properties so HA doesn't enforce type validation
             self._attr_device_class = None
             self._attr_state_class = None
             self._attr_native_unit_of_measurement = None
-        
+
         # Parse the value
         if requires_numeric_value(self._attr_device_class, self._attr_state_class) and is_special_state_value(initial_state):
             self._parsed_value = None
@@ -141,14 +141,14 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         if (state := await self.async_get_last_state()) is not None:
             if state.state not in ["unavailable", "unknown", None]:
                 device_class_for_restoring = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
-                
+
                 if device_class_for_restoring == SensorDeviceClass.TIMESTAMP:
                     if state.attributes and "timestamp_object" in state.attributes:
                         self._parsed_value = state.attributes["timestamp_object"]
                     else:
                         # Try to parse the state if it's a timestamp string
                         self._parsed_value = parse_value(
-                            state.state, 
+                            state.state,
                             device_class_for_restoring,
                             SensorStateClass.MEASUREMENT,
                             False
@@ -183,7 +183,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                 else:
                     # For other sensors, use the state directly
                     self._attr_native_value = state.state
-                    
+
             # Restore attributes if available, but clean up inconsistent ones
             if state.attributes:
                 # Don't overwrite entity attributes like unit, etc.
@@ -191,11 +191,11 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                     k: v for k, v in state.attributes.items()
                     if k not in ["device_class", "state_class", "unit_of_measurement"]
                 }
-                
+
                 # Remove stale/inconsistent formatted attributes
                 if "formatted_duration" in saved_attributes and "formatted_value" in saved_attributes:
                     del saved_attributes["formatted_duration"]
-                
+
                 self._attr_extra_state_attributes.update(saved_attributes)
 
         @callback
@@ -283,14 +283,14 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         if self._attr_device_class in (SensorDeviceClass.DURATION, SensorDeviceClass.TIMESTAMP):
             # Store metadata in attributes but clear from entity properties
             self._attr_extra_state_attributes["original_device_class"] = self._attr_device_class
-            
+
             if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
                 self._attr_extra_state_attributes["original_state_class"] = "timestamp"
                 self._attr_extra_state_attributes["original_unit"] = "timestamp"
             else:
                 self._attr_extra_state_attributes["original_state_class"] = self._attr_state_class
                 self._attr_extra_state_attributes["original_unit"] = self._attr_native_unit_of_measurement
-            
+
             # Clear properties so HA doesn't enforce type validation
             self._attr_device_class = None
             self._attr_state_class = None
@@ -302,14 +302,14 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
         # Cell sensor configuration
         self._is_cell_sensor = (
-            (("cell" in self._topic.lower() or "voltage" in self._topic.lower() or 
-              "temp" in self._topic.lower()) and 
+            (("cell" in self._topic.lower() or "voltage" in self._topic.lower() or
+              "temp" in self._topic.lower()) and
              self._attr_extra_state_attributes.get("category") == "battery") or
             self._attr_extra_state_attributes.get("has_cell_data", False) or
-            ("health" in self._topic.lower() and 
+            ("health" in self._topic.lower() and
              self._attr_extra_state_attributes.get("category") == "tire")
         )
-        
+
         # Determine stat type
         self._stat_type = "cell"
         if "temp" in self._internal_name.lower():
@@ -324,9 +324,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Parse the value using original device class for formatted types
         device_class_for_parsing = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
         state_class_for_parsing = self._attr_extra_state_attributes.get("original_state_class") or self._attr_state_class
-        self._parsed_value = parse_value(initial_state, device_class_for_parsing, 
+        self._parsed_value = parse_value(initial_state, device_class_for_parsing,
                                        state_class_for_parsing, self._is_cell_sensor)
-        
+
         # Format the value
         self._attr_native_value = format_sensor_value(
             self._parsed_value, device_class_for_parsing, self._attr_extra_state_attributes
@@ -354,19 +354,19 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         if (state := await self.async_get_last_state()) is not None:
             if state.state not in ["unavailable", "unknown", None]:
                 device_class_for_restoring = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
-                
+
                 if device_class_for_restoring == SensorDeviceClass.TIMESTAMP:
                     if state.attributes and "timestamp_object" in state.attributes:
                         self._parsed_value = state.attributes["timestamp_object"]
                     else:
                         # Try to parse the state if it's a timestamp string
                         self._parsed_value = parse_value(
-                            state.state, 
+                            state.state,
                             device_class_for_restoring,
                             self._attr_state_class,
                             self._is_cell_sensor
                         )
-                    # Just use the formatted state directly 
+                    # Just use the formatted state directly
                     self._attr_native_value = state.state
                 elif device_class_for_restoring == SensorDeviceClass.DURATION:
                     # For duration, try to extract raw value from attributes first
@@ -396,7 +396,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 else:
                     # For other sensors, use the state directly
                     self._attr_native_value = state.state
-                    
+
             # Restore attributes if available, but clean up inconsistent ones
             if state.attributes:
                 # Don't overwrite entity attributes like unit, etc.
@@ -404,11 +404,11 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     k: v for k, v in state.attributes.items()
                     if k not in ["device_class", "state_class", "unit_of_measurement"]
                 }
-                
+
                 # Remove stale/inconsistent formatted attributes
                 if "formatted_duration" in saved_attributes and "formatted_value" in saved_attributes:
                     del saved_attributes["formatted_duration"]
-                
+
                 self._attr_extra_state_attributes.update(saved_attributes)
 
         @callback
@@ -417,8 +417,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Parse the value using original values
             device_class_for_parsing = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
             state_class_for_parsing = self._attr_extra_state_attributes.get("original_state_class") or self._attr_state_class
-            
-            self._parsed_value = parse_value(payload, device_class_for_parsing, 
+
+            self._parsed_value = parse_value(payload, device_class_for_parsing,
                                            state_class_for_parsing, self._is_cell_sensor)
 
             # Format the value
