@@ -1,4 +1,4 @@
-"""OVMS sensor entities."""
+"""OVMS sensor entities with standardized attributes."""
 import logging
 from typing import Any, Dict, Optional, List
 from datetime import datetime
@@ -26,31 +26,68 @@ def format_sensor_value(value, device_class, attributes):
     if value is None:
         return None
         
+    # Clean up any potentially inconsistent attributes for all sensors
+    for attr in ["formatted_value", "formatted_duration", "timestamp_iso"]:
+        if attr in attributes:
+            del attributes[attr]
+            
     if device_class == SensorDeviceClass.DURATION:
-        # For duration, store raw value as attribute and return formatted string
+        # For duration, store raw value and formatted value
         attributes["raw_value"] = value
-        # Remove any potentially stale formatted attributes
-        for attr in ["formatted_value", "formatted_duration"]:
-            if attr in attributes:
-                del attributes[attr]
-        # Use a single, standardized attribute name for the formatted value
         attributes["formatted_value"] = format_duration(value)
         return format_duration(value)
     elif device_class == SensorDeviceClass.TIMESTAMP:
-        # For timestamp, store datetime object as attribute and return ISO string
-        attributes["timestamp_object"] = value
+        # For timestamp, store datetime object and formatted value
+        attributes["raw_value"] = value
         if isinstance(value, datetime):
             formatted = value.isoformat()
             # Make it more readable by just keeping date and time
             if 'T' in formatted:
                 date_part, time_part = formatted.split('T')
-                time_part = time_part.split('+')[0].split('.')[0]  # Remove milliseconds and timezone
-                return f"{date_part} at {time_part}"
-            return formatted
-        return str(value)
+                time_part = time_part.split('+')[0].split('.')[0]
+                formatted_string = f"{date_part} at {time_part}"
+            else:
+                formatted_string = formatted
+            attributes["formatted_value"] = formatted_string
+            return formatted_string
+        formatted_string = str(value)
+        attributes["formatted_value"] = formatted_string
+        return formatted_string
     else:
-        # Normal handling
-        return truncate_state_value(value)
+        # For all other sensor types, also store raw and formatted values
+        attributes["raw_value"] = value
+        formatted = truncate_state_value(value)
+        attributes["formatted_value"] = formatted
+        return formatted
+
+def standardize_attributes(attributes):
+    """Standardize attributes across all sensor types."""
+    # Clean up legacy/redundant attributes
+    legacy_attrs = [
+        "formatted_duration", 
+        "timestamp_iso",
+        "cell_count", 
+        "min_value", "max_value", "mean_value", "median_value"
+    ]
+    
+    for attr in legacy_attrs:
+        if attr in attributes:
+            del attributes[attr]
+    
+    # For cell values, standardize naming
+    stat_type = attributes.get("stat_type", "cell")
+    for key in list(attributes.keys()):
+        # Standardize cell value keys
+        if any(key.startswith(prefix) for prefix in ["cell_", "voltage_", "temp_", "value_"]):
+            if "_" in key and key.split("_")[1].isdigit():
+                # Keep only one format (stat_type_N)
+                suffix = key.split("_")[1]
+                standard_key = f"{stat_type}_{suffix}"
+                if key != standard_key:
+                    attributes[standard_key] = attributes[key]
+                    del attributes[key]
+    
+    return attributes
 
 
 class CellVoltageSensor(SensorEntity, RestoreEntity):
@@ -116,6 +153,9 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             self._parsed_value, device_class_for_formatting, self._attr_extra_state_attributes
         )
 
+        # Standardize all attributes
+        self._attr_extra_state_attributes = standardize_attributes(self._attr_extra_state_attributes)
+
         # Set entity_id
         if hass:
             self.entity_id = async_generate_entity_id(
@@ -133,8 +173,8 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                 device_class_for_restoring = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
                 
                 if device_class_for_restoring == SensorDeviceClass.TIMESTAMP:
-                    if state.attributes and "timestamp_object" in state.attributes:
-                        self._parsed_value = state.attributes["timestamp_object"]
+                    if state.attributes and "raw_value" in state.attributes:
+                        self._parsed_value = state.attributes["raw_value"]
                     else:
                         # Try to parse the state if it's a timestamp string
                         self._parsed_value = parse_value(
@@ -151,22 +191,12 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                         self._parsed_value = state.attributes["raw_value"]
                         # Use the formatted string as the main value
                         self._attr_native_value = format_duration(self._parsed_value)
-                        # Use standardized attribute name
-                        self._attr_extra_state_attributes["formatted_value"] = self._attr_native_value
-                        # Remove any other inconsistent formatted attributes
-                        if "formatted_duration" in self._attr_extra_state_attributes:
-                            del self._attr_extra_state_attributes["formatted_duration"]
                     else:
                         # Try to parse the state if it looks like a formatted duration
                         raw_value = parse_duration(state.state)
                         if raw_value is not None:
                             self._parsed_value = raw_value
                             self._attr_native_value = state.state  # Keep the formatted string
-                            self._attr_extra_state_attributes["raw_value"] = raw_value
-                            self._attr_extra_state_attributes["formatted_value"] = state.state
-                            # Remove any inconsistent formatted attributes
-                            if "formatted_duration" in self._attr_extra_state_attributes:
-                                del self._attr_extra_state_attributes["formatted_duration"]
                         else:
                             # Just use the state value directly
                             self._attr_native_value = state.state
@@ -174,19 +204,17 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                     # For other sensors, use the state directly
                     self._attr_native_value = state.state
                     
-            # Restore attributes if available, but clean up inconsistent ones
+            # Restore attributes if available
             if state.attributes:
                 # Don't overwrite entity attributes like unit, etc.
                 saved_attributes = {
                     k: v for k, v in state.attributes.items()
                     if k not in ["device_class", "state_class", "unit_of_measurement"]
                 }
-                
-                # Remove stale/inconsistent formatted attributes
-                if "formatted_duration" in saved_attributes and "formatted_value" in saved_attributes:
-                    del saved_attributes["formatted_duration"]
-                
                 self._attr_extra_state_attributes.update(saved_attributes)
+                
+            # Standardize all attributes
+            self._attr_extra_state_attributes = standardize_attributes(self._attr_extra_state_attributes)
 
         @callback
         def update_state(payload: Any) -> None:
@@ -208,6 +236,9 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             self._attr_native_value = format_sensor_value(
                 self._parsed_value, device_class_for_formatting, self._attr_extra_state_attributes
             )
+
+            # Standardize all attributes
+            self._attr_extra_state_attributes = standardize_attributes(self._attr_extra_state_attributes)
 
             # Update timestamp
             self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
@@ -290,12 +321,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
              self._attr_extra_state_attributes.get("category") == "tire")
         )
         
-        # Determine stat type
+        # Store stat type in attributes for standardization
         self._stat_type = "cell"
         if "temp" in self._internal_name.lower():
             self._stat_type = "temp"
         elif "voltage" in self._internal_name.lower():
             self._stat_type = "voltage"
+        self._attr_extra_state_attributes["stat_type"] = self._stat_type
 
         # Initialize cell sensors tracking
         self._cell_sensors_created = False
@@ -325,6 +357,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_extra_state_attributes, device_class_for_parsing, self._parsed_value
         )
         self._attr_extra_state_attributes.update(updated_attrs)
+        
+        # Standardize all attributes
+        self._attr_extra_state_attributes = standardize_attributes(self._attr_extra_state_attributes)
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -336,8 +371,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 device_class_for_restoring = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
                 
                 if device_class_for_restoring == SensorDeviceClass.TIMESTAMP:
-                    if state.attributes and "timestamp_object" in state.attributes:
-                        self._parsed_value = state.attributes["timestamp_object"]
+                    if state.attributes and "raw_value" in state.attributes:
+                        self._parsed_value = state.attributes["raw_value"]
                     else:
                         # Try to parse the state if it's a timestamp string
                         self._parsed_value = parse_value(
@@ -354,22 +389,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                         self._parsed_value = state.attributes["raw_value"]
                         # Use the formatted string as the main value
                         self._attr_native_value = format_duration(self._parsed_value)
-                        # Use standardized attribute name
-                        self._attr_extra_state_attributes["formatted_value"] = self._attr_native_value
-                        # Remove any other inconsistent formatted attributes
-                        if "formatted_duration" in self._attr_extra_state_attributes:
-                            del self._attr_extra_state_attributes["formatted_duration"]
                     else:
                         # Try to parse the state if it looks like a formatted duration
                         raw_value = parse_duration(state.state)
                         if raw_value is not None:
                             self._parsed_value = raw_value
-                            self._attr_extra_state_attributes["raw_value"] = raw_value
                             self._attr_native_value = state.state  # Keep the formatted string
-                            self._attr_extra_state_attributes["formatted_value"] = state.state
-                            # Remove any inconsistent formatted attributes
-                            if "formatted_duration" in self._attr_extra_state_attributes:
-                                del self._attr_extra_state_attributes["formatted_duration"]
                         else:
                             # Just use the state value directly
                             self._attr_native_value = state.state
@@ -377,19 +402,17 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     # For other sensors, use the state directly
                     self._attr_native_value = state.state
                     
-            # Restore attributes if available, but clean up inconsistent ones
+            # Restore attributes if available
             if state.attributes:
                 # Don't overwrite entity attributes like unit, etc.
                 saved_attributes = {
                     k: v for k, v in state.attributes.items()
                     if k not in ["device_class", "state_class", "unit_of_measurement"]
                 }
-                
-                # Remove stale/inconsistent formatted attributes
-                if "formatted_duration" in saved_attributes and "formatted_value" in saved_attributes:
-                    del saved_attributes["formatted_duration"]
-                
                 self._attr_extra_state_attributes.update(saved_attributes)
+            
+            # Standardize all attributes
+            self._attr_extra_state_attributes = standardize_attributes(self._attr_extra_state_attributes)
 
         @callback
         def update_state(payload: str) -> None:
@@ -422,6 +445,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 self._attr_extra_state_attributes, device_class_for_parsing, self._parsed_value
             )
             self._attr_extra_state_attributes.update(updated_attrs)
+            
+            # Standardize all attributes
+            self._attr_extra_state_attributes = standardize_attributes(self._attr_extra_state_attributes)
 
             self.async_write_ha_state()
 
@@ -444,29 +470,18 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_extra_state_attributes[f"{self._stat_type}_values"] = values
             self._attr_extra_state_attributes["count"] = len(values)
 
-            # Remove legacy names
-            for old_key in ["cell_values", "values", "cell_count"]:
-                if old_key in self._attr_extra_state_attributes and (old_key != "cell_values" or self._stat_type != "cell"):
-                    del self._attr_extra_state_attributes[old_key]
-
             # Calculate statistics
             self._attr_extra_state_attributes["median"] = calculate_median(values)
             self._attr_extra_state_attributes["min"] = min(values)
             self._attr_extra_state_attributes["max"] = max(values)
 
-            # Remove legacy stats
-            for legacy_key in ["min_value", "max_value", "mean_value", "median_value"]:
-                if legacy_key in self._attr_extra_state_attributes:
-                    del self._attr_extra_state_attributes[legacy_key]
-
-            # Update individual values
-            # First clear existing attributes
+            # Update individual values with standardized naming
+            # First clear existing stat_type_N attributes
             for key in list(self._attr_extra_state_attributes.keys()):
-                if any(key.startswith(prefix) for prefix in ["cell_", "voltage_", "temp_", "value_"]):
-                    if key.split("_")[1].isdigit():
-                        del self._attr_extra_state_attributes[key]
+                if key.startswith(f"{self._stat_type}_") and key.split("_")[1].isdigit():
+                    del self._attr_extra_state_attributes[key]
 
-            # Add new values
+            # Add new values with standardized naming
             for i, val in enumerate(values):
                 self._attr_extra_state_attributes[f"{self._stat_type}_{i+1}"] = val
 
