@@ -473,6 +473,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_extra_state_attributes["median"] = calculate_median(values)
             self._attr_extra_state_attributes["min"] = min(values)
             self._attr_extra_state_attributes["max"] = max(values)
+            
+            # Use median as main value, fall back to average if needed
+            if median_value is not None:
+                self._attr_native_value = median_value
+            elif values:  # If we have values but no median, use average
+                self._attr_native_value = sum(values) / len(values)
 
             # Remove legacy stats
             for legacy_key in ["min_value", "max_value", "mean_value", "median_value"]:
