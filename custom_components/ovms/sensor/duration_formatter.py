@@ -26,75 +26,100 @@ def format_duration(value, unit=UnitOfTime.SECONDS):
         
         parts = []
         
-        # Format directly based on the native unit
+        # Format directly based on the native unit without converting to seconds
         if unit == UnitOfTime.DAYS:
-            # Extract days, hours, minutes
-            days = int(raw_value)
-            fractional_day = raw_value - days
+            # For days: extract days, hours, minutes
+            whole_days = int(raw_value)
+            day_fraction = raw_value - whole_days
             
-            if days > 0:
-                parts.append(f"{days}d")
-                
-            # Convert fractional day to hours
-            hours = int((fractional_day * 24).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))
-            if hours > 0:
+            if whole_days > 0:
+                parts.append(f"{whole_days}d")
+            
+            # Convert fraction of day to hours
+            hours = int(day_fraction * 24)
+            hour_fraction = (day_fraction * 24) - hours
+            
+            if hours > 0 or whole_days > 0:
                 parts.append(f"{hours}h")
+            
+            # Convert fraction of hour to minutes
+            minutes = int(hour_fraction * 60)
+            if minutes > 0 or hours > 0 or whole_days > 0:
+                parts.append(f"{minutes}m")
                 
         elif unit == UnitOfTime.HOURS:
-            # Extract hours, minutes
-            hours = int(raw_value)
-            fractional_hour = raw_value - hours
+            # For hours: extract hours, minutes, seconds
+            whole_hours = int(raw_value)
+            hour_fraction = raw_value - whole_hours
+            
+            if whole_hours > 0:
+                parts.append(f"{whole_hours}h")
+            
+            # Convert fraction of hour to minutes
+            minutes = int(hour_fraction * 60)
+            minute_fraction = (hour_fraction * 60) - minutes
+            
+            if minutes > 0 or whole_hours > 0:
+                parts.append(f"{minutes}m")
+            
+            # Convert fraction of minute to seconds
+            seconds = int(minute_fraction * 60)
+            if seconds > 0 and (whole_hours == 0):  # Only show seconds if less than 1 hour
+                parts.append(f"{seconds}s")
+                
+        elif unit == UnitOfTime.MINUTES:
+            # For minutes: extract hours, minutes, seconds
+            total_minutes = raw_value
+            
+            # Extract hours from minutes
+            hours = int(total_minutes // 60)
+            minutes = int(total_minutes % 60)
+            minute_fraction = total_minutes % 1
             
             if hours > 0:
                 parts.append(f"{hours}h")
-                
-            # Convert fractional hour to minutes
-            minutes = int((fractional_hour * 60).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))
-            if minutes > 0:
-                parts.append(f"{minutes}m")
-                
-        elif unit == UnitOfTime.MINUTES:
-            # Extract minutes, seconds
-            minutes = int(raw_value)
-            fractional_minute = raw_value - minutes
             
-            if minutes > 0:
+            if minutes > 0 or hours > 0:
                 parts.append(f"{minutes}m")
-                
-            # Convert fractional minute to seconds
-            seconds = int((fractional_minute * 60).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))
-            if seconds > 0 or not parts:  # Add seconds if it's the only component
+            
+            # Convert fraction of minute to seconds
+            seconds = int(minute_fraction * 60)
+            if seconds > 0 and (hours == 0):  # Only show seconds if less than 1 hour
                 parts.append(f"{seconds}s")
                 
         else:  # Default: SECONDS
-            # For seconds, show appropriate components
+            # For seconds: extract days, hours, minutes, seconds
             total_seconds = raw_value
             
-            days, remainder = divmod(total_seconds, 86400)
+            # Extract components
+            days = int(total_seconds // 86400)
+            remainder = total_seconds % 86400
+            
+            hours = int(remainder // 3600)
+            remainder = remainder % 3600
+            
+            minutes = int(remainder // 60)
+            seconds = remainder % 60
+            
             if days > 0:
-                days = int(days)
                 parts.append(f"{days}d")
-                
-            hours, remainder = divmod(remainder, 3600)
-            if hours > 0:
-                hours = int(hours)
+            
+            if hours > 0 or days > 0:
                 parts.append(f"{hours}h")
-                
-            minutes, seconds = divmod(remainder, 60)
-            if minutes > 0:
-                minutes = int(minutes)
+            
+            if minutes > 0 or hours > 0 or days > 0:
                 parts.append(f"{minutes}m")
-                
-            # Add seconds if less than an hour total or it's the only component
+            
+            # Only include seconds if less than 1 hour total or it's the only component
             if (not parts) or (days == 0 and hours == 0):
                 # Format seconds with appropriate precision
                 if seconds < 10:
-                    seconds = round(float(seconds), 1)
-                    parts.append(f"{seconds}s")
+                    seconds_rounded = float(seconds.quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))
+                    parts.append(f"{seconds_rounded}s")
                 else:
-                    seconds = int(seconds.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
-                    parts.append(f"{seconds}s")
-
+                    seconds_int = int(seconds.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+                    parts.append(f"{seconds_int}s")
+        
         # Handle empty parts (zero value)
         if not parts:
             if unit == UnitOfTime.SECONDS:
@@ -124,8 +149,9 @@ def parse_duration(value: Any, target_unit=UnitOfTime.SECONDS) -> Optional[float
     if value is None:
         return None
         
-    # If already a number, return it as is (assuming it's already in target unit)
+    # If already a number, return it converted to target unit
     if isinstance(value, (int, float)):
+        # For direct numbers, assume they're already in the target unit
         return float(value)
         
     if not isinstance(value, str):
