@@ -10,6 +10,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
+from homeassistant.const import UnitOfTime
 
 from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
 from .parsers import parse_value, process_json_payload, requires_numeric_value, is_special_state_value, calculate_median
@@ -29,13 +30,22 @@ def format_sensor_value(value, device_class, attributes):
     if device_class == SensorDeviceClass.DURATION:
         # For duration, store raw value as attribute and return formatted string
         attributes["raw_value"] = value
+        
+        # Get original unit from attributes, default to seconds
+        original_unit = attributes.get("original_unit", UnitOfTime.SECONDS)
+        
+        # Debug information to help troubleshoot unit issues
+        attributes["debug_unit_used"] = str(original_unit)
+        
         # Remove any potentially stale formatted attributes
         for attr in ["formatted_value", "formatted_duration"]:
             if attr in attributes:
                 del attributes[attr]
+                
         # Use a single, standardized attribute name for the formatted value
-        attributes["formatted_value"] = format_duration(value)
-        return format_duration(value)
+        formatted = format_duration(value, original_unit)
+        attributes["formatted_value"] = formatted
+        return formatted
     elif device_class == SensorDeviceClass.TIMESTAMP:
         # For timestamp, store datetime object as attribute and return ISO string
         attributes["timestamp_object"] = value
@@ -373,7 +383,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     if state.attributes and "raw_value" in state.attributes:
                         self._parsed_value = state.attributes["raw_value"]
                         # Use the formatted string as the main value
-                        self._attr_native_value = format_duration(self._parsed_value)
+                        original_unit = state.attributes.get("original_unit", UnitOfTime.SECONDS)
+                        self._attr_native_value = format_duration(self._parsed_value, original_unit)
                         # Use standardized attribute name
                         self._attr_extra_state_attributes["formatted_value"] = self._attr_native_value
                         # Remove any other inconsistent formatted attributes
