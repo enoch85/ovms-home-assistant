@@ -10,7 +10,7 @@ def format_duration(value, unit=UnitOfTime.SECONDS):
     
     Args:
         value: The duration value in its native unit
-        unit: The native unit of the value (UnitOfTime constant)
+        unit: The unit of the value (UnitOfTime constant or string like 'min', 'seconds')
     
     Returns:
         A formatted string representation of the duration
@@ -24,28 +24,40 @@ def format_duration(value, unit=UnitOfTime.SECONDS):
         if is_negative:
             raw_value = abs(raw_value)
         
+        # Convert string unit to proper unit type if needed
+        if isinstance(unit, str):
+            unit_str = unit.lower()
+            if unit_str in ["m", "min", "minute", "minutes"]:
+                unit = UnitOfTime.MINUTES
+            elif unit_str in ["h", "hr", "hour", "hours"]:
+                unit = UnitOfTime.HOURS
+            elif unit_str in ["d", "day", "days"]:
+                unit = UnitOfTime.DAYS
+            else:
+                unit = UnitOfTime.SECONDS
+        
         parts = []
         
         # Format directly based on the native unit without converting to seconds
-        if unit == UnitOfTime.DAYS:
-            # For days: extract days, hours, minutes
-            whole_days = int(raw_value)
-            day_fraction = raw_value - whole_days
+        if unit == UnitOfTime.MINUTES:
+            # For minutes: extract hours, minutes, seconds
+            total_minutes = raw_value
             
-            if whole_days > 0:
-                parts.append(f"{whole_days}d")
+            # Extract hours from minutes
+            hours = int(total_minutes // 60)
+            minutes = int(total_minutes % 60)
+            minute_fraction = total_minutes % 1
             
-            # Convert fraction of day to hours
-            hours = int(day_fraction * 24)
-            hour_fraction = (day_fraction * 24) - hours
-            
-            if hours > 0 or whole_days > 0:
+            if hours > 0:
                 parts.append(f"{hours}h")
             
-            # Convert fraction of hour to minutes
-            minutes = int(hour_fraction * 60)
-            if minutes > 0 or hours > 0 or whole_days > 0:
+            if minutes > 0 or (hours > 0 and minute_fraction == 0):
                 parts.append(f"{minutes}m")
+            
+            # Convert fraction of minute to seconds
+            seconds = int(minute_fraction * 60)
+            if seconds > 0 and hours == 0:  # Only show seconds if less than 1 hour
+                parts.append(f"{seconds}s")
                 
         elif unit == UnitOfTime.HOURS:
             # For hours: extract hours, minutes, seconds
@@ -64,28 +76,28 @@ def format_duration(value, unit=UnitOfTime.SECONDS):
             
             # Convert fraction of minute to seconds
             seconds = int(minute_fraction * 60)
-            if seconds > 0 and (whole_hours == 0):  # Only show seconds if less than 1 hour
+            if seconds > 0 and whole_hours == 0:  # Only show seconds if less than 1 hour
                 parts.append(f"{seconds}s")
                 
-        elif unit == UnitOfTime.MINUTES:
-            # For minutes: extract hours, minutes, seconds
-            total_minutes = raw_value
+        elif unit == UnitOfTime.DAYS:
+            # For days: extract days, hours, minutes
+            whole_days = int(raw_value)
+            day_fraction = raw_value - whole_days
             
-            # Extract hours from minutes
-            hours = int(total_minutes // 60)
-            minutes = int(total_minutes % 60)
-            minute_fraction = total_minutes % 1
+            if whole_days > 0:
+                parts.append(f"{whole_days}d")
             
-            if hours > 0:
+            # Convert fraction of day to hours
+            hours = int(day_fraction * 24)
+            hour_fraction = (day_fraction * 24) - hours
+            
+            if hours > 0 or whole_days > 0:
                 parts.append(f"{hours}h")
             
-            if minutes > 0 or hours > 0:
+            # Convert fraction of hour to minutes
+            minutes = int(hour_fraction * 60)
+            if minutes > 0 or hours > 0 or whole_days > 0:
                 parts.append(f"{minutes}m")
-            
-            # Convert fraction of minute to seconds
-            seconds = int(minute_fraction * 60)
-            if seconds > 0 and (hours == 0):  # Only show seconds if less than 1 hour
-                parts.append(f"{seconds}s")
                 
         else:  # Default: SECONDS
             # For seconds: extract days, hours, minutes, seconds
@@ -145,84 +157,94 @@ def format_duration(value, unit=UnitOfTime.SECONDS):
         return str(value)
 
 def parse_duration(value: Any, target_unit=UnitOfTime.SECONDS) -> Optional[float]:
-    """Parse duration value from formatted string to the target unit."""
-    if value is None:
+    """Parse duration value from formatted string to the target unit.
+
+    This function can convert both numeric seconds and formatted strings
+    like "2h 30m" into a standard seconds value.
+    """
+    if not value:
         return None
-        
-    # If already a number, return it converted to target unit
+
+    # If it's already a number, return it
     if isinstance(value, (int, float)):
-        # For direct numbers, assume they're already in the target unit
         return float(value)
-        
-    if not isinstance(value, str):
-        return None
-        
-    # Try direct conversion for simple numeric strings
-    try:
-        return float(value)
-    except ValueError:
-        pass
-        
-    # For formatted strings, parse and calculate total in the target unit
-    total_in_seconds = 0
-    
-    # Parse days
-    day_match = re.search(r'(\d+\.?\d*)d', value)
-    if day_match:
-        total_in_seconds += float(day_match.group(1)) * 86400
-        
-    # Parse hours
-    hour_match = re.search(r'(\d+\.?\d*)h', value)
-    if hour_match:
-        total_in_seconds += float(hour_match.group(1)) * 3600
-        
-    # Parse minutes
-    minute_match = re.search(r'(\d+\.?\d*)m', value)
-    if minute_match:
-        total_in_seconds += float(minute_match.group(1)) * 60
-        
-    # Parse seconds
-    second_match = re.search(r'(\d+\.?\d*)s', value)
-    if second_match:
-        total_in_seconds += float(second_match.group(1))
-        
-    # If we found any time components
-    if day_match or hour_match or minute_match or second_match:
-        # Convert to target unit
-        if target_unit == UnitOfTime.MINUTES:
-            return total_in_seconds / 60
-        elif target_unit == UnitOfTime.HOURS:
-            return total_in_seconds / 3600
-        elif target_unit == UnitOfTime.DAYS:
-            return total_in_seconds / 86400
-        else:  # Default to seconds
-            return total_in_seconds
-            
-    # Handle HH:MM:SS format
-    if ":" in value:
-        parts = value.split(":")
-        if len(parts) == 3:  # HH:MM:SS
-            try:
-                hours, minutes, seconds = map(float, parts)
-                total_in_seconds = hours * 3600 + minutes * 60 + seconds
-            except ValueError:
-                return None
-        elif len(parts) == 2:  # MM:SS
-            try:
-                minutes, seconds = map(float, parts)
-                total_in_seconds = minutes * 60 + seconds
-            except ValueError:
-                return None
-                
-        # Convert to target unit
-        if target_unit == UnitOfTime.MINUTES:
-            return total_in_seconds / 60
-        elif target_unit == UnitOfTime.HOURS:
-            return total_in_seconds / 3600
-        elif target_unit == UnitOfTime.DAYS:
-            return total_in_seconds / 86400
-        else:  # Default to seconds
-            return total_in_seconds
-            
-    # Could not parse the value
+
+    # If it's a string that represents a number, convert it
+    if isinstance(value, str):
+        # Direct numeric conversion
+        try:
+            return float(value)
+        except ValueError:
+            pass
+
+        # Handle HH:MM:SS format
+        if ":" in value:
+            parts = value.split(":")
+            if len(parts) == 3:  # HH:MM:SS
+                try:
+                    hours, minutes, seconds = map(float, parts)
+                    total_seconds = hours * 3600 + minutes * 60 + seconds
+                    # Convert to target unit
+                    if target_unit == UnitOfTime.MINUTES:
+                        return total_seconds / 60
+                    elif target_unit == UnitOfTime.HOURS:
+                        return total_seconds / 3600
+                    elif target_unit == UnitOfTime.DAYS:
+                        return total_seconds / 86400
+                    return total_seconds
+                except ValueError:
+                    pass
+            elif len(parts) == 2:  # MM:SS
+                try:
+                    minutes, seconds = map(float, parts)
+                    total_seconds = minutes * 60 + seconds
+                    # Convert to target unit
+                    if target_unit == UnitOfTime.MINUTES:
+                        return total_seconds / 60
+                    elif target_unit == UnitOfTime.HOURS:
+                        return total_seconds / 3600
+                    elif target_unit == UnitOfTime.DAYS:
+                        return total_seconds / 86400
+                    return total_seconds
+                except ValueError:
+                    pass
+
+        # Handle formatted duration strings like "2h 30m"
+        try:
+            # Match patterns like 1d, 2h, 30m, 45s
+            total_seconds = 0
+
+            # Days
+            day_match = re.search(r'(\d+)d', value)
+            if day_match:
+                total_seconds += int(day_match.group(1)) * 86400
+
+            # Hours
+            hour_match = re.search(r'(\d+)h', value)
+            if hour_match:
+                total_seconds += int(hour_match.group(1)) * 3600
+
+            # Minutes
+            minute_match = re.search(r'(\d+)m', value)
+            if minute_match:
+                total_seconds += int(minute_match.group(1)) * 60
+
+            # Seconds
+            second_match = re.search(r'(\d+\.?\d*)s', value)
+            if second_match:
+                total_seconds += float(second_match.group(1))
+
+            if total_seconds > 0 or (day_match or hour_match or minute_match or second_match):
+                # Convert to target unit
+                if target_unit == UnitOfTime.MINUTES:
+                    return total_seconds / 60
+                elif target_unit == UnitOfTime.HOURS:
+                    return total_seconds / 3600
+                elif target_unit == UnitOfTime.DAYS:
+                    return total_seconds / 86400
+                return total_seconds
+        except Exception:
+            pass
+
+    # If all parsing fails, return None
     return None
