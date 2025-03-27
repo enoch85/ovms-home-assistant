@@ -34,9 +34,6 @@ def format_sensor_value(value, device_class, attributes):
         # Get the original unit directly from the metric definition in attributes
         original_unit = attributes.get("original_unit")
         
-        # Check if user wants full unit names (from attributes or config)
-        use_full_names = attributes.get("use_full_names", True)  # Default to full names
-        
         # First format with short format (for main display)
         formatted_short = format_duration(value, original_unit, False)
         
@@ -46,6 +43,11 @@ def format_sensor_value(value, device_class, attributes):
         # Store both values in attributes
         attributes["formatted_value"] = formatted_full
         attributes["formatted_short"] = formatted_short
+        
+        # Remove any legacy or debug fields
+        for field in ["determined_unit", "unit_uncertain", "unit_defaulted", "debug_unit_used", "use_full_names"]:
+            if field in attributes:
+                del attributes[field]
             
         # Return the short format as the main value
         return formatted_short
@@ -185,9 +187,12 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                             self._attr_native_value = state.state  # Keep the formatted string
                             self._attr_extra_state_attributes["raw_value"] = raw_value
                             self._attr_extra_state_attributes["formatted_short"] = state.state
-                            # Remove any inconsistent formatted attributes
-                            if "formatted_duration" in self._attr_extra_state_attributes:
-                                del self._attr_extra_state_attributes["formatted_duration"]
+                            
+                            # Remove any debug or legacy attributes
+                            for field in ["formatted_duration", "determined_unit", "unit_uncertain", 
+                                         "unit_defaulted", "debug_unit_used"]:
+                                if field in self._attr_extra_state_attributes:
+                                    del self._attr_extra_state_attributes[field]
                         else:
                             # Just use the state value directly
                             self._attr_native_value = state.state
@@ -396,9 +401,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                             self._attr_extra_state_attributes["raw_value"] = raw_value
                             self._attr_native_value = state.state  # Keep the formatted string
                             self._attr_extra_state_attributes["formatted_short"] = state.state
-                            # Remove any inconsistent formatted attributes
-                            if "formatted_duration" in self._attr_extra_state_attributes:
-                                del self._attr_extra_state_attributes["formatted_duration"]
+                            
+                            # Remove any debug or legacy attributes
+                            for field in ["formatted_duration", "determined_unit", "unit_uncertain", 
+                                         "unit_defaulted", "debug_unit_used"]:
+                                if field in self._attr_extra_state_attributes:
+                                    del self._attr_extra_state_attributes[field]
                         else:
                             # Just use the state value directly
                             self._attr_native_value = state.state
