@@ -28,24 +28,27 @@ def format_sensor_value(value, device_class, attributes):
         return None
 
     if device_class == SensorDeviceClass.DURATION:
-        # For duration, store raw value as attribute and return formatted string
+        # For duration, store raw value as attribute
         attributes["raw_value"] = value
         
-        # Get original unit from attributes, default to seconds
-        original_unit = attributes.get("original_unit", UnitOfTime.SECONDS)
+        # Get the original unit directly from the metric definition in attributes
+        original_unit = attributes.get("original_unit")
         
-        # Debug information to help troubleshoot unit issues
-        attributes["debug_unit_used"] = str(original_unit)
+        # Check if user wants full unit names (from attributes or config)
+        use_full_names = attributes.get("use_full_names", True)  # Default to full names
         
-        # Remove any potentially stale formatted attributes
-        for attr in ["formatted_value", "formatted_duration"]:
-            if attr in attributes:
-                del attributes[attr]
-                
-        # Use a single, standardized attribute name for the formatted value
-        formatted = format_duration(value, original_unit)
-        attributes["formatted_value"] = formatted
-        return formatted
+        # First format with short format (for main display)
+        formatted_short = format_duration(value, original_unit, False)
+        
+        # Also format with full names for the attribute
+        formatted_full = format_duration(value, original_unit, True)
+        
+        # Store both values in attributes
+        attributes["formatted_value"] = formatted_full
+        attributes["formatted_short"] = formatted_short
+            
+        # Return the short format as the main value
+        return formatted_short
     elif device_class == SensorDeviceClass.TIMESTAMP:
         # For timestamp, store datetime object as attribute and return ISO string
         attributes["timestamp_object"] = value
@@ -170,12 +173,10 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                     if state.attributes and "raw_value" in state.attributes:
                         self._parsed_value = state.attributes["raw_value"]
                         # Use the formatted string as the main value
-                        self._attr_native_value = format_duration(self._parsed_value)
-                        # Use standardized attribute name
-                        self._attr_extra_state_attributes["formatted_value"] = self._attr_native_value
-                        # Remove any other inconsistent formatted attributes
-                        if "formatted_duration" in self._attr_extra_state_attributes:
-                            del self._attr_extra_state_attributes["formatted_duration"]
+                        device_class_for_formatting = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
+                        self._attr_native_value = format_sensor_value(
+                            self._parsed_value, device_class_for_formatting, self._attr_extra_state_attributes
+                        )
                     else:
                         # Try to parse the state if it looks like a formatted duration
                         raw_value = parse_duration(state.state)
@@ -183,7 +184,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                             self._parsed_value = raw_value
                             self._attr_native_value = state.state  # Keep the formatted string
                             self._attr_extra_state_attributes["raw_value"] = raw_value
-                            self._attr_extra_state_attributes["formatted_value"] = state.state
+                            self._attr_extra_state_attributes["formatted_short"] = state.state
                             # Remove any inconsistent formatted attributes
                             if "formatted_duration" in self._attr_extra_state_attributes:
                                 del self._attr_extra_state_attributes["formatted_duration"]
@@ -203,7 +204,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                 }
 
                 # Remove stale/inconsistent formatted attributes
-                if "formatted_duration" in saved_attributes and "formatted_value" in saved_attributes:
+                if "formatted_duration" in saved_attributes:
                     del saved_attributes["formatted_duration"]
 
                 self._attr_extra_state_attributes.update(saved_attributes)
@@ -383,13 +384,10 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     if state.attributes and "raw_value" in state.attributes:
                         self._parsed_value = state.attributes["raw_value"]
                         # Use the formatted string as the main value
-                        original_unit = state.attributes.get("original_unit", UnitOfTime.SECONDS)
-                        self._attr_native_value = format_duration(self._parsed_value, original_unit)
-                        # Use standardized attribute name
-                        self._attr_extra_state_attributes["formatted_value"] = self._attr_native_value
-                        # Remove any other inconsistent formatted attributes
-                        if "formatted_duration" in self._attr_extra_state_attributes:
-                            del self._attr_extra_state_attributes["formatted_duration"]
+                        device_class_for_formatting = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
+                        self._attr_native_value = format_sensor_value(
+                            self._parsed_value, device_class_for_formatting, self._attr_extra_state_attributes
+                        )
                     else:
                         # Try to parse the state if it looks like a formatted duration
                         raw_value = parse_duration(state.state)
@@ -397,7 +395,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                             self._parsed_value = raw_value
                             self._attr_extra_state_attributes["raw_value"] = raw_value
                             self._attr_native_value = state.state  # Keep the formatted string
-                            self._attr_extra_state_attributes["formatted_value"] = state.state
+                            self._attr_extra_state_attributes["formatted_short"] = state.state
                             # Remove any inconsistent formatted attributes
                             if "formatted_duration" in self._attr_extra_state_attributes:
                                 del self._attr_extra_state_attributes["formatted_duration"]
@@ -417,7 +415,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 }
 
                 # Remove stale/inconsistent formatted attributes
-                if "formatted_duration" in saved_attributes and "formatted_value" in saved_attributes:
+                if "formatted_duration" in saved_attributes:
                     del saved_attributes["formatted_duration"]
 
                 self._attr_extra_state_attributes.update(saved_attributes)
