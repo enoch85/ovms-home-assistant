@@ -19,6 +19,8 @@ def format_duration(value, unit=UnitOfTime.SECONDS, use_full_names=False):
     
     Returns:
         A formatted string representation of the duration
+        Short format (e.g., "5d 2h 30m") when use_full_names=False
+        Full format (e.g., "5 days 2 hours 30 minutes") when use_full_names=True
     """
     try:
         # Convert to precise decimal for calculations
