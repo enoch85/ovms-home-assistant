@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <!-- Background -->
+  <rect width="800" height="600" fill="#f8f9fa" rx="10" ry="10"/>
+  
+  <!-- Title -->
+  <text x="400" y="40" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#2c3e50">OVMS MQTT Integration Setup Flow</text>
+
+  <!-- Step 1: MQTT Broker -->
+  <rect x="60" y="80" width="200" height="160" rx="10" ry="10" fill="#ffffff" stroke="#3498db" stroke-width="2"/>
+  <text x="160" y="110" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#2c3e50">Step 1: MQTT Broker</text>
+  
+  <rect x="80" y="125" width="160" height="25" rx="5" ry="5" fill="#f2f2f2" stroke="#bdc3c7" stroke-width="1"/>
+  <text x="90" y="142" font-family="Arial, sans-serif" font-size="12" fill="#7f8c8d">mqtt-broker.example.com</text>
+  
+  <rect x="80" y="160" width="160" height="25" rx="5" ry="5" fill="#f2f2f2" stroke="#bdc3c7" stroke-width="1"/>
+  <text x="90" y="177" font-family="Arial, sans-serif" font-size="12" fill="#7f8c8d">Port: 8883 (mqtts://)</text>
+  
+  <rect x="80" y="195" width="160" height="25" rx="5" ry="5" fill="#f2f2f2" stroke="#bdc3c7" stroke-width="1"/>
+  <text x="90" y="212" font-family="Arial, sans-serif" font-size="12" fill="#7f8c8d">Username / Password</text>
+
+  <!-- Step 2: Topic Structure -->
+  <rect x="300" y="80" width="200" height="160" rx="10" ry="10" fill="#ffffff" stroke="#3498db" stroke-width="2"/>
+  <text x="400" y="110" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#2c3e50">Step 2: Topic Structure</text>
+  
+  <rect x="320" y="125" width="160" height="25" rx="5" ry="5" fill="#f2f2f2" stroke="#bdc3c7" stroke-width="1"/>
+  <text x="330" y="142" font-family="Arial, sans-serif" font-size="12" fill="#7f8c8d">Prefix: ovms</text>
+  
+  <rect x="320" y="160" width="160" height="25" rx="5" ry="5" fill="#f2f2f2" stroke="#bdc3c7" stroke-width="1"/>
+  <text x="330" y="177" font-family="Arial, sans-serif" font-size="12" fill="#7f8c8d">Structure: Default</text>
+  
+  <rect x="320" y="195" width="160" height="25" rx="5" ry="5" fill="#f2f2f2" stroke="#bdc3c7" stroke-width="1"/>
+  <text x="330" y="212" font-family="Arial, sans-serif" font-size="12" fill="#7f8c8d">MQTT Username: username</text>
+
+  <!-- Step 3: Vehicle Config -->
+  <rect x="540" y="80" width="200" height="160" rx="10" ry="10" fill="#ffffff" stroke="#3498db" stroke-width="2"/>
+  <text x="640" y="110" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#2c3e50">Step 3: Vehicle Config</text>
+  
+  <rect x="560" y="125" width="160" height="25" rx="5" ry="5" fill="#f2f2f2" stroke="#bdc3c7" stroke-width="1"/>
+  <text x="570" y="142" font-family="Arial, sans-serif" font-size="12" fill="#7f8c8d">Vehicle ID: my_ovms</text>
+  
+  <text x="570" y="177" font-family="Arial, sans-serif" font-size="14" fill="#2c3e50">Discovered vehicles:</text>
+  <text x="590" y="200" font-family="Arial, sans-serif" font-size="12" fill="#3498db">• my_ovms</text>
+  <text x="590" y="220" font-family="Arial, sans-serif" font-size="12" fill="#3498db">• other_vehicle</text>
+
+  <!-- Integration Complete -->
+  <rect x="220" y="300" width="360" height="80" rx="10" ry="10" fill="#e6f7e9" stroke="#27ae60" stroke-width="2"/>
+  <text x="400" y="340" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#2c3e50">Integration Complete</text>
+  <text x="400" y="365" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#2c3e50">Entities are created from discovered topics</text>
+
+  <!-- Generated Entities -->
+  <rect x="120" y="440" width="560" height="120" rx="10" ry="10" fill="#ffffff" stroke="#3498db" stroke-width="2"/>
+  <text x="400" y="470" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#2c3e50">Generated Entities</text>
+  
+  <!-- Entity Types -->
+  <rect x="150" y="490" width="140" height="25" rx="10" ry="10" fill="#d6eaf8" stroke="#3498db" stroke-width="1"/>
+  <text x="220" y="507" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#2c3e50">sensor.battery_soc</text>
+  
+  <rect x="300" y="490" width="140" height="25" rx="10" ry="10" fill="#d5f5e3" stroke="#27ae60" stroke-width="1"/>
+  <text x="370" y="507" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#2c3e50">sensor.range_estimated</text>
+  
+  <rect x="510" y="490" width="140" height="25" rx="10" ry="10" fill="#f9ebea" stroke="#e74c3c" stroke-width="1"/>
+  <text x="580" y="507" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#2c3e50">binary_sensor.charging</text>
+  
+  <rect x="150" y="525" width="140" height="25" rx="10" ry="10" fill="#fdebd0" stroke="#f39c12" stroke-width="1"/>
+  <text x="220" y="542" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#2c3e50">device_tracker.location</text>
+  
+  <rect x="300" y="525" width="140" height="25" rx="10" ry="10" fill="#ebdef0" stroke="#8e44ad" stroke-width="1"/>
+  <text x="370" y="542" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#2c3e50">sensor.temperature</text>
+  
+  <rect x="510" y="525" width="140" height="25" rx="10" ry="10" fill="#d6dbdf" stroke="#7f8c8d" stroke-width="1"/>
+  <text x="580" y="542" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#2c3e50">switch.climate_control</text>
+
+  <!-- Arrows -->
+  <path d="M 265 160 L 295 160" fill="none" stroke="#3498db" stroke-width="2" stroke-linecap="round"/>
+  <polygon points="295,160 290,155 290,165" fill="#3498db" stroke="#3498db" stroke-width="2"/>
+  
+  <path d="M 505 160 L 535 160" fill="none" stroke="#3498db" stroke-width="2" stroke-linecap="round"/>
+  <polygon points="535,160 530,155 530,165" fill="#3498db" stroke="#3498db" stroke-width="2"/>
+  
+  <path d="M 640 245 L 640 280 L 400 280 L 400 295" fill="none" stroke="#3498db" stroke-width="2" stroke-linecap="round"/>
+  <polygon points="400,295 395,290 405,290" fill="#3498db" stroke="#3498db" stroke-width="2"/>
+  
+  <path d="M 400 385 L 400 435" fill="none" stroke="#3498db" stroke-width="2" stroke-linecap="round"/>
+  <polygon points="400,435 395,430 405,430" fill="#3498db" stroke="#3498db" stroke-width="2"/>
+  
+  <!-- Security Note -->
+  <text x="400" y="580" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" font-style="italic" fill="#7f8c8d">Secure connection recommended: Use TLS/SSL (port 8883) with certificate verification</text>
+</svg>
