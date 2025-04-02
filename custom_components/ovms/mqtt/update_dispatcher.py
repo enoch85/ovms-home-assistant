@@ -151,7 +151,15 @@ class UpdateDispatcher:
         """Handle updates to version topics with special priority."""
         try:
             # If this is a version topic, update the device info
-            if any(ver_keyword in topic.lower() for ver_keyword in ["version", "m.version"]):
+            is_version_topic = any(ver_keyword in topic.lower() for ver_keyword in ["version", "m.version"])
+            
+            # Only update device info for main module version (not vehicle-specific versions)
+            is_main_version = is_version_topic and not any(
+                vehicle_prefix in topic.lower() 
+                for vehicle_prefix in ["xvu", "xmg", "xsq", "xnl"]  # Vehicle-specific prefixes
+            )
+            
+            if is_version_topic:
                 _LOGGER.info("Detected firmware version update: %s", payload)
 
                 # Truncate very long version strings to avoid potential issues
@@ -159,53 +167,55 @@ class UpdateDispatcher:
                     trimmed_payload = payload[:252] + "..."
                     _LOGGER.warning("Version string too long, truncating: %s -> %s", payload, trimmed_payload)
                     payload = trimmed_payload
+                
+                # Only update the device firmware version if this is the main module version
+                if is_main_version:
+                    # Get the vehicle_id from config
+                    vehicle_id = None
+                    for entry_id, data in self.hass.data[DOMAIN].items():
+                        if "mqtt_client" in data:
+                            config = data["mqtt_client"].config
+                            if "vehicle_id" in config:
+                                vehicle_id = config["vehicle_id"]
+                                _LOGGER.debug("Found vehicle_id '%s' in config", vehicle_id)
+                                break
 
-                # Get the vehicle_id from config
-                vehicle_id = None
-                for entry_id, data in self.hass.data[DOMAIN].items():
-                    if "mqtt_client" in data:
-                        config = data["mqtt_client"].config
-                        if "vehicle_id" in config:
-                            vehicle_id = config["vehicle_id"]
-                            _LOGGER.debug("Found vehicle_id '%s' in config", vehicle_id)
+                    # Find the device in the registry
+                    from homeassistant.helpers import device_registry as dr
+                    device_registry = dr.async_get(self.hass)
+
+                    # Find OVMS device
+                    device = None
+                    for dev in device_registry.devices.values():
+                        for identifier in dev.identifiers:
+                            if identifier[0] == DOMAIN:
+                                device = dev
+                                _LOGGER.debug("Found OVMS device: %s", dev.name)
+                                break
+                        if device:
                             break
 
-                # Find the device in the registry
-                from homeassistant.helpers import device_registry as dr
-                device_registry = dr.async_get(self.hass)
-
-                # Find OVMS device
-                device = None
-                for dev in device_registry.devices.values():
-                    for identifier in dev.identifiers:
-                        if identifier[0] == DOMAIN:
-                            device = dev
-                            _LOGGER.debug("Found OVMS device: %s", dev.name)
-                            break
+                    # Update device with version information
                     if device:
-                        break
-
-                # Update device with version information
-                if device:
-                    try:
-                        device_registry.async_update_device(
-                            device.id,
-                            sw_version=payload
-                        )
-                        _LOGGER.debug("Updated device %s firmware version to %s", device.id, payload)
-                    except Exception as ex:
-                        _LOGGER.error("Failed to update device with version: %s", ex)
-                        # Try an alternative approach
                         try:
-                            # Use a simpler update call as a fallback
                             device_registry.async_update_device(
                                 device.id,
-                                sw_version=payload[:100]  # Use just first 100 chars as a fallback
+                                sw_version=payload
                             )
-                        except Exception:
-                            _LOGGER.error("Failed to update device with shortened version too")
-                else:
-                    _LOGGER.debug("No OVMS device found in registry to update version")
+                            _LOGGER.debug("Updated device %s firmware version to %s", device.id, payload)
+                        except Exception as ex:
+                            _LOGGER.error("Failed to update device with version: %s", ex)
+                            # Try an alternative approach
+                            try:
+                                # Use a simpler update call as a fallback
+                                device_registry.async_update_device(
+                                    device.id,
+                                    sw_version=payload[:100]  # Use just first 100 chars as a fallback
+                                )
+                            except Exception:
+                                _LOGGER.error("Failed to update device with shortened version too")
+                    else:
+                        _LOGGER.debug("No OVMS device found in registry to update version")
 
                 # Ensure version topics have higher priority
                 current_priority = self.entity_registry.priorities.get(topic, 0)
