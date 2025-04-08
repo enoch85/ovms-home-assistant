@@ -152,13 +152,13 @@ class UpdateDispatcher:
         try:
             # If this is a version topic, update the device info
             is_version_topic = any(ver_keyword in topic.lower() for ver_keyword in ["version", "m.version"])
-            
+
             # Only update device info for main module version (not vehicle-specific versions)
             is_main_version = is_version_topic and not any(
-                vehicle_prefix in topic.lower() 
+                vehicle_prefix in topic.lower()
                 for vehicle_prefix in ["xvu", "xmg", "xsq", "xnl"]  # Vehicle-specific prefixes
             )
-            
+
             if is_version_topic:
                 _LOGGER.info("Detected firmware version update: %s", payload)
 
@@ -167,7 +167,7 @@ class UpdateDispatcher:
                     trimmed_payload = payload[:252] + "..."
                     _LOGGER.warning("Version string too long, truncating: %s -> %s", payload, trimmed_payload)
                     payload = trimmed_payload
-                
+
                 # Only update the device firmware version if this is the main module version
                 if is_main_version:
                     # Get the vehicle_id from config
