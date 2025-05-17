@@ -21,6 +21,7 @@ CATEGORY_VW_EUP = None
 CATEGORY_SMART_FORTWO = None
 CATEGORY_MG_ZS_EV = None
 CATEGORY_NISSAN_LEAF = None
+CATEGORY_RENAULT_TWIZY = None
 PREFIX_CATEGORIES = None
 
 def get_metric_by_path(metric_path):
@@ -84,6 +85,19 @@ def get_metric_by_path(metric_path):
     if 'xnl.' in metric_path and not metric_path.startswith('xnl.'):
         xnl_index = metric_path.find('xnl.')
         alt_path = metric_path[xnl_index:]
+        if alt_path in METRIC_DEFINITIONS:
+            return METRIC_DEFINITIONS[alt_path]
+            
+    # For Renault Twizy metrics, also try removing 'metric.' prefix if it's present
+    if metric_path.startswith('metric.xrt.'):
+        alt_path = metric_path[7:]  # Remove 'metric.'
+        if alt_path in METRIC_DEFINITIONS:
+            return METRIC_DEFINITIONS[alt_path]
+
+    # Try with just 'xrt.' if it exists in the path
+    if 'xrt.' in metric_path and not metric_path.startswith('xrt.'):
+        xrt_index = metric_path.find('xrt.')
+        alt_path = metric_path[xrt_index:]
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
@@ -177,6 +191,28 @@ def get_metric_by_pattern(topic_parts):
                         return METRIC_DEFINITIONS[variation]
                 break
 
+        # Check for Renault Twizy metrics specifically
+        for part in topic_parts:
+            if part == "xrt":
+                # This is a Renault Twizy metric, try to construct a matching key
+                metric_key = ".".join(topic_parts)
+                if METRIC_DEFINITIONS is None:
+                    # Import only when needed
+                    from . import METRIC_DEFINITIONS as MD
+                    METRIC_DEFINITIONS = MD
+
+                # Try several variations to handle different path formats
+                variations = [
+                    metric_key,
+                    f"xrt.{metric_key.split('xrt.', 1)[1]}" if 'xrt.' in metric_key else None,
+                    ".".join(topic_parts[topic_parts.index("xrt"):])
+                ]
+
+                for variation in variations:
+                    if variation and variation in METRIC_DEFINITIONS:
+                        return METRIC_DEFINITIONS[variation]
+                break
+
         # Check for Nissan Leaf metrics specifically
         for part in topic_parts:
             if part == "xnl":
@@ -212,7 +248,7 @@ def determine_category_from_topic(topic_parts):
     global CATEGORY_BATTERY, CATEGORY_CHARGING, CATEGORY_CLIMATE, CATEGORY_DOOR
     global CATEGORY_LOCATION, CATEGORY_MOTOR, CATEGORY_TRIP, CATEGORY_DIAGNOSTIC
     global CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE
-    global CATEGORY_VW_EUP, CATEGORY_SMART_FORTWO, CATEGORY_MG_ZS_EV, CATEGORY_NISSAN_LEAF
+    global CATEGORY_VW_EUP, CATEGORY_SMART_FORTWO, CATEGORY_MG_ZS_EV, CATEGORY_NISSAN_LEAF, CATEGORY_RENAULT_TWIZY
     global PREFIX_CATEGORIES
 
     # Initialize categories if not already done
@@ -222,7 +258,7 @@ def determine_category_from_topic(topic_parts):
             CATEGORY_LOCATION, CATEGORY_MOTOR, CATEGORY_TRIP, CATEGORY_DIAGNOSTIC,
             CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE,
             CATEGORY_VW_EUP, CATEGORY_SMART_FORTWO, CATEGORY_MG_ZS_EV, CATEGORY_NISSAN_LEAF,
-            PREFIX_CATEGORIES
+            CATEGORY_RENAULT_TWIZY, PREFIX_CATEGORIES
         )
 
     # Special handling for vehicle-specific topics
@@ -234,6 +270,8 @@ def determine_category_from_topic(topic_parts):
         return CATEGORY_MG_ZS_EV
     if "xnl" in topic_parts:
         return CATEGORY_NISSAN_LEAF
+    if "xrt" in topic_parts:
+        return CATEGORY_RENAULT_TWIZY
 
     # Check for known categories in topic
     for part in topic_parts:
@@ -255,6 +293,7 @@ def determine_category_from_topic(topic_parts):
             CATEGORY_SMART_FORTWO,
             CATEGORY_MG_ZS_EV,
             CATEGORY_NISSAN_LEAF,
+            CATEGORY_RENAULT_TWIZY,
         ]:
             return part_lower
 
@@ -300,6 +339,12 @@ def create_friendly_name(topic_parts, metric_info=None):
         # Format as "Nissan Leaf Sensor Name"
         last_part = topic_parts[-1].replace("_", " ").title()
         return f"Nissan Leaf {last_part}"
+        
+    # Check for Renault Twizy metrics
+    if "xrt" in topic_parts:
+        # Format as "Renault Twizy Sensor Name"
+        last_part = topic_parts[-1].replace("_", " ").title()
+        return f"Renault Twizy {last_part}"
 
     # Otherwise, build a name from the last part of the topic
     last_part = topic_parts[-1].replace("_", " ").title()
