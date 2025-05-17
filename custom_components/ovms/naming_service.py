@@ -60,13 +60,13 @@ class EntityNamingService:
                 return f"Nissan Leaf {last_part}"
             return f"Nissan Leaf {raw_name.replace('_', ' ').title()}" if raw_name else "Nissan Leaf Sensor"
 
-        # Check if this is a Nissan Leaf metric by looking for 'xnl' prefix
-        has_xnl = any(p == "xnl" for p in parts) if parts else ('xnl' in topic)
-        if has_xnl:
+        # Check if this is a Renault Twizy metric by looking for 'xrt' prefix
+        has_xrt = any(p == "xrt" for p in parts) if parts else ('xrt' in topic)
+        if has_xrt:
             if parts and len(parts) > 0:
                 last_part = parts[-1].replace("_", " ").title()
-                return f"Nissan Leaf {last_part}"
-            return f"Nissan Leaf {raw_name.replace('_', ' ').title()}" if raw_name else "Nissan Leaf Sensor"
+                return f"Renault Twizy {last_part}"
+            return f"Renault Twizy {raw_name.replace('_', ' ').title()}" if raw_name else "Renault Twizy Sensor"
 
         # Standard handling for other metrics - extract meaningful names from parts
         if parts and len(parts) > 0:
