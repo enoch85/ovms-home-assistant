@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <!-- Background -->
+  <rect width="800" height="500" fill="#f8f9fa" rx="10" ry="10"/>
+  
+  <!-- Title -->
+  <text x="400" y="40" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#333">Vehicle Data Flow: OVMS to Home Assistant</text>
+  
+  <!-- Components -->
+  <!-- Vehicle with OVMS -->
+  <rect x="50" y="120" width="160" height="100" rx="10" ry="10" fill="#d1e7dd" stroke="#20c997" stroke-width="2"/>
+  <text x="130" y="155" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle">Electric Vehicle</text>
+  <text x="130" y="180" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">with OVMS Module</text>
+  
+  <!-- MQTT Broker -->
+  <rect x="320" y="120" width="160" height="100" rx="10" ry="10" fill="#cfe2ff" stroke="#0d6efd" stroke-width="2"/>
+  <text x="400" y="155" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle">MQTT Broker</text>
+  <text x="400" y="180" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">(mosquitto, etc.)</text>
+  
+  <!-- Home Assistant -->
+  <rect x="590" y="120" width="160" height="100" rx="10" ry="10" fill="#f8d7da" stroke="#dc3545" stroke-width="2"/>
+  <text x="670" y="155" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle">Home Assistant</text>
+  <text x="670" y="180" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">with OVMS Integration</text>
+  
+  <!-- Arrows -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+    </marker>
+  </defs>
+  
+  <!-- OVMS to MQTT -->
+  <line x1="210" y1="170" x2="320" y2="170" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <!-- MQTT to Home Assistant -->
+  <line x1="480" y1="170" x2="590" y2="170" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Details -->
+  <rect x="70" y="250" width="660" height="220" rx="10" ry="10" fill="white" stroke="#ddd" stroke-width="2"/>
+  
+  <!-- Data Flow Details -->
+  <text x="400" y="280" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#333">Data Flow Process</text>
+  
+  <text x="100" y="320" font-family="Arial, sans-serif" font-size="14" fill="#333">1. OVMS module collects vehicle metrics (battery, climate, location, status)</text>
+  <text x="100" y="350" font-family="Arial, sans-serif" font-size="14" fill="#333">2. Module publishes data to MQTT topics: ovms/username/vehicle_id/metric/...</text>
+  <text x="100" y="380" font-family="Arial, sans-serif" font-size="14" fill="#333">3. MQTT broker receives and manages the published messages</text>
+  <text x="100" y="410" font-family="Arial, sans-serif" font-size="14" fill="#333">4. Home Assistant subscribes to relevant MQTT topics (ovms/#)</text>
+  <text x="100" y="440" font-family="Arial, sans-serif" font-size="14" fill="#333">5. Integration processes data and creates appropriate entities (sensors, trackers)</text>
+  
+  <!-- Port Information -->
+  <text x="400" y="480" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666">MQTT Connection Ports: 1883 (TCP), 8883 (SSL/TLS), 8083 (WebSocket), 8084 (Secure WebSocket)</text>
+</svg>

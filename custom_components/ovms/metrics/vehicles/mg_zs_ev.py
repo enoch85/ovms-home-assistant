@@ -74,7 +74,7 @@ MG_ZS_EV_METRICS = {
         "unit": UnitOfLength.MILES + "/" + UnitOfEnergy.KILO_WATT_HOUR,
         "category": "mg_zs_ev",
     },
-    
+
     # System status metrics
     "xmg.enable.polling": {
         "name": "MG ZS-EV Polling Enabled",
@@ -111,7 +111,7 @@ MG_ZS_EV_METRICS = {
         "category": "mg_zs_ev",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
-    
+
     # Battery technical metrics
     "xmg.v.bat.coolant.temp": {
         "name": "MG ZS-EV Battery Coolant Temperature",
@@ -155,7 +155,7 @@ MG_ZS_EV_METRICS = {
         "unit": UnitOfElectricPotential.VOLT,
         "category": "mg_zs_ev",
     },
-    
+
     # BMS cell data metrics
     "xmg.v.bms.cell.voltage.max": {
         "name": "MG ZS-EV Max Cell Voltage",
@@ -203,7 +203,7 @@ MG_ZS_EV_METRICS = {
         "device_class": SensorDeviceClass.TIMESTAMP,
         "category": "mg_zs_ev",
     },
-    
+
     # DC-DC converter metrics
     "xmg.v.dcdc.load": {
         "name": "MG ZS-EV DC-DC Converter Load",
@@ -214,7 +214,7 @@ MG_ZS_EV_METRICS = {
         "unit": PERCENTAGE,
         "category": "mg_zs_ev",
     },
-    
+
     # Environmental metrics
     "xmg.v.env.faceoutlet.temp": {
         "name": "MG ZS-EV Face Outlet Temperature",
@@ -225,7 +225,7 @@ MG_ZS_EV_METRICS = {
         "unit": UnitOfTemperature.CELSIUS,
         "category": "mg_zs_ev",
     },
-    
+
     # Ignition and operational state
     "xmg.v.ignition.state": {
         "name": "MG ZS-EV Ignition State",
@@ -233,7 +233,7 @@ MG_ZS_EV_METRICS = {
         "icon": "mdi:power",
         "category": "mg_zs_ev",
     },
-    
+
     # Motor and coolant metrics
     "xmg.v.m.coolant.temp": {
         "name": "MG ZS-EV Motor Coolant Temperature",
@@ -252,7 +252,7 @@ MG_ZS_EV_METRICS = {
         "unit": "Nm",
         "category": "mg_zs_ev",
     },
-    
+
     # Radiator and cooling system
     "xmg.v.radiator.fan": {
         "name": "MG ZS-EV Radiator Fan",
@@ -261,7 +261,7 @@ MG_ZS_EV_METRICS = {
         "device_class": BinarySensorDeviceClass.RUNNING,
         "category": "mg_zs_ev",
     },
-    
+
     # SOC and VCU metrics
     "xmg.v.soc.raw": {
         "name": "MG ZS-EV Raw SOC",
@@ -323,7 +323,7 @@ MG_ZS_EV_METRICS = {
         "unit": UnitOfTemperature.CELSIUS,
         "category": "mg_zs_ev",
     },
-    
+
     # Auth
     "xmg.auth.bcm": {
         "name": "MG ZS-EV BCM Auth",

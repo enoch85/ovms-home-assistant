@@ -27,13 +27,17 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 - **Command Interface**: Send commands to your vehicle through services with proper rate limiting
 - **Vehicle Status**: Track online/offline status of your vehicle automatically
 - **Secure Communication**: Supports TLS/SSL connections to MQTT brokers with certificate verification
-- **Vehicle-Specific Metrics**: Special support for VW e-UP!, Smart ForTwo, and MG ZS-EV - with additional vehicle models planned
+- **Vehicle-Specific Metrics**: Special support for VW e-UP!, Smart ForTwo, Nissan Leaf, and MG ZS-EV - with additional vehicle models planned
 - **Diagnostics Support**: Provides detailed diagnostics for troubleshooting
 - **Flexible Topic Structure**: Supports various MQTT topic structures including custom formats
 - **Multi-language Support**: Includes translations for English, French, German, Spanish, and Swedish
 - **GPS Tracking**: Advanced location tracking with accuracy estimation from signal quality
 - **Cell-level Battery Data**: Processes and displays individual cell data with statistical analysis
 - **Command Rate Limiting**: Prevents overwhelming the vehicle with too many commands
+- **Intelligent Attribute Enrichment**: Automatically adds useful derived attributes to entities (battery level categorization, temperature comfort levels, etc.)
+- **Advanced Formatting**: Intelligent formatting for duration values (minutes, hours, days) and timestamps
+- **Dynamic Topic Discovery**: Sophisticated topic detection even with non-standard username patterns
+- **Combined Location Tracking**: Automatically creates unified device tracker from separate latitude/longitude entities
 
 ## Technical Quality
 
@@ -43,7 +47,7 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 - **Security**: SSL/TLS support, credential protection, and input validation
 - **Standards Compliance**: Follows Home Assistant development guidelines
 - **Performance**: Efficient MQTT message processing with minimal overhead
-- **Reliability**: Connection recovery mechanisms with backoff strategy
+- **Reliability**: Connection recovery mechanisms with exponential backoff strategy
 - **Testing**: Automated validations via HACS and Hassfest
 - **Maintenance**: Structured release process with version control
 
@@ -52,8 +56,15 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 - Home Assistant (2025.2.5 or newer) according to HACS specification
 - MQTT integration configured in Home Assistant
 - OVMS module publishing to the same MQTT broker
-- OVMS firmware 3.3.001 or newer recommended
+- OVMS firmware 3.3.001 or newer recommended (3.3.004+ for optimal performance)
 - Python package: paho-mqtt>=1.6.1 (installed automatically)
+
+## Known "Issues" and Solutions
+
+- If you have trouble with certain metrics not appearing, try the `server v3 update all` command. Please see [this section](https://github.com/enoch85/ovms-home-assistant?tab=readme-ov-file#ovmssend_command) for more information. This command will update all of your metrics at once in the OVMS module, and in turn send the updated metrics over to the broker which is then picked up by the integration.
+- Some metrics may show as unavailable initially. This is normal until the vehicle provides data for these metrics.
+- For best results, ensure your OVMS module firmware is updated to at least version 3.3.004 or higher.
+
 
 ## Screenshots
 ![1](/assets/screenshot-overview1.png)
@@ -64,9 +75,18 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 
 *Integration overview 2*
 
+## Cell Battery Data Analysis
+
+The integration provides comprehensive analysis of cell-level battery data:
+
+- **Statistical Processing**: Instead of creating dozens of individual sensors for each cell, the integration automatically calculates statistical measures (minimum, maximum, average, median) for cell voltages, temperatures, and health values
+- **Attribute-Based Storage**: These statistics are stored as attributes on the main sensor, providing easy access while keeping your entities list clean
+- **Cell Deviation Tracking**: The integration tracks and displays voltage and temperature deviations between cells, helping to identify potential battery pack issues
+- **Historical Tracking**: Maximum deviation values are tracked over time to help identify battery degradation patterns
+
 ![3](/assets/screenshot-overview3.png)
 
-*All topics with a lot of metrics are stored in attributes instead, where the average and median are calculated and presented*
+*Example of cell statistics in entity attributes - these values are automatically calculated*
 
 ## Data usage
 
@@ -127,6 +147,18 @@ topic write ovms/+/+/client/rr/command/#
 topic write ovms/+/+/status
 ```
 
+### Security Best Practices
+
+When setting up your MQTT broker for OVMS:
+
+- **Use Strong Credentials**: Create a dedicated user for OVMS with a strong password
+- **Apply Minimal Permissions**: Follow the principle of least privilege with the ACL shown above
+- **Enable TLS/SSL**: Use port 8883 with TLS encryption for all connections
+- **Certificate Verification**: Enable certificate verification in production environments
+- **Network Segregation**: If possible, keep your MQTT broker on a separate network segment
+
+The integration supports secure connections with TLS, proper certificate validation, and username/password authentication to ensure your vehicle data remains protected.
+
 ## OVMS Configuration
 
 Configure your OVMS module to publish data to your MQTT broker:
@@ -183,6 +215,29 @@ For testing purposes, you can:
 
 3. Check the Home Assistant logs for detailed information about discovered topics and created entities
 
+### Debugging and Logs
+
+*Warning! The debug output is substantial. It may fill your disk if you are not careful, don't leave it turned on.*
+
+The integration provides several levels of logging:
+
+- **Info Level**: Basic operational information (connections, entity creation)
+- **Debug Level**: Detailed information about topic discovery, message processing, and entity creation
+- **Warning/Error Levels**: Issues that might need attention
+
+Common log patterns to look for:
+
+- `Topic discovery completed` - Indicates successful MQTT topic scanning
+- `Adding sensor/binary_sensor/device_tracker` - Shows entity creation
+- `MQTT connection test completed` - Shows broker connection results
+- `Command response for...` - Shows command execution results
+
+To interpret logs effectively:
+1. Look for error messages indicating connection issues
+2. Check for topics being discovered correctly
+3. Verify entity creation messages for your expected metrics
+4. Watch for command results when testing integration functions
+
 ## Using the Integration
 
 ### Available Entities
@@ -196,6 +251,24 @@ After setup, entities will be created for your vehicle metrics. These include:
 - **Vehicle-specific**: Other metrics specific to your vehicle model
 
 Entities are grouped under a device representing your vehicle, identified by the vehicle ID.
+
+### Data Presentation and Formatting
+
+The integration intelligently formats data to enhance usability:
+
+- **Duration Values**: Time values are automatically formatted in the most appropriate units (minutes, hours, days) with both short form (5h 30m) and full text variants available as attributes
+- **Timestamps**: Dates and times are displayed in a human-readable format
+- **Battery Levels**: Battery entities include a "battery_level" attribute categorizing the state as low/medium/high
+- **Temperature Comfort**: Temperature entities include a "temperature_level" attribute (freezing/cold/cool/comfortable/warm/hot)
+- **GPS Accuracy**: Location entities automatically include accuracy estimates derived from GPS signal quality
+
+### Version Detection
+
+The integration automatically detects your OVMS module's firmware version and displays it in the device info:
+
+- The version is extracted from the MQTT messages
+- Device info is updated in the Home Assistant device registry
+- The integration recommends OVMS firmware 3.3.004 or higher for optimal operation
 
 ### Services
 
@@ -236,6 +309,26 @@ name: "REG123: update all"
 ![screenshot-command](/assets/screenshot-command.png)
 
 *Example of how a command button could look like in the Lovelace UI*
+
+#### Common OVMS Commands
+
+Here are some useful OVMS commands you can send through the service:
+
+| Command | Description | Example Parameters |
+|---------|-------------|-------------------|
+| `stat` | Get general vehicle status | `range`, `charge` |
+| `server v3 update all` | Force update of all metrics | |
+| `charge` | Control charging | `start mode range`, `stop` |
+| `climate` | Control climate system | `on temp 21`, `off` |
+| `lock` | Lock/unlock vehicle | `on`, `off` |
+| `location` | Get current location | |
+| `valet` | Control valet mode | `on`, `off` |
+| `config list` | List configuration parameters | `vehicle` |
+| `metrics list` | List available metrics | `v.b.soc` |
+| `feature` | Toggle features | `vehicle` |
+| `notify raise` | Trigger notification | `alert.charge.stopped` |
+
+Commands are rate limited to 5 per minute by default to prevent overwhelming the vehicle. The integration implements exponential backoff for reconnection attempts when connectivity is lost.
 
 #### `ovms.set_feature`
 Set an OVMS configuration feature.
@@ -308,6 +401,59 @@ tap_action:
     button: 1
 ```
 
+## Communication Flow
+
+The integration manages bidirectional communication between Home Assistant and your OVMS module:
+
+### Data Flow: OVMS → Home Assistant
+1. OVMS module publishes metrics to MQTT broker
+2. Integration subscribes to all topics under the configured prefix
+3. Messages are parsed to determine entity type and attributes
+4. Entities are created or updated with the incoming data
+5. Statistical processing is applied to relevant data (cell values, etc.)
+6. Attributes are enriched with additional contextual information
+
+![OVMS-Read-Flow](/assets/ovms-data-flow.svg)
+
+### Command Flow: Home Assistant → OVMS
+1. Service call is received with command parameters
+2. Rate limiting is applied to prevent overwhelming the vehicle
+3. Command is published to the appropriate MQTT topic
+4. Integration subscribes to the corresponding response topic
+5. Response is received and returned to the caller
+6. Command state is updated based on the response
+
+![OVMS-Write-Flow](/assets/ovms-command-flow.svg)
+
+### Offline Detection and Recovery
+
+The integration implements mechanisms for connection management:
+
+- **Status Monitoring**: Vehicle online/offline status is tracked
+- **Last Will and Testament**: MQTT "LWT" messages detect unexpected disconnections
+- **Automatic Reconnection**: Reconnection with exponential backoff (increasing delays between attempts)
+- **Connection Recovery**: When connection is restored, subscriptions are re-established
+- **State Preservation**: Entity states are preserved during connection interruptions
+
+## Location Tracking & GPS
+
+The integration provides comprehensive location tracking:
+
+### Combined Device Tracker
+
+- Automatically creates a unified device tracker from separate latitude/longitude entities
+- Maintains a single entity for location tracking that works with Home Assistant's map
+- Updates latitude and longitude sensors when the tracker moves
+
+### GPS Accuracy Estimation
+
+- Calculates position accuracy based on GPS signal quality metrics
+- Integrates HDOP (Horizontal Dilution of Precision) data when available
+- Provides accuracy estimates in meters as an attribute
+- Adjusts accuracy based on signal strength
+
+*Example of the combined device tracker with accuracy information*
+
 ### State Preservation for Notification Topics in Home Assistant
 
 Notification topics in Home Assistant are inherently transient, representing momentary events rather than persistent states. As a result, the associated sensors typically remain active for a limited period before transitioning to an `unavailable` status—this behavior is by design.
@@ -355,13 +501,17 @@ The integration supports these MQTT topic structures:
 - Simple: `ovms/vehicle_id/...`
 - Custom: Define your own structure with placeholders
 
-### Communication Flow
+### Dynamic Topic Discovery
 
-1. OVMS module publishes metrics to MQTT broker
-2. Integration subscribes to all topics under the configured prefix
-3. Received messages are parsed to determine entity type and attributes
-4. Entities are created or updated based on the incoming data
-5. Commands are sent via MQTT and responses are tracked
+The integration implements sophisticated topic discovery:
+
+- **Wildcard Subscription**: Uses MQTT wildcards to discover all relevant topics
+- **Pattern Recognition**: Identifies topic structures even with different username patterns
+- **Vehicle ID Extraction**: Automatically extracts vehicle IDs from discovered topics
+- **Structure Detection**: Detects the actual topic structure being used by the OVMS module
+- **Adaptive Subscription**: Subscribes to identified pattern for ongoing communication
+
+This allows the integration to work even when the exact topic structure isn't known in advance.
 
 ### Entity Classification
 
@@ -392,40 +542,6 @@ The integration includes sophisticated data processing:
 - Conversion between different units based on user preferences
 - JSON payload parsing for complex data structures
 - GPS accuracy calculation from quality metrics
-
-## Security Features
-
-- **TLS/SSL Support**: Secure encrypted connections to MQTT broker
-- **Certificate Verification**: Option to verify SSL certificates (enabled by default)
-- **Rate Limiting**: Command limiting to prevent overwhelming the vehicle (5 per minute by default)
-- **Input Validation**: Comprehensive validation of all inputs
-- **MQTT ACL**: Detailed guidance for restrictive MQTT permissions
-
-## Troubleshooting
-
-*Warning! The debug output is substantial. It may fill your disk if you are not careful, don't leave it turned on.*
-
-### No Entities Created
-
-1. Check if your OVMS module is publishing to the MQTT broker
-2. Verify the topic structure matches what's configured in the integration
-3. Enable debug logging and check for errors in the Home Assistant logs
-4. Ensure your MQTT broker allows wildcard subscriptions (#)
-5. Verify ACL permissions in your MQTT broker for the topics listed above
-
-### Connection Issues
-
-1. Verify MQTT broker credentials are correct
-2. Check if TLS/SSL settings match between OVMS, Home Assistant, and the broker
-3. Test connection using an external MQTT client
-4. Check firewall rules if using different networks
-
-### Command Failures
-
-1. Ensure the OVMS module is online
-2. Check if the command syntax is correct for your vehicle
-3. Verify MQTT QoS settings allow reliable message delivery
-4. Look for command responses in the logs
 
 ## Advanced Usage
 
@@ -477,13 +593,46 @@ This integration undergoes regular validation through:
 - Python code validation and linting
 - Version checking and dependency management
 
+## Troubleshooting
+
+*Warning! The debug output is substantial. It may fill your disk if you are not careful, don't leave it turned on.*
+
+### No Entities Created
+
+1. Check if your OVMS module is publishing to the MQTT broker
+2. Verify the topic structure matches what's configured in the integration
+3. Enable debug logging and check for errors in the Home Assistant logs
+4. Ensure your MQTT broker allows wildcard subscriptions (#)
+5. Verify ACL permissions in your MQTT broker for the topics listed above
+
+### Connection Issues
+
+1. Verify MQTT broker credentials are correct
+2. Check if TLS/SSL settings match between OVMS, Home Assistant, and the broker
+3. Test connection using an external MQTT client
+4. Check firewall rules if using different networks
+
+### Command Failures
+
+1. Ensure the OVMS module is online
+2. Check if the command syntax is correct for your vehicle
+3. Verify MQTT QoS settings allow reliable message delivery
+4. Look for command responses in the logs
+
+### Entity Not Updating
+
+1. Check if the OVMS module is still publishing data for that metric
+2. Verify the topic hasn't changed
+3. Try sending `server v3 update all` command to refresh all metrics
+4. Check if there are any error messages in the logs
+
 ## FAQ
 
 **Q: Can I use multiple vehicles with this integration?**  
 A: Yes, you can set up multiple instances of the integration, one for each vehicle.
 
 **Q: Does this work with all OVMS-supported vehicles?**  
-A: Yes, the integration is vehicle-agnostic and works with any vehicle supported by OVMS. Vehicle-specific enhancements are provided for some models like VW e-UP!, Smart ForTwo, and MG ZS-EV.
+A: Yes, the integration is vehicle-agnostic and works with any vehicle supported by OVMS. Vehicle-specific enhancements are provided for some models like VW e-UP!, Smart ForTwo, Nissan Leaf and MG ZS-EV.
 
 **Q: Can I use this without internet access?**  
 A: Yes, as long as your OVMS module, MQTT broker, and Home Assistant can communicate on the same network.
@@ -496,6 +645,15 @@ A: The integration includes automatic reconnection with exponential backoff, onl
 
 **Q: Is my data secure?**  
 A: Yes, the integration supports TLS/SSL encryption for MQTT connections and follows secure coding practices for handling sensitive data.
+
+**Q: What happens if I lose connection to my vehicle?**  
+A: The integration maintains the last known state of all entities and marks the vehicle as offline. When connection is restored, all entity states are updated with the latest data.
+
+**Q: How can I see detailed information about cell voltages and temperatures?**  
+A: This data is stored in entity attributes for the main battery sensors. Look at the attributes of your battery voltage and temperature entities to see detailed statistics.
+
+**Q: Does the integration create separate sensors for each battery cell?**  
+A: No, by default the integration calculates statistics (min, max, average, median) for cell data and stores these as attributes on a single sensor. This prevents cluttering your entities list with dozens of individual cell sensors.
 
 ## Contributing
 

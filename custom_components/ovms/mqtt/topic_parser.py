@@ -158,7 +158,7 @@ class TopicParser:
             # Smart ForTwo metrics
             if "xsq" in parts:
                 return ".".join(parts)
-                
+
             # MG ZS-EV metrics
             if "xmg" in parts:
                 return ".".join(parts)
@@ -169,6 +169,10 @@ class TopicParser:
                 
             # Renault Twizy metrics
             if "xrt" in parts:
+                return ".".join(parts)
+
+            # Nissan Leaf metrics
+            if "xnl" in parts:
                 return ".".join(parts)
 
             # Metric specific prefixes

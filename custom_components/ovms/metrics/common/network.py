@@ -34,6 +34,7 @@ NETWORK_METRICS = {
         "icon": "mdi:signal",
         "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": "dBm",
         "category": "network",
     },
     "m.net.provider": {
@@ -48,6 +49,7 @@ NETWORK_METRICS = {
         "icon": "mdi:signal",
         "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": "dBm",
         "category": "network",
     },
     "m.net.type": {
@@ -68,6 +70,7 @@ NETWORK_METRICS = {
         "icon": "mdi:wifi",
         "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": "dBm",
         "category": "network",
     },
     "m.net.mdm.mode": {
