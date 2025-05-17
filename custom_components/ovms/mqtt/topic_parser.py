@@ -162,11 +162,11 @@ class TopicParser:
             # MG ZS-EV metrics
             if "xmg" in parts:
                 return ".".join(parts)
-                
+
             # Nissan Leaf metrics
             if "xnl" in parts:
                 return ".".join(parts)
-                
+
             # Renault Twizy metrics
             if "xrt" in parts:
                 return ".".join(parts)

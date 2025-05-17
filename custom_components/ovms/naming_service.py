@@ -51,7 +51,7 @@ class EntityNamingService:
                 last_part = parts[-1].replace("_", " ").title()
                 return f"MG ZS-EV {last_part}"
             return f"MG ZS-EV {raw_name.replace('_', ' ').title()}" if raw_name else "MG ZS-EV Sensor"
-            
+
         # Check if this is a Nissan Leaf metric by looking for 'xnl' prefix
         has_xnl = any(p == "xnl" for p in parts) if parts else ('xnl' in topic)
         if has_xnl:

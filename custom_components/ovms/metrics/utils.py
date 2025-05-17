@@ -73,7 +73,7 @@ def get_metric_by_path(metric_path):
         alt_path = metric_path[xsq_index:]
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
-            
+
     # For Nissan Leaf metrics, also try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xnl.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
@@ -189,7 +189,7 @@ def get_metric_by_pattern(topic_parts):
                     if variation and variation in METRIC_DEFINITIONS:
                         return METRIC_DEFINITIONS[variation]
                 break
-                
+
         # Check for Nissan Leaf metrics specifically
         for part in topic_parts:
             if part == "xnl":
@@ -329,7 +329,7 @@ def create_friendly_name(topic_parts, metric_info=None):
         # Format as "Smart ForTwo Sensor Name"
         last_part = topic_parts[-1].replace("_", " ").title()
         return f"Smart ForTwo {last_part}"
-        
+
     # Check for Nissan Leaf metrics
     if "xnl" in topic_parts:
         # Format as "Nissan Leaf Sensor Name"
