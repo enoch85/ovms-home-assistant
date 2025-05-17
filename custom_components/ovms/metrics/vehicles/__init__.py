@@ -4,6 +4,7 @@ from .vw_eup import VW_EUP_METRICS
 from .smart_fortwo import SMART_FORTWO_METRICS
 from .mg_zs_ev import MG_ZS_EV_METRICS
 from .nissan_leaf import NISSAN_LEAF_METRICS
+from .renault_twizy import RENAULT_TWIZY_METRICS
 
 # Add imports for future vehicle-specific metric sets here
 # from .tesla_model_s import TESLA_MODEL_S_METRICS
@@ -15,6 +16,7 @@ __all__ = [
     "SMART_FORTWO_METRICS",
     "MG_ZS_EV_METRICS",
     "NISSAN_LEAF_METRICS",
+    "RENAULT_TWIZY_METRICS",
     # "TESLA_MODEL_S_METRICS",
     # "RENAULT_ZOE_METRICS",
 ]
