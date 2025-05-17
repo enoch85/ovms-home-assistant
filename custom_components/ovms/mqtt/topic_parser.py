@@ -171,10 +171,6 @@ class TopicParser:
             if "xrt" in parts:
                 return ".".join(parts)
 
-            # Nissan Leaf metrics
-            if "xnl" in parts:
-                return ".".join(parts)
-
             # Metric specific prefixes
             if parts[0] in ["metric", "status", "notify"]:
                 return ".".join(parts[1:])
