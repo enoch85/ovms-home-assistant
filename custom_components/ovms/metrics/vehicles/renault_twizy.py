@@ -16,6 +16,7 @@ from homeassistant.const import (
     UnitOfPower,
     UnitOfTemperature,
     UnitOfTime,
+    UnitOfSpeed,
 )
 from homeassistant.helpers.entity import EntityCategory
 
