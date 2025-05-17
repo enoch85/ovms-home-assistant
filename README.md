@@ -199,6 +199,18 @@ Configure your OVMS module to publish data to your MQTT broker:
 
 ![Setup Flow](/assets/setup-flow.svg)
 
+### Advanced Options
+
+After initial setup, additional options can be configured via the integration options:
+
+1. Go to Settings → Devices & Services → OVMS → Configure
+2. Configure additional options:
+   - **Topic Blacklist**: A comma-separated list of topics to exclude from creating entities (e.g., `battery.log,xrt.log`)
+   - **Topic Structure**: Choose or customize your topic structure format
+   - **Quality of Service (QoS)**: Choose the MQTT QoS level (0, 1, or 2)
+
+The Topic Blacklist feature is particularly useful to prevent high-frequency log topics from creating hundreds of unwanted entities.
+
 ### Testing Configuration
 
 For testing purposes, you can:

@@ -23,6 +23,7 @@ CONF_TOPIC_STRUCTURE = "topic_structure"
 CONF_VERIFY_SSL = "verify_ssl"
 CONF_ORIGINAL_VEHICLE_ID = "original_vehicle_id"
 CONF_CREATE_CELL_SENSORS = "create_cell_sensors"  # Option to create individual cell sensors
+CONF_TOPIC_BLACKLIST = "topic_blacklist"  # Option to blacklist topics
 
 # Defaults
 DEFAULT_PORT = 1883
@@ -35,6 +36,7 @@ DEFAULT_UNIT_SYSTEM = "metric"
 DEFAULT_TOPIC_STRUCTURE = "{prefix}/{mqtt_username}/{vehicle_id}"
 DEFAULT_VERIFY_SSL = True
 DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by default
+DEFAULT_TOPIC_BLACKLIST = ["battery.log"]  # Default topics to blacklist
 
 # Options
 PROTOCOLS = ["mqtt", "mqtts"]

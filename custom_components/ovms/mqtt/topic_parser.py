@@ -3,7 +3,7 @@ import logging
 import re
 from typing import Dict, Any, Optional, Tuple, List
 
-from ..const import LOGGER_NAME
+from ..const import LOGGER_NAME, CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST
 from ..metrics import (
     BINARY_METRICS,
     get_metric_by_path,
@@ -22,6 +22,7 @@ class TopicParser:
         self.entity_registry = entity_registry
         self.structure_prefix = self._format_structure_prefix()
         self.coordinate_entities_created = {}  # Track which coordinate entities we've created
+        self.topic_blacklist = config.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST)
 
     def _format_structure_prefix(self) -> str:
         """Format the topic structure prefix based on configuration."""
@@ -67,6 +68,13 @@ class TopicParser:
             # Skip event topics - we don't need entities for these
             if topic.endswith("/event"):
                 return None
+                
+            # Skip blacklisted topics
+            if self.topic_blacklist:
+                for pattern in self.topic_blacklist:
+                    if pattern in topic:
+                        _LOGGER.debug("Skipping blacklisted topic pattern '%s': %s", pattern, topic)
+                        return None
 
             # Check if topic matches our structure prefix
             if not topic.startswith(self.structure_prefix):
