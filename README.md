@@ -205,11 +205,18 @@ After initial setup, additional options can be configured via the integration op
 
 1. Go to Settings → Devices & Services → OVMS → Configure
 2. Configure additional options:
-   - **Topic Blacklist**: A comma-separated list of topics to exclude from creating entities (e.g., `battery.log,xrt.log`)
+   - **Topic Blacklist**: A comma-separated list of topics to exclude from creating entities (e.g., `.log,battery.log,power.log,gps.log`)
    - **Topic Structure**: Choose or customize your topic structure format
    - **Quality of Service (QoS)**: Choose the MQTT QoS level (0, 1, or 2)
 
-The Topic Blacklist feature is particularly useful to prevent high-frequency log topics from creating hundreds of unwanted entities.
+The Topic Blacklist feature is particularly useful to prevent high-frequency log topics from creating hundreds of unwanted entities. The integration comes with default filters for common log topics, but you may need to add additional patterns based on your specific OVMS module and vehicle.
+
+**Common patterns to blacklist:**
+- `.log` - Blocks all log topics (matches any topic containing ".log")
+- `battery.log` - Blocks battery log specific topics
+- `power.log` - Blocks power log specific topics
+- `gps.log` - Blocks GPS log specific topics
+- `xrt.log` - Blocks Renault Twizy specific log topics
 
 ### Testing Configuration
 
