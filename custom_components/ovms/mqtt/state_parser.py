@@ -44,12 +44,35 @@ class StateParser:
             if value.lower() in ["yes", "on", "true", "enabled"]:
                 return 1
 
-        # Check if this is a comma-separated list of numbers (including negative numbers)
-        if isinstance(value, str) and "," in value:
+        # Check for unit suffix like "psi" at the end
+        unit_suffix = ""
+        value_without_unit = value
+        
+        # Only process strings
+        if isinstance(value, str):
+            # Common unit suffixes to check for
+            common_units = ["psi", "kpa", "bar", "°c", "°f", "c", "f", "km", "mi", "mph", "kph"]
+            for unit in common_units:
+                if value.lower().endswith(unit):
+                    unit_suffix = value[-len(unit):].lower()
+                    value_without_unit = value[:-len(unit)]
+                    break
+                
+        # Check if this is a separator-based list (comma or semicolon separated) of numbers
+        if isinstance(value_without_unit, str) and ("," in value_without_unit or ";" in value_without_unit):
             try:
+                # Determine the separator
+                separator = ";" if ";" in value_without_unit else ","
+                
                 # Try to parse all parts as floats
-                parts = [float(part.strip()) for part in value.split(",") if part.strip()]
+                parts = [float(part.strip()) for part in value_without_unit.split(separator) if part.strip()]
                 if parts:
+                    # If we have a unit suffix and it's a pressure unit, convert as needed
+                    if unit_suffix == "psi" and device_class == SensorDeviceClass.PRESSURE:
+                        from ..utils import convert_pressure
+                        from homeassistant.const import UnitOfPressure
+                        parts = [convert_pressure(part, "psi", UnitOfPressure.KPA) for part in parts]
+                    
                     # Calculate and return statistics
                     avg_value = sum(parts) / len(parts)
                     # Return the average as the main value, rounded to 4 decimal places

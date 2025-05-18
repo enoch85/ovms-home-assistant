@@ -54,6 +54,27 @@ def convert_volume(value: float, to_unit: str) -> float:
     return value
 
 
+def convert_pressure(value: float, from_unit: str, to_unit: str) -> float:
+    """Convert pressure between units."""
+    # Convert to kPa first (as base unit)
+    base_value = value
+    if from_unit.lower() == "psi":
+        base_value = value * 6.89476  # 1 PSI = 6.89476 kPa
+    
+    # Then convert to target unit
+    if to_unit == UnitOfPressure.KPA:
+        return base_value
+    if to_unit == UnitOfPressure.PSI:
+        return base_value / 6.89476
+    if to_unit == UnitOfPressure.BAR:
+        return base_value / 100  # 1 bar = 100 kPa
+    if to_unit == UnitOfPressure.MMHG:
+        return base_value * 7.50062  # 1 kPa = 7.50062 mmHg
+    if to_unit == UnitOfPressure.INHG:
+        return base_value * 0.2953  # 1 kPa = 0.2953 inHg
+    return base_value
+
+
 def get_unit_system(use_metric: bool) -> Dict[str, str]:
     """Get the unit system based on preference."""
     if use_metric:
@@ -87,10 +108,29 @@ def parse_numeric_value(value: Any) -> Optional[float]:
         return float(value)
 
     if isinstance(value, str):
+        # Check for common unit suffixes
+        unit_suffix = ""
+        value_to_parse = value
+        
+        # Common unit suffixes to check for
+        common_units = ["psi", "kpa", "bar", "°c", "°f", "c", "f", "km", "mi", "mph", "kph"]
+        for unit in common_units:
+            if value.lower().endswith(unit):
+                unit_suffix = unit.lower()
+                value_to_parse = value[:-len(unit)]
+                break
+        
         try:
-            # Remove units and other non-numeric characters
-            numeric_str = re.sub(r'[^\d.-]', '', value)
-            return float(numeric_str)
+            # Remove any remaining non-numeric characters
+            numeric_str = re.sub(r'[^\d.-]', '', value_to_parse)
+            result = float(numeric_str)
+            
+            # Convert units if needed
+            if unit_suffix == "psi":
+                from homeassistant.const import UnitOfPressure
+                result = convert_pressure(result, "psi", UnitOfPressure.KPA)
+                
+            return result
         except (ValueError, TypeError):
             pass
 

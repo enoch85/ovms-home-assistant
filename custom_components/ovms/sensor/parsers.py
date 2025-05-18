@@ -66,9 +66,32 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
 
     result = {}
     try:
+        # Handle both comma and semicolon separators in values
+        separator = ";" if ";" in value else ","
+        
+        # Check for unit suffix like "psi" at the end
+        unit_suffix = ""
+        value_without_unit = value
+        
+        # Common unit suffixes to check for
+        common_units = ["psi", "kpa", "bar", "°c", "°f", "c", "f", "km", "mi", "mph", "kph"]
+        for unit in common_units:
+            if value.lower().endswith(unit):
+                unit_suffix = value[-len(unit):].lower()
+                value_without_unit = value[:-len(unit)]
+                break
+        
         # Try to parse all parts as floats
-        parts = [float(part.strip()) for part in value.split(",") if part.strip()]
+        parts = [float(part.strip()) for part in value_without_unit.split(separator) if part.strip()]
         if parts:
+            # If we have a unit suffix and it's a known pressure unit, convert to kPa
+            if unit_suffix == "psi":
+                from ..utils import convert_pressure
+                from homeassistant.const import UnitOfPressure
+                parts = [convert_pressure(part, "psi", UnitOfPressure.KPA) for part in parts]
+                result["original_unit"] = unit_suffix
+                result["converted_from_psi"] = True
+            
             # Store the array in attributes - use only one consistent naming
             result[f"{stat_type}_values"] = parts
             result["count"] = len(parts)
