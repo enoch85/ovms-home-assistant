@@ -12,10 +12,12 @@ from ..const import (
     CONF_VERIFY_SSL,
     CONF_PORT,
     CONF_PROTOCOL,
+    CONF_TOPIC_BLACKLIST,
     DEFAULT_QOS,
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_TOPIC_STRUCTURE,
     DEFAULT_VERIFY_SSL,
+    DEFAULT_TOPIC_BLACKLIST,
     TOPIC_STRUCTURES,
     LOGGER_NAME,
 )
@@ -66,7 +68,17 @@ class OVMSOptionsFlow(OptionsFlow):
                 del user_input["Port"]
                 if "verify_ssl_certificate" in user_input:
                     del user_input["verify_ssl_certificate"]
+                    
+                # Process topic blacklist (convert to a list for storage)
+                if CONF_TOPIC_BLACKLIST in user_input and isinstance(user_input[CONF_TOPIC_BLACKLIST], str):
+                    blacklist = [x.strip() for x in user_input[CONF_TOPIC_BLACKLIST].split(",") if x.strip()]
+                    user_input[CONF_TOPIC_BLACKLIST] = blacklist
 
+            # Process the blacklist string input
+            if CONF_TOPIC_BLACKLIST in user_input and isinstance(user_input[CONF_TOPIC_BLACKLIST], str):
+                blacklist_str = user_input[CONF_TOPIC_BLACKLIST]
+                user_input[CONF_TOPIC_BLACKLIST] = [item.strip() for item in blacklist_str.split(',') if item.strip()]
+            
             _LOGGER.debug("Saving options: %s", user_input)
             return self.async_create_entry(title="", data=user_input)
 
@@ -130,6 +142,14 @@ class OVMSOptionsFlow(OptionsFlow):
                     entry_data.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
                 ),
             ): vol.In(TOPIC_STRUCTURES),
+            vol.Optional(
+                CONF_TOPIC_BLACKLIST,
+                default=','.join(entry_options.get(
+                    CONF_TOPIC_BLACKLIST,
+                    entry_data.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST)
+                )),
+                description="Comma-separated list of topics to filter out (e.g. battery.log,xrt.log)"
+            ): str,
         })
 
         return self.async_show_form(

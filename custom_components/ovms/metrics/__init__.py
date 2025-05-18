@@ -41,7 +41,7 @@ from .common import (
 )
 
 # Import vehicle-specific metrics
-from .vehicles import VW_EUP_METRICS, SMART_FORTWO_METRICS, MG_ZS_EV_METRICS, NISSAN_LEAF_METRICS
+from .vehicles import VW_EUP_METRICS, SMART_FORTWO_METRICS, MG_ZS_EV_METRICS, NISSAN_LEAF_METRICS, RENAULT_TWIZY_METRICS
 
 # Import patterns and utils
 from .patterns import TOPIC_PATTERNS
@@ -73,6 +73,7 @@ CATEGORY_VW_EUP = "vw_eup"
 CATEGORY_SMART_FORTWO = "smart_fortwo"
 CATEGORY_MG_ZS_EV = "mg_zs_ev"
 CATEGORY_NISSAN_LEAF = "nissan_leaf"
+CATEGORY_RENAULT_TWIZY = "renault_twizy"
 
 # Combine all metrics into the master dictionary
 METRIC_DEFINITIONS = {
@@ -93,6 +94,7 @@ METRIC_DEFINITIONS = {
     **SMART_FORTWO_METRICS,
     **MG_ZS_EV_METRICS,
     **NISSAN_LEAF_METRICS,
+    **RENAULT_TWIZY_METRICS,
 }
 
 # Group metrics by categories
@@ -160,6 +162,9 @@ METRIC_CATEGORIES = {
     CATEGORY_NISSAN_LEAF: [
         k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_NISSAN_LEAF
     ],
+    CATEGORY_RENAULT_TWIZY: [
+        k for k, v in METRIC_DEFINITIONS.items() if v.get("category") == CATEGORY_RENAULT_TWIZY
+    ],
 }
 
 # Binary metrics that should be boolean - includes only actual binary metrics
@@ -220,4 +225,12 @@ PREFIX_CATEGORIES = {
     "xnl.v.b": CATEGORY_NISSAN_LEAF,
     "xnl.v.c": CATEGORY_NISSAN_LEAF,
     "xnl.v.e": CATEGORY_NISSAN_LEAF,
+    "xrt.b": CATEGORY_RENAULT_TWIZY,
+    "xrt.bms": CATEGORY_RENAULT_TWIZY,
+    "xrt.cfg": CATEGORY_RENAULT_TWIZY,
+    "xrt.i": CATEGORY_RENAULT_TWIZY,
+    "xrt.m": CATEGORY_RENAULT_TWIZY,
+    "xrt.p": CATEGORY_RENAULT_TWIZY,
+    "xrt.s": CATEGORY_RENAULT_TWIZY,
+    "xrt.v": CATEGORY_RENAULT_TWIZY,
 }

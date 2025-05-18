@@ -3,7 +3,7 @@ import logging
 import re
 from typing import Dict, Any, Optional, Tuple, List
 
-from ..const import LOGGER_NAME
+from ..const import LOGGER_NAME, CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST
 from ..metrics import (
     BINARY_METRICS,
     get_metric_by_path,
@@ -22,6 +22,10 @@ class TopicParser:
         self.entity_registry = entity_registry
         self.structure_prefix = self._format_structure_prefix()
         self.coordinate_entities_created = {}  # Track which coordinate entities we've created
+        
+        # Get and normalize the topic blacklist
+        blacklist = config.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST)
+        self.topic_blacklist = self._normalize_blacklist(blacklist)
 
     def _format_structure_prefix(self) -> str:
         """Format the topic structure prefix based on configuration."""
@@ -67,6 +71,13 @@ class TopicParser:
             # Skip event topics - we don't need entities for these
             if topic.endswith("/event"):
                 return None
+                
+            # Skip blacklisted topics
+            if self.topic_blacklist:
+                for pattern in self.topic_blacklist:
+                    if pattern in topic:
+                        _LOGGER.debug("Skipping blacklisted topic pattern '%s': %s", pattern, topic)
+                        return None
 
             # Check if topic matches our structure prefix
             if not topic.startswith(self.structure_prefix):
@@ -165,6 +176,10 @@ class TopicParser:
 
             # Nissan Leaf metrics
             if "xnl" in parts:
+                return ".".join(parts)
+
+            # Renault Twizy metrics
+            if "xrt" in parts:
                 return ".".join(parts)
 
             # Metric specific prefixes
@@ -309,3 +324,19 @@ class TopicParser:
             return True
 
         return False
+
+    def _normalize_blacklist(self, blacklist):
+        """Normalize the blacklist format to always be a list of patterns."""
+        if not blacklist:
+            return []
+            
+        # If it's already a list, use it directly
+        if isinstance(blacklist, list):
+            return [str(item) for item in blacklist if item]
+            
+        # Convert string to list (handling comma-separated input from UI)
+        if isinstance(blacklist, str):
+            return [x.strip() for x in blacklist.split(",") if x.strip()]
+            
+        # Fallback to default
+        return DEFAULT_TOPIC_BLACKLIST

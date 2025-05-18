@@ -27,7 +27,7 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 - **Command Interface**: Send commands to your vehicle through services with proper rate limiting
 - **Vehicle Status**: Track online/offline status of your vehicle automatically
 - **Secure Communication**: Supports TLS/SSL connections to MQTT brokers with certificate verification
-- **Vehicle-Specific Metrics**: Special support for VW e-UP!, Smart ForTwo, Nissan Leaf, and MG ZS-EV - with additional vehicle models planned
+- **Vehicle-Specific Metrics**: Special support for VW e-UP!, Smart ForTwo, Nissan Leaf, Reanult Twizy, and MG ZS-EV - with additional vehicle models planned
 - **Diagnostics Support**: Provides detailed diagnostics for troubleshooting
 - **Flexible Topic Structure**: Supports various MQTT topic structures including custom formats
 - **Multi-language Support**: Includes translations for English, French, German, Spanish, and Swedish
@@ -198,6 +198,25 @@ Configure your OVMS module to publish data to your MQTT broker:
 6. Select your vehicle ID when prompted
 
 ![Setup Flow](/assets/setup-flow.svg)
+
+### Advanced Options
+
+After initial setup, additional options can be configured via the integration options:
+
+1. Go to Settings → Devices & Services → OVMS → Configure
+2. Configure additional options:
+   - **Topic Blacklist**: A comma-separated list of topics to exclude from creating entities (e.g., `.log,battery.log,power.log,gps.log`)
+   - **Topic Structure**: Choose or customize your topic structure format
+   - **Quality of Service (QoS)**: Choose the MQTT QoS level (0, 1, or 2)
+
+The Topic Blacklist feature is particularly useful to prevent high-frequency log topics from creating hundreds of unwanted entities. The integration comes with default filters for common log topics, but you may need to add additional patterns based on your specific OVMS module and vehicle.
+
+**Common patterns to blacklist:**
+- `.log` - Blocks all log topics (matches any topic containing ".log")
+- `battery.log` - Blocks battery log specific topics
+- `power.log` - Blocks power log specific topics
+- `gps.log` - Blocks GPS log specific topics
+- `xrt.log` - Blocks Renault Twizy specific log topics
 
 ### Testing Configuration
 
@@ -632,7 +651,7 @@ This integration undergoes regular validation through:
 A: Yes, you can set up multiple instances of the integration, one for each vehicle.
 
 **Q: Does this work with all OVMS-supported vehicles?**  
-A: Yes, the integration is vehicle-agnostic and works with any vehicle supported by OVMS. Vehicle-specific enhancements are provided for some models like VW e-UP!, Smart ForTwo, Nissan Leaf and MG ZS-EV.
+A: Yes, the integration is vehicle-agnostic and works with any vehicle supported by OVMS. Vehicle-specific enhancements are provided for some models like VW e-UP!, Smart ForTwo, Nissan Leaf, Renault Twizy and MG ZS-EV.
 
 **Q: Can I use this without internet access?**  
 A: Yes, as long as your OVMS module, MQTT broker, and Home Assistant can communicate on the same network.

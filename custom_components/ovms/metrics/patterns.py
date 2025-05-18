@@ -209,6 +209,11 @@ TOPIC_PATTERNS = {
         "icon": "mdi:car-electric",
         "category": "nissan_leaf",
     },
+    "xrt": {
+        "name": "Renault Twizy",
+        "icon": "mdi:car-electric",
+        "category": "renault_twizy",
+    },
     # Custom patterns
     "egpio_input": {
         "name": "GPIO Input Ports",
