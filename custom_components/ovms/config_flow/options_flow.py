@@ -68,6 +68,11 @@ class OVMSOptionsFlow(OptionsFlow):
                 del user_input["Port"]
                 if "verify_ssl_certificate" in user_input:
                     del user_input["verify_ssl_certificate"]
+                    
+                # Process topic blacklist (convert to a list for storage)
+                if CONF_TOPIC_BLACKLIST in user_input and isinstance(user_input[CONF_TOPIC_BLACKLIST], str):
+                    blacklist = [x.strip() for x in user_input[CONF_TOPIC_BLACKLIST].split(",") if x.strip()]
+                    user_input[CONF_TOPIC_BLACKLIST] = blacklist
 
             # Process the blacklist string input
             if CONF_TOPIC_BLACKLIST in user_input and isinstance(user_input[CONF_TOPIC_BLACKLIST], str):

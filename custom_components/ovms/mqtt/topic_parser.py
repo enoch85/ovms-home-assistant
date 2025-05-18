@@ -22,7 +22,10 @@ class TopicParser:
         self.entity_registry = entity_registry
         self.structure_prefix = self._format_structure_prefix()
         self.coordinate_entities_created = {}  # Track which coordinate entities we've created
-        self.topic_blacklist = config.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST)
+        
+        # Get and normalize the topic blacklist
+        blacklist = config.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST)
+        self.topic_blacklist = self._normalize_blacklist(blacklist)
 
     def _format_structure_prefix(self) -> str:
         """Format the topic structure prefix based on configuration."""
@@ -321,3 +324,19 @@ class TopicParser:
             return True
 
         return False
+
+    def _normalize_blacklist(self, blacklist):
+        """Normalize the blacklist format to always be a list of patterns."""
+        if not blacklist:
+            return []
+            
+        # If it's already a list, use it directly
+        if isinstance(blacklist, list):
+            return [str(item) for item in blacklist if item]
+            
+        # Convert string to list (handling comma-separated input from UI)
+        if isinstance(blacklist, str):
+            return [x.strip() for x in blacklist.split(",") if x.strip()]
+            
+        # Fallback to default
+        return DEFAULT_TOPIC_BLACKLIST
