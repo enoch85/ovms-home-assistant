@@ -66,11 +66,12 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
     # This function is often used for attributes of sensors that parse array-like strings.
     # The is_cell_sensor flag can determine if it proceeds, or it can be made more general.
     # For now, respecting the existing is_cell_sensor check:
-    if not is_cell_sensor:
-        # If this function is intended *only* for cell sensors, this check is appropriate.
-        # If it's meant to be more general (e.g., for tire pressure arrays that aren't "cell_sensors"),
-        # this condition might need to be re-evaluated or the function called differently.
-        # _LOGGER.debug("Skipping parse_comma_separated_values as is_cell_sensor is False for entity: %s", entity_name)
+    if not is_cell_sensor and device_class != SensorDeviceClass.PRESSURE: # Modified condition
+        # If this function is intended *only* for cell sensors or pressure sensors, this check is appropriate.
+        _LOGGER.debug(
+            "Skipping parse_comma_separated_values as it's not a cell sensor or pressure sensor for entity: %s", 
+            entity_name
+        )
         return None
 
     result = {}
@@ -84,26 +85,27 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
         unit_suffix = ""
         
         # Detect and strip known pressure unit suffixes
-        # This is kept specific to pressure units as other units might not be expected in comma-separated lists
-        # or might require different handling.
-        pressure_units = ["psi", "kpa", "bar"]
+        pressure_units = ["psi", "kpa", "bar"] # Ensure this list is consistent or centrally managed
         for unit in pressure_units:
-            if string_to_parse_parts_from.lower().endswith(unit):
-                unit_suffix = string_to_parse_parts_from[-len(unit):].lower()
+            # Case-insensitive check for suffix
+            if string_to_parse_parts_from.lower().endswith(unit.lower()):
+                # Preserve original casing of the unit if needed, or stick to lower
+                unit_suffix = string_to_parse_parts_from[-len(unit):].lower() 
                 string_to_parse_parts_from = string_to_parse_parts_from[:-len(unit)].strip()
+                _LOGGER.debug("Detected unit \'%s\', remaining string for parsing: \'%s\'", unit_suffix, string_to_parse_parts_from)
                 break
         
-        result["raw_values_string"] = string_to_parse_parts_from # Store the string part that's supposed to be numbers
+        result["raw_values_string"] = string_to_parse_parts_from 
 
         _LOGGER.debug(
-            "In parse_comma_separated_values for '%s': processing numeric string '%s' with separator '%s', unit_suffix '%s'", 
+            "In parse_comma_separated_values for '%s': processing numeric string '%s' with separator '%s', detected unit_suffix '%s'", 
             entity_name, string_to_parse_parts_from, separator, unit_suffix
         )
         
         parsed_numeric_parts = []
         for part_str in string_to_parse_parts_from.split(separator):
             stripped_part = part_str.strip()
-            if stripped_part:  # Ensure part is not empty after stripping
+            if stripped_part:
                 try:
                     parsed_numeric_parts.append(float(stripped_part))
                 except (ValueError, TypeError):
@@ -111,14 +113,13 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
                         "Could not parse part '%s' as float in value '%s' for entity '%s'. Skipping this part.",
                         stripped_part, original_input_value, entity_name
                     )
-                    # Continue to parse other parts; allows partial success
             
         if not parsed_numeric_parts:
             _LOGGER.warning(
                 "No numeric parts could be successfully parsed from '%s' for entity '%s'.", 
                 string_to_parse_parts_from, entity_name
             )
-            return None # Indicates failure to extract any numeric data
+            return None
 
         _LOGGER.debug(
             "In parse_comma_separated_values for '%s': successfully parsed numeric parts: %s", 
@@ -127,26 +128,29 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
 
         # Store the detected unit suffix in the result.
         # The parsed_numeric_parts are in this unit.
-        result["detected_unit"] = unit_suffix
+        result["detected_unit"] = unit_suffix if unit_suffix else None # Store None if no unit detected
 
         # Populate result dictionary with statistics and individual values
         result[f"{stat_type}_values"] = parsed_numeric_parts
         result["count"] = len(parsed_numeric_parts)
         
-        if parsed_numeric_parts: # Ensure list is not empty before calculating stats
-            result["mean"] = sum(parsed_numeric_parts) / len(parsed_numeric_parts)
-            result["median"] = calculate_median(parsed_numeric_parts) # Assumes calculate_median handles empty list if it can occur
-            result["min"] = min(parsed_numeric_parts)
-            result["max"] = max(parsed_numeric_parts)
+        if parsed_numeric_parts:
+            current_values = parsed_numeric_parts # These are in the detected unit
+            
+            result["mean"] = sum(current_values) / len(current_values)
+            result["median"] = calculate_median(current_values)
+            result["min"] = min(current_values)
+            result["max"] = max(current_values)
 
-            for i, val in enumerate(parsed_numeric_parts):
+            for i, val in enumerate(current_values):
                 result[f"{stat_type}_{i+1}"] = val
             
-            # The main "value" of this parsed structure, typically the mean.
-            result["value"] = round(result["mean"], 4)
-        else: # Should not happen if we return None above for empty parsed_numeric_parts
+            # The main "value" of this parsed structure is the mean, in the detected unit.
+            result["value"] = round(result["mean"], 4) 
+        else:
             result["value"] = None 
 
+        _LOGGER.debug("parse_comma_separated_values result for %s: %s", entity_name, result)
         return result
 
     except Exception as e:
@@ -154,11 +158,38 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
             "Unexpected error in parse_comma_separated_values for entity '%s', value '%s': %s", 
             entity_name, value, e, exc_info=True
         )
-        return None # Return None on any unexpected error
+        return None
 
 def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None,
-                is_cell_sensor: bool = False) -> Any:
+                is_cell_sensor: bool = False, entity_name: str = "") -> Any: # Added entity_name
     """Parse the value from the payload."""
+    
+    # If this is a pressure sensor and the value is a string, it might be a comma-separated list
+    if device_class == SensorDeviceClass.PRESSURE and isinstance(value, str) and ("," in value or ";" in value):
+        _LOGGER.debug("Attempting to parse '%s' as comma-separated pressure value for entity '%s'", value, entity_name)
+        # Call parse_comma_separated_values. 
+        # Note: is_cell_sensor is passed as True to enable parsing, or adjust the condition in parse_comma_separated_values
+        # For pressure, we want to parse it regardless of cell_sensor status.
+        # The 'stat_type' can be generic like 'part' or 'reading' if not 'cell'.
+        parsed_pressure_data = parse_comma_separated_values(
+            value, 
+            entity_name=entity_name, 
+            is_cell_sensor=True, # This allows the function to proceed. Consider making this more generic.
+                                 # Or, modify parse_comma_separated_values to not strictly require is_cell_sensor=True
+                                 # if device_class is PRESSURE. (Already done in the snippet above)
+            stat_type="pressure", 
+            device_class=device_class
+        )
+        if parsed_pressure_data and "value" in parsed_pressure_data:
+            # The 'value' (mean) and 'detected_unit' are now available.
+            # The entity creation logic will need to use 'detected_unit' for native_unit_of_measurement.
+            # For now, parse_value returns the numeric state. The unit is handled by the entity.
+            _LOGGER.debug("Parsed pressure data for %s: %s. Returning mean value: %s", entity_name, parsed_pressure_data, parsed_pressure_data["value"])
+            return parsed_pressure_data # Return the whole dict so entity can get unit and other stats
+        else:
+            _LOGGER.warning("Could not parse comma-separated pressure value '%s' for entity '%s'. Falling back.", value, entity_name)
+            # Fallback to standard parsing if comma-separated parsing fails to produce a value
+
     # Handle timestamp device class specifically
     if device_class == SensorDeviceClass.TIMESTAMP and isinstance(value, str):
         try:
@@ -168,11 +199,11 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
                 return parsed
 
             # For OVMS timestamp format, extract just the datetime part
-            import datetime
-            import re
+            import datetime # Moved import here
+            import re # Moved import here
 
             # Match format "2025-03-25 17:42:57 TIMEZONE" and extract datetime part
-            match = re.match(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', value)
+            match = re.match(r'(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})', value)
             if match:
                 dt_str = match.group(1)
                 # Create a datetime object without timezone info
@@ -181,8 +212,10 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
                 return dt_util.as_local(dt_obj)
 
             # Return current time if we can't parse it instead of failing
+            _LOGGER.warning("Could not parse timestamp string '%s' for entity '%s'. Returning current time.", value, entity_name)
             return dt_util.now()
-        except Exception:
+        except Exception as e: # Catch specific exceptions if possible
+            _LOGGER.error("Error parsing timestamp string '%s' for entity '%s': %s. Returning current time.", value, entity_name, e)
             # Return current time on parse failure instead of None
             return dt_util.now()
 
@@ -191,39 +224,53 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
         parsed_duration = parse_duration(value)
         if parsed_duration is not None:
             return parsed_duration
+        _LOGGER.warning("Could not parse duration string '%s' for entity '%s'. Falling back.", value, entity_name)
         # If parsing fails, continue with standard processing
 
     # Handle special state values for numeric sensors
     if requires_numeric_value(device_class, state_class) and is_special_state_value(value):
+        _LOGGER.debug("Value '%s' for entity '%s' is a special state value. Returning None.", value, entity_name)
         return None
 
     # Special handling for yes/no values in numeric sensors
     if requires_numeric_value(device_class, state_class) and isinstance(value, str):
-        # Convert common boolean strings to numeric values
-        if value.lower() in ["no", "off", "false", "disabled"]:
+        lower_value = value.lower()
+        if lower_value in ["no", "off", "false", "disabled"]:
+            _LOGGER.debug("Converting '%s' to 0 for entity '%s'", value, entity_name)
             return 0
-        if value.lower() in ["yes", "on", "true", "enabled"]:
+        if lower_value in ["yes", "on", "true", "enabled"]:
+            _LOGGER.debug("Converting '%s' to 1 for entity '%s'", value, entity_name)
             return 1
-
-    # Check if this is a comma-separated list of numbers for a cell sensor
-    if is_cell_sensor and isinstance(value, str) and "," in value:
-        # For cell sensors with comma separated values, extract the average
+    
+    # This specific block for "is_cell_sensor and isinstance(value, str) and "," in value:"
+    # might be redundant if SensorDeviceClass.PRESSURE is handled above and cell sensors
+    # also use SensorDeviceClass.PRESSURE or another class that gets routed to parse_comma_separated_values.
+    # If cell sensors are distinct and need this specific simple mean, it can stay.
+    # Otherwise, it might lead to double processing or conflicting logic.
+    # For now, assuming it might be for a different kind of comma-separated value not covered by the pressure logic.
+    if is_cell_sensor and isinstance(value, str) and ("," in value or ";" in value) and device_class != SensorDeviceClass.PRESSURE:
+        _LOGGER.debug("Attempting to parse '%s' as comma-separated cell value for entity '%s'", value, entity_name)
         try:
-            values = [float(part.strip()) for part in value.split(",") if part.strip()]
+            separator = ";" if ";" in value else ","
+            values = [float(part.strip()) for part in value.split(separator) if part.strip()]
             if values:
-                return round(sum(values) / len(values), 4)
+                mean_val = round(sum(values) / len(values), 4)
+                _LOGGER.debug("Parsed cell values for %s: %s. Returning mean: %s", entity_name, values, mean_val)
+                return mean_val
+            else:
+                _LOGGER.warning("No numeric parts in cell value '%s' for entity '%s'", value, entity_name)
         except (ValueError, TypeError):
-            pass
+            _LOGGER.warning("Could not parse comma-separated cell value '%s' for entity '%s'. Falling back.", value, entity_name)
+            pass # Fall through to JSON/direct parsing
 
     # Try parsing as JSON first
     try:
         json_val = json.loads(value) if isinstance(value, str) else value
 
-        # Handle special JSON values
         if is_special_state_value(json_val):
+            _LOGGER.debug("JSON value '%s' for entity '%s' is special. Returning None.", json_val, entity_name)
             return None
 
-        # If JSON is a dict, extract likely value
         if isinstance(json_val, dict):
             result = None
             if "value" in json_val:
@@ -231,67 +278,87 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             elif "state" in json_val:
                 result = json_val["state"]
             else:
-                # Return first numeric value found
                 for key, val in json_val.items():
                     if isinstance(val, (int, float)):
                         result = val
                         break
-
-            # Handle special values in result
+            
             if is_special_state_value(result):
+                _LOGGER.debug("Extracted dict value '%s' for entity '%s' is special. Returning None.", result, entity_name)
                 return None
 
-            # If we have a result, return it
             if result is not None:
+                _LOGGER.debug("Extracted value from JSON dict for %s: %s", entity_name, result)
                 return result
 
-            # If we need a numeric value but couldn't extract one, return None
             if requires_numeric_value(device_class, state_class):
+                _LOGGER.warning("Could not extract numeric value from JSON dict for %s: %s. Returning None.", entity_name, json_val)
                 return None
-            return str(json_val)
+            _LOGGER.debug("Returning string representation of JSON dict for %s: %s", entity_name, str(json_val))
+            return truncate_state_value(str(json_val))
 
-        # If JSON is a scalar, use it directly
         if isinstance(json_val, (int, float)):
+            _LOGGER.debug("JSON value for %s is numeric: %s", entity_name, json_val)
             return json_val
 
         if isinstance(json_val, str):
-            # Handle special string values
             if is_special_state_value(json_val):
+                _LOGGER.debug("JSON string value '%s' for entity '%s' is special. Returning None.", json_val, entity_name)
                 return None
-
-            # If we need a numeric value but got a string, try to convert it
             if requires_numeric_value(device_class, state_class):
                 try:
-                    return float(json_val)
+                    num_val = float(json_val)
+                    _LOGGER.debug("Converted JSON string '%s' to float %s for entity '%s'", json_val, num_val, entity_name)
+                    return num_val
                 except (ValueError, TypeError):
+                    _LOGGER.warning("Could not convert JSON string '%s' to float for entity '%s'. Returning None.", json_val, entity_name)
                     return None
-            return json_val
+            _LOGGER.debug("Returning JSON string value for %s: %s", entity_name, json_val)
+            return truncate_state_value(json_val)
 
         if isinstance(json_val, bool):
-            # If we need a numeric value, convert bool to int
             if requires_numeric_value(device_class, state_class):
-                return 1 if json_val else 0
+                val = 1 if json_val else 0
+                _LOGGER.debug("Converted JSON bool %s to %s for entity '%s'", json_val, val, entity_name)
+                return val
+            _LOGGER.debug("Returning JSON bool value for %s: %s", entity_name, json_val)
             return json_val
 
-        # For arrays or other types, convert to string if not numeric
         if requires_numeric_value(device_class, state_class):
+            _LOGGER.warning("JSON value for %s is of unhandled type %s and numeric is required. Returning None.", entity_name, type(json_val))
             return None
-        return str(json_val)
+        _LOGGER.debug("Returning string representation of JSON value for %s: %s", entity_name, str(json_val))
+        return truncate_state_value(str(json_val))
 
-    except (ValueError, json.JSONDecodeError):
-        # Not JSON, try numeric
+    except (ValueError, json.JSONDecodeError): # Added TypeError to catch non-string inputs to json.loads
+        _LOGGER.debug("Value '%s' for entity '%s' is not valid JSON. Trying direct numeric conversion.", value, entity_name)
         try:
-            # Check if it's a float
-            if isinstance(value, str) and "." in value:
-                return float(value)
-            # Check if it's an int
-            return int(value)
+            if isinstance(value, (int, float)): # Already a number
+                 _LOGGER.debug("Value for %s is already numeric: %s", entity_name, value)
+                 return value
+            if isinstance(value, str):
+                # Check if it's a float
+                if "." in value:
+                    num_val = float(value)
+                    _LOGGER.debug("Converted string '%s' to float %s for entity '%s'", value, num_val, entity_name)
+                    return num_val
+                # Check if it's an int
+                num_val = int(value)
+                _LOGGER.debug("Converted string '%s' to int %s for entity '%s'", value, num_val, entity_name)
+                return num_val
+            # If it's not a string, int, or float at this point, and numeric is required, it's an issue.
+            if requires_numeric_value(device_class, state_class):
+                _LOGGER.warning("Value '%s' (type %s) for entity '%s' could not be converted to numeric. Returning None.", value, type(value), entity_name)
+                return None
+            # Otherwise return as is, truncated
+            _LOGGER.debug("Value for %s is not numeric, returning as truncated string: %s", entity_name, value)
+            return truncate_state_value(str(value))
+
         except (ValueError, TypeError):
-            # If we need a numeric value but couldn't convert, return None
+            _LOGGER.warning("Could not convert value '%s' to numeric for entity '%s'. Returning None if numeric, else original (truncated).", value, entity_name)
             if requires_numeric_value(device_class, state_class):
                 return None
-            # Otherwise return as is
-            return value
+            return truncate_state_value(str(value)) # Ensure it's a string before returning
 
 def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: str = "",
                         is_cell_sensor: bool = False, stat_type: str = "cell") -> Dict[str, Any]:

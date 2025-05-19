@@ -265,7 +265,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
     ) -> None:
         """Initialize the sensor."""
         self._attr_unique_id = unique_id
-        self._internal_name = name
+        self._internal_name = name  # Used for logging and entity_name in parsers
         self._attr_name = friendly_name or name.replace("_", " ").title()
         self._topic = topic
         self._attr_device_info = device_info or {}
@@ -312,7 +312,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_state_class = None
             self._attr_native_unit_of_measurement = None
 
-        # Add unit to attributes
+        # Add unit to attributes if not already set by metric definition's attributes
         if self._attr_native_unit_of_measurement and "unit" not in self._attr_extra_state_attributes:
             self._attr_extra_state_attributes["unit"] = self._attr_native_unit_of_measurement
 
@@ -322,45 +322,74 @@ class OVMSSensor(SensorEntity, RestoreEntity):
               "temp" in self._topic.lower()) and
              self._attr_extra_state_attributes.get("category") == "battery") or
             self._attr_extra_state_attributes.get("has_cell_data", False) or
-            ("health" in self._topic.lower() and
+            (("health" in self._topic.lower() or "pressure" in self._topic.lower()) and # Added pressure here for robust check
              self._attr_extra_state_attributes.get("category") == "tire")
         )
-
+        
         # Determine stat type
-        self._stat_type = "cell"
-        if "temp" in self._internal_name.lower():
+        self._stat_type = "cell" # Default
+        if self._attr_extra_state_attributes.get("category") == "tire" and self._attr_device_class == SensorDeviceClass.PRESSURE:
+            self._stat_type = "pressure"
+        elif "temp" in self._internal_name.lower():
             self._stat_type = "temp"
         elif "voltage" in self._internal_name.lower():
             self._stat_type = "voltage"
+
 
         # Initialize cell sensors tracking
         self._cell_sensors_created = False
         self._cell_sensors = []
 
-        # Parse the value using original device class for formatted types
         device_class_for_parsing = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
         state_class_for_parsing = self._attr_extra_state_attributes.get("original_state_class") or self._attr_state_class
-        self._parsed_value = parse_value(initial_state, device_class_for_parsing,
-                                       state_class_for_parsing, self._is_cell_sensor)
+        
+        parsed_data_or_value = parse_value(
+            initial_state, 
+            device_class_for_parsing,
+            state_class_for_parsing, 
+            self._is_cell_sensor, # This flag might need re-evaluation for pressure sensors if it causes issues
+            entity_name=self._internal_name
+        )
 
-        # Format the value
+        attributes_processed_from_dict = False
+        if isinstance(parsed_data_or_value, dict) and device_class_for_parsing == SensorDeviceClass.PRESSURE:
+            self._parsed_value = parsed_data_or_value.get("value")
+            detected_unit = parsed_data_or_value.get("detected_unit")
+            if detected_unit:
+                self._attr_native_unit_of_measurement = detected_unit
+                self._attr_extra_state_attributes["unit"] = detected_unit
+            
+            for key, val in parsed_data_or_value.items():
+                if key not in ["value", "detected_unit"]:
+                    self._attr_extra_state_attributes[key] = val
+            attributes_processed_from_dict = True
+        else:
+            self._parsed_value = parsed_data_or_value
+
         self._attr_native_value = format_sensor_value(
             self._parsed_value, device_class_for_parsing, self._attr_extra_state_attributes
         )
 
-        # Extract additional attributes
-        if self._is_cell_sensor and isinstance(initial_state, str) and "," in initial_state:
-            self._handle_cell_values(initial_state)
-        else:
-            updated_attrs = process_json_payload(initial_state, self._attr_extra_state_attributes,
-                                               self._internal_name, self._is_cell_sensor, self._stat_type)
-            self._attr_extra_state_attributes.update(updated_attrs)
-
-        # Add device-specific attributes
-        updated_attrs = add_device_specific_attributes(
+        if not attributes_processed_from_dict:
+            # Check if this is a cell sensor (non-pressure) with comma-separated values
+            is_non_pressure_comma_separated_cell_sensor = (
+                self._is_cell_sensor and 
+                isinstance(initial_state, str) and 
+                ("," in initial_state or ";" in initial_state) and 
+                device_class_for_parsing != SensorDeviceClass.PRESSURE
+            )
+            if is_non_pressure_comma_separated_cell_sensor:
+                 self._handle_cell_values(initial_state) # Handles its own attribute extraction
+            else:
+                # For other cases (including if initial_state is JSON, or simple string not handled above)
+                updated_attrs = process_json_payload(initial_state, self._attr_extra_state_attributes,
+                                                   self._internal_name, self._is_cell_sensor, self._stat_type)
+                self._attr_extra_state_attributes.update(updated_attrs)
+        
+        updated_attrs_device_specific = add_device_specific_attributes(
             self._attr_extra_state_attributes, device_class_for_parsing, self._parsed_value
         )
-        self._attr_extra_state_attributes.update(updated_attrs)
+        self._attr_extra_state_attributes.update(updated_attrs_device_specific)
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -431,43 +460,58 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         @callback
         def update_state(payload: str) -> None:
             """Update the sensor state."""
-            # Parse the value using original values
             device_class_for_parsing = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
             state_class_for_parsing = self._attr_extra_state_attributes.get("original_state_class") or self._attr_state_class
 
-            self._parsed_value = parse_value(payload, device_class_for_parsing,
-                                           state_class_for_parsing, self._is_cell_sensor)
+            parsed_result = parse_value(
+                payload, 
+                device_class_for_parsing,
+                state_class_for_parsing, 
+                self._is_cell_sensor, # This flag might need re-evaluation
+                entity_name=self._internal_name
+            )
 
-            # Format the value
+            attributes_processed_from_dict = False
+            if isinstance(parsed_result, dict) and device_class_for_parsing == SensorDeviceClass.PRESSURE:
+                self._parsed_value = parsed_result.get("value")
+                detected_unit = parsed_result.get("detected_unit")
+                if detected_unit:
+                    self._attr_native_unit_of_measurement = detected_unit
+                    self._attr_extra_state_attributes["unit"] = detected_unit
+                
+                for key, val in parsed_result.items():
+                    if key not in ["value", "detected_unit"]:
+                        self._attr_extra_state_attributes[key] = val
+                attributes_processed_from_dict = True
+            else:
+                self._parsed_value = parsed_result
+
             self._attr_native_value = format_sensor_value(
                 self._parsed_value, device_class_for_parsing, self._attr_extra_state_attributes
             )
 
-            # Update timestamp
             self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
 
-            # Process the payload for attributes
-            if self._is_cell_sensor and isinstance(payload, str) and "," in payload:
-                self._handle_cell_values(payload)
-            else:
-                updated_attrs = process_json_payload(payload, self._attr_extra_state_attributes,
-                                                  self._internal_name, self._is_cell_sensor, self._stat_type)
-                self._attr_extra_state_attributes.update(updated_attrs)
-
-            # Add device-specific attributes
-            updated_attrs = add_device_specific_attributes(
+            if not attributes_processed_from_dict:
+                is_non_pressure_comma_separated_cell_sensor = (
+                    self._is_cell_sensor and 
+                    isinstance(payload, str) and 
+                    ("," in payload or ";" in payload) and 
+                    device_class_for_parsing != SensorDeviceClass.PRESSURE
+                )
+                if is_non_pressure_comma_separated_cell_sensor:
+                    self._handle_cell_values(payload)
+                else:
+                    updated_attrs = process_json_payload(payload, self._attr_extra_state_attributes,
+                                                      self._internal_name, self._is_cell_sensor, self._stat_type)
+                    self._attr_extra_state_attributes.update(updated_attrs)
+            
+            updated_attrs_device_specific = add_device_specific_attributes(
                 self._attr_extra_state_attributes, device_class_for_parsing, self._parsed_value
             )
-            self._attr_extra_state_attributes.update(updated_attrs)
+            self._attr_extra_state_attributes.update(updated_attrs_device_specific)
 
             self.async_write_ha_state()
-
-        # Subscribe to updates
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}", update_state,
-            )
-        )
 
     def _handle_cell_values(self, payload: str) -> None:
         """Handle cell values in payload."""
