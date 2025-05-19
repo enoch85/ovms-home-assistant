@@ -11,6 +11,7 @@ from homeassistant.const import (
     UnitOfSpeed,
     UnitOfTemperature,
     UnitOfVolume,
+    UnitOfPressure, 
 )
 
 from .const import LOGGER_NAME

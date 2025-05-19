@@ -61,78 +61,117 @@ def calculate_median(values: List[float]) -> Optional[float]:
 
 def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sensor: bool = False, 
                         stat_type: str = "cell", device_class: Optional[Any] = None) -> Optional[Dict[str, Any]]:
-    """Parse comma-separated values into a dictionary with statistics."""
+    """Parse comma-separated or semicolon-separated values into a dictionary with statistics."""
+    
+    # This function is often used for attributes of sensors that parse array-like strings.
+    # The is_cell_sensor flag can determine if it proceeds, or it can be made more general.
+    # For now, respecting the existing is_cell_sensor check:
     if not is_cell_sensor:
-        return None  # Skip processing if not a cell sensor
+        # If this function is intended *only* for cell sensors, this check is appropriate.
+        # If it's meant to be more general (e.g., for tire pressure arrays that aren't "cell_sensors"),
+        # this condition might need to be re-evaluated or the function called differently.
+        # _LOGGER.debug("Skipping parse_comma_separated_values as is_cell_sensor is False for entity: %s", entity_name)
+        return None
 
     result = {}
     try:
-        # Handle both comma and semicolon separators in values
-        separator = ";" if ";" in value else ","
+        original_input_value = value # Preserve the original input for logging or attributes
+
+        # Determine the separator
+        separator = ";" if ";" in original_input_value else ","
         
-        # Check for unit suffix like "psi" at the end
+        string_to_parse_parts_from = original_input_value
         unit_suffix = ""
-        value_without_unit = value
         
-        # Pressure unit suffixes to check for
+        # Detect and strip known pressure unit suffixes
+        # This is kept specific to pressure units as other units might not be expected in comma-separated lists
+        # or might require different handling.
         pressure_units = ["psi", "kpa", "bar"]
         for unit in pressure_units:
-            if value.lower().endswith(unit):
-                unit_suffix = value[-len(unit):].lower()
-                value_without_unit = value[:-len(unit)]
+            if string_to_parse_parts_from.lower().endswith(unit):
+                unit_suffix = string_to_parse_parts_from[-len(unit):].lower()
+                string_to_parse_parts_from = string_to_parse_parts_from[:-len(unit)].strip()
                 break
         
-        # Try to parse all parts as floats
-        _LOGGER.debug("In parsers.py: Processing value_without_unit: %s with separator: %s", value_without_unit, separator)
+        result["raw_values_string"] = string_to_parse_parts_from # Store the string part that's supposed to be numbers
+
+        _LOGGER.debug(
+            "In parse_comma_separated_values for '%s': processing numeric string '%s' with separator '%s', unit_suffix '%s'", 
+            entity_name, string_to_parse_parts_from, separator, unit_suffix
+        )
         
-        # Special handling for tire pressure values with special codes
-        if device_class == SensorDeviceClass.PRESSURE:
-            # Store the raw values as a string attribute regardless of parsing success
-            result["raw_values"] = value_without_unit
+        parsed_numeric_parts = []
+        for part_str in string_to_parse_parts_from.split(separator):
+            stripped_part = part_str.strip()
+            if stripped_part:  # Ensure part is not empty after stripping
+                try:
+                    parsed_numeric_parts.append(float(stripped_part))
+                except (ValueError, TypeError):
+                    _LOGGER.warning(
+                        "Could not parse part '%s' as float in value '%s' for entity '%s'. Skipping this part.",
+                        stripped_part, original_input_value, entity_name
+                    )
+                    # Continue to parse other parts; allows partial success
             
-            # Store special codes if present
-            has_special_codes = any(
-                val in value_without_unit for val in ["255", "254", "251"]
+        if not parsed_numeric_parts:
+            _LOGGER.warning(
+                "No numeric parts could be successfully parsed from '%s' for entity '%s'.", 
+                string_to_parse_parts_from, entity_name
             )
-            if has_special_codes:
-                result["has_special_codes"] = True
-                result["special_codes_info"] = (
-                    "Values of 255, 254, or 251 indicate special sensor states rather than actual pressure readings."
+            return None # Indicates failure to extract any numeric data
+
+        _LOGGER.debug(
+            "In parse_comma_separated_values for '%s': successfully parsed numeric parts: %s", 
+            entity_name, parsed_numeric_parts
+        )
+
+        # Unit conversion: if original unit was psi and it's a pressure sensor, convert to kPa
+        if unit_suffix == "psi" and device_class == SensorDeviceClass.PRESSURE:
+            from ..utils import convert_pressure # Ensure this import is valid and utils.convert_pressure exists
+            from homeassistant.const import UnitOfPressure
+            try:
+                converted_parts = [convert_pressure(p, "psi", UnitOfPressure.KPA) for p in parsed_numeric_parts]
+                _LOGGER.debug(
+                    "In parse_comma_separated_values for '%s': converted parts from PSI to KPA: %s", 
+                    entity_name, converted_parts
                 )
-        
-        parts = [float(part.strip()) for part in value_without_unit.split(separator) if part.strip()]
-        _LOGGER.debug("In parsers.py: Parsed parts: %s", parts)
-        
-        if parts:
-            # If we have a unit suffix and it's a known pressure unit, convert to kPa
-            if unit_suffix == "psi":
-                from ..utils import convert_pressure
-                from homeassistant.const import UnitOfPressure
-                parts = [convert_pressure(part, "psi", UnitOfPressure.KPA) for part in parts]
-                result["original_unit"] = unit_suffix
-                result["converted_from_psi"] = True
-                _LOGGER.debug("In parsers.py: Converted pressure parts from psi: %s", parts)
-            
-            # Store the array in attributes - use only one consistent naming
-            result[f"{stat_type}_values"] = parts
-            result["count"] = len(parts)
+                parsed_numeric_parts = converted_parts # Use converted values
+                result["original_unit"] = "psi"
+                result["converted_to_kpa"] = True
+            except Exception as e:
+                _LOGGER.error(
+                    "Error converting pressure units from psi to kPa for entity '%s', parts %s: %s", 
+                    entity_name, parsed_numeric_parts, e
+                )
+                # Decide whether to proceed with original (psi) parts or fail.
+                # For now, it will proceed with the already parsed (potentially psi) parts if conversion fails.
 
-            # Calculate and store statistics
-            result["median"] = calculate_median(parts)
-            result["mean"] = sum(parts) / len(parts)
-            result["min"] = min(parts)
-            result["max"] = max(parts)
+        # Populate result dictionary with statistics and individual values
+        result[f"{stat_type}_values"] = parsed_numeric_parts
+        result["count"] = len(parsed_numeric_parts)
+        
+        if parsed_numeric_parts: # Ensure list is not empty before calculating stats
+            result["mean"] = sum(parsed_numeric_parts) / len(parsed_numeric_parts)
+            result["median"] = calculate_median(parsed_numeric_parts) # Assumes calculate_median handles empty list if it can occur
+            result["min"] = min(parsed_numeric_parts)
+            result["max"] = max(parsed_numeric_parts)
 
-            # Store individual values with descriptive names
-            for i, val in enumerate(parts):
+            for i, val in enumerate(parsed_numeric_parts):
                 result[f"{stat_type}_{i+1}"] = val
+            
+            # The main "value" of this parsed structure, typically the mean.
+            result["value"] = round(result["mean"], 4)
+        else: # Should not happen if we return None above for empty parsed_numeric_parts
+            result["value"] = None 
 
-            # Return average as the main value, rounded to 4 decimal places
-            result["value"] = round(sum(parts) / len(parts), 4)
-            return result
-    except (ValueError, TypeError):
-        pass
-    return None
+        return result
+
+    except Exception as e:
+        _LOGGER.error(
+            "Unexpected error in parse_comma_separated_values for entity '%s', value '%s': %s", 
+            entity_name, value, e, exc_info=True
+        )
+        return None # Return None on any unexpected error
 
 def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None,
                 is_cell_sensor: bool = False) -> Any:
