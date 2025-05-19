@@ -112,9 +112,9 @@ def parse_numeric_value(value: Any) -> Optional[float]:
         unit_suffix = ""
         value_to_parse = value
         
-        # Common unit suffixes to check for
-        common_units = ["psi", "kpa", "bar", "°c", "°f", "c", "f", "km", "mi", "mph", "kph"]
-        for unit in common_units:
+        # Pressure unit suffixes to check for
+        pressure_units = ["psi", "kpa", "bar"]
+        for unit in pressure_units:
             if value.lower().endswith(unit):
                 unit_suffix = unit.lower()
                 value_to_parse = value[:-len(unit)]

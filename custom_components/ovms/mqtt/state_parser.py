@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from homeassistant.components.sensor import SensorDeviceClass
 
-from ..const import LOGGER_NAME
+from ..const import LOGGER_NAME, DOMAIN
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -50,9 +50,9 @@ class StateParser:
         
         # Only process strings
         if isinstance(value, str):
-            # Common unit suffixes to check for
-            common_units = ["psi", "kpa", "bar", "°c", "°f", "c", "f", "km", "mi", "mph", "kph"]
-            for unit in common_units:
+            # Pressure unit suffixes to check for
+            pressure_units = ["psi", "kpa", "bar"]
+            for unit in pressure_units:
                 if value.lower().endswith(unit):
                     unit_suffix = value[-len(unit):].lower()
                     value_without_unit = value[:-len(unit)]
@@ -64,21 +64,84 @@ class StateParser:
                 # Determine the separator
                 separator = ";" if ";" in value_without_unit else ","
                 
-                # Try to parse all parts as floats
-                parts = [float(part.strip()) for part in value_without_unit.split(separator) if part.strip()]
-                if parts:
-                    # If we have a unit suffix and it's a pressure unit, convert as needed
+                # Handling for tire pressure values
+                if device_class == SensorDeviceClass.PRESSURE:
+                    _LOGGER.debug("Processing tire pressure values for string: '%s'", value_without_unit)
+                    
+                    parsed_floats = []
+                    all_parts_valid = True
+                    # Split the string into potential parts, stripping whitespace and removing empty parts
+                    potential_parts = [p.strip() for p in value_without_unit.split(separator) if p.strip()]
+
+                    if not potential_parts: # If, after stripping and filtering, there are no parts
+                        _LOGGER.debug("No valid parts found after splitting and stripping: '%s'", value_without_unit)
+                        all_parts_valid = False # Will cause fall-through
+                    else:
+                        for part_str in potential_parts:
+                            # Each part_str is already stripped and non-empty here
+                            try:
+                                parsed_floats.append(float(part_str))
+                            except (ValueError, TypeError):
+                                _LOGGER.debug("Failed to parse '%s' as float in pressure-specific block.", part_str)
+                                all_parts_valid = False
+                                break # Stop processing if one part is invalid for this specific block
+                    
+                    if all_parts_valid and parsed_floats: # Ensure all parts were valid and we have some numbers
+                        _LOGGER.debug("Successfully parsed all pressure parts: %s from '%s'", parsed_floats, value_without_unit)
+                        
+                        # Unit conversion if necessary (e.g., psi to kPa)
+                        if unit_suffix == "psi": # Already know device_class is PRESSURE
+                            from ..utils import convert_pressure
+                            from homeassistant.const import UnitOfPressure
+                            parsed_floats = [convert_pressure(p, "psi", UnitOfPressure.KPA) for p in parsed_floats]
+                            _LOGGER.debug("Converted PSI pressure parts to KPA: %s", parsed_floats)
+                        
+                        avg_value = sum(parsed_floats) / len(parsed_floats)
+                        result = round(avg_value, 4)
+                        _LOGGER.debug("Calculated pressure result: %s from parts: %s", result, parsed_floats)
+                        return result
+                    else:
+                        # If not all parts were valid, or no parts were found,
+                        # fall through to the generic list parser or other parsing methods.
+                        _LOGGER.debug("Falling through from pressure-specific block for: '%s'", value_without_unit)
+
+                # Generic comma/semicolon separated list parsing (fallback or for other device classes)
+                _LOGGER.debug("Processing comma/semicolon list (generic fallback): '%s' with device_class: %s", value_without_unit, device_class)
+                
+                generic_parts_parsed = []
+                all_generic_parts_valid = True
+                potential_generic_parts = [p.strip() for p in value_without_unit.split(separator) if p.strip()]
+
+                if not potential_generic_parts:
+                    all_generic_parts_valid = False
+                else:
+                    for part_str in potential_generic_parts:
+                        try:
+                            generic_parts_parsed.append(float(part_str))
+                        except (ValueError, TypeError):
+                            all_generic_parts_valid = False
+                            _LOGGER.debug("Generic list parser failed to parse part '%s' from '%s'", part_str, value_without_unit)
+                            break
+                
+                if all_generic_parts_valid and generic_parts_parsed:
+                    _LOGGER.debug("Parsed generic parts: %s from '%s'", generic_parts_parsed, value_without_unit)
+                    # Unit conversion for pressure, if applicable and not handled above
                     if unit_suffix == "psi" and device_class == SensorDeviceClass.PRESSURE:
                         from ..utils import convert_pressure
                         from homeassistant.const import UnitOfPressure
-                        parts = [convert_pressure(part, "psi", UnitOfPressure.KPA) for part in parts]
+                        generic_parts_parsed = [convert_pressure(part, "psi", UnitOfPressure.KPA) for part in generic_parts_parsed]
+                        _LOGGER.debug("Converted pressure parts (generic fallback) from psi: %s", generic_parts_parsed)
                     
-                    # Calculate and return statistics
-                    avg_value = sum(parts) / len(parts)
-                    # Return the average as the main value, rounded to 4 decimal places
-                    return round(avg_value, 4)
-            except (ValueError, TypeError):
-                # If any part can't be converted to float, fall through to other methods
+                    avg_value = sum(generic_parts_parsed) / len(generic_parts_parsed)
+                    result = round(avg_value, 4)
+                    _LOGGER.debug("Calculated generic list result: %s from parts: %s", result, generic_parts_parsed)
+                    return result
+                else:
+                    _LOGGER.debug("Generic list parsing failed or yielded no parts for: '%s'", value_without_unit)
+
+            except Exception as e: # Catch any unexpected error during list processing
+                _LOGGER.debug("Error during comma/semicolon list processing for '%s': %s. Falling through.", value_without_unit, e, exc_info=True)
+                # Fall through to other parsing methods
                 pass
 
         # Try parsing as JSON first

@@ -59,7 +59,8 @@ def calculate_median(values: List[float]) -> Optional[float]:
         return (sorted_values[n//2 - 1] + sorted_values[n//2]) / 2
     return sorted_values[n//2]
 
-def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sensor: bool = False, stat_type: str = "cell") -> Optional[Dict[str, Any]]:
+def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sensor: bool = False, 
+                        stat_type: str = "cell", device_class: Optional[Any] = None) -> Optional[Dict[str, Any]]:
     """Parse comma-separated values into a dictionary with statistics."""
     if not is_cell_sensor:
         return None  # Skip processing if not a cell sensor
@@ -73,16 +74,35 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
         unit_suffix = ""
         value_without_unit = value
         
-        # Common unit suffixes to check for
-        common_units = ["psi", "kpa", "bar", "°c", "°f", "c", "f", "km", "mi", "mph", "kph"]
-        for unit in common_units:
+        # Pressure unit suffixes to check for
+        pressure_units = ["psi", "kpa", "bar"]
+        for unit in pressure_units:
             if value.lower().endswith(unit):
                 unit_suffix = value[-len(unit):].lower()
                 value_without_unit = value[:-len(unit)]
                 break
         
         # Try to parse all parts as floats
+        _LOGGER.debug("In parsers.py: Processing value_without_unit: %s with separator: %s", value_without_unit, separator)
+        
+        # Special handling for tire pressure values with special codes
+        if device_class == SensorDeviceClass.PRESSURE:
+            # Store the raw values as a string attribute regardless of parsing success
+            result["raw_values"] = value_without_unit
+            
+            # Store special codes if present
+            has_special_codes = any(
+                val in value_without_unit for val in ["255", "254", "251"]
+            )
+            if has_special_codes:
+                result["has_special_codes"] = True
+                result["special_codes_info"] = (
+                    "Values of 255, 254, or 251 indicate special sensor states rather than actual pressure readings."
+                )
+        
         parts = [float(part.strip()) for part in value_without_unit.split(separator) if part.strip()]
+        _LOGGER.debug("In parsers.py: Parsed parts: %s", parts)
+        
         if parts:
             # If we have a unit suffix and it's a known pressure unit, convert to kPa
             if unit_suffix == "psi":
@@ -91,6 +111,7 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
                 parts = [convert_pressure(part, "psi", UnitOfPressure.KPA) for part in parts]
                 result["original_unit"] = unit_suffix
                 result["converted_from_psi"] = True
+                _LOGGER.debug("In parsers.py: Converted pressure parts from psi: %s", parts)
             
             # Store the array in attributes - use only one consistent naming
             result[f"{stat_type}_values"] = parts
