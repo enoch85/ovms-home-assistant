@@ -363,6 +363,8 @@ VW_EUP_METRICS = {
         "icon": "mdi:tag-text",
         "category": "vw_eup",
         "entity_category": EntityCategory.DIAGNOSTIC,
+        "device_class": None,  # Explicitly not numeric
+        "state_class": None,
     },
     "xvu.v.t.diff": {
         "name": "VW eUP! Tire Pressure Difference",
