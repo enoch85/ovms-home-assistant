@@ -10,6 +10,8 @@ DEVICE_METRICS = {
         "icon": "mdi:car",
         "category": "device",
         "entity_category": EntityCategory.DIAGNOSTIC,
+        "device_class": None,  # Explicitly not numeric
+        "state_class": None,
     },
     "v.vin": {
         "name": "Vehicle Identification Number",
@@ -17,5 +19,7 @@ DEVICE_METRICS = {
         "icon": "mdi:identifier",
         "category": "device",
         "entity_category": EntityCategory.DIAGNOSTIC,
+        "device_class": None,  # Explicitly not numeric
+        "state_class": None,
     },
 }

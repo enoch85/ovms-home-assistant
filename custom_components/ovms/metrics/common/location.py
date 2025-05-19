@@ -50,6 +50,8 @@ LOCATION_METRICS = {
         "description": "<GPS><GLONASS>; N/A/D/E (None/Autonomous/Differential/Estimated)",
         "icon": "mdi:crosshairs-gps",
         "category": "location",
+        "device_class": None,  # Explicitly not numeric
+        "state_class": None,
     },
     "v.p.gpssq": {
         "name": "GPS Signal Quality",
@@ -75,6 +77,7 @@ LOCATION_METRICS = {
         "icon": "mdi:clock",
         "device_class": SensorDeviceClass.TIMESTAMP,
         "category": "location",
+        "state_class": None,  # Timestamps don't have a state class
     },
     "v.p.latitude": {
         "name": "Latitude",
@@ -88,6 +91,8 @@ LOCATION_METRICS = {
         "description": "Name of current location if defined",
         "icon": "mdi:map-marker",
         "category": "location",
+        "device_class": None,  # Explicitly not numeric
+        "state_class": None,
     },
     "v.p.longitude": {
         "name": "Longitude",

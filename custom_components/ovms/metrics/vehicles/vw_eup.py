@@ -363,11 +363,14 @@ VW_EUP_METRICS = {
         "icon": "mdi:tag-text",
         "category": "vw_eup",
         "entity_category": EntityCategory.DIAGNOSTIC,
+        "device_class": None,  # Explicitly not numeric
+        "state_class": None,
     },
     "xvu.v.t.diff": {
         "name": "VW eUP! Tire Pressure Difference",
         "description": "Difference in tire pressure values",
         "icon": "mdi:car-tire-alert",
+        "device_class": SensorDeviceClass.PRESSURE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPressure.KPA,
         "category": "vw_eup",
@@ -376,6 +379,7 @@ VW_EUP_METRICS = {
         "name": "VW eUP! Tire Emergency Values",
         "description": "Emergency tire pressure values",
         "icon": "mdi:car-tire-alert",
+        "device_class": SensorDeviceClass.PRESSURE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPressure.KPA,
         "category": "vw_eup",

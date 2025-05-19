@@ -64,10 +64,12 @@ SYSTEM_METRICS = {
     },
     "m.time.utc": {
         "name": "UTC Time",
-        "description": "Current UTC time",
-        "icon": "mdi:clock",
+        "description": "UTC time from GSM module",
+        "icon": "mdi:clock-outline",
         "device_class": SensorDeviceClass.TIMESTAMP,
         "category": "system",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+        "state_class": None,  # Timestamps don't have a state class
     },
     "m.version": {
         "name": "Firmware Version",
