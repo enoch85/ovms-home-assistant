@@ -125,26 +125,9 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
             entity_name, parsed_numeric_parts
         )
 
-        # Unit conversion: if original unit was psi and it's a pressure sensor, convert to kPa
-        if unit_suffix == "psi" and device_class == SensorDeviceClass.PRESSURE:
-            from ..utils import convert_pressure # Ensure this import is valid and utils.convert_pressure exists
-            from homeassistant.const import UnitOfPressure
-            try:
-                converted_parts = [convert_pressure(p, "psi", UnitOfPressure.KPA) for p in parsed_numeric_parts]
-                _LOGGER.debug(
-                    "In parse_comma_separated_values for '%s': converted parts from PSI to KPA: %s", 
-                    entity_name, converted_parts
-                )
-                parsed_numeric_parts = converted_parts # Use converted values
-                result["original_unit"] = "psi"
-                result["converted_to_kpa"] = True
-            except Exception as e:
-                _LOGGER.error(
-                    "Error converting pressure units from psi to kPa for entity '%s', parts %s: %s", 
-                    entity_name, parsed_numeric_parts, e
-                )
-                # Decide whether to proceed with original (psi) parts or fail.
-                # For now, it will proceed with the already parsed (potentially psi) parts if conversion fails.
+        # Store the detected unit suffix in the result.
+        # The parsed_numeric_parts are in this unit.
+        result["detected_unit"] = unit_suffix
 
         # Populate result dictionary with statistics and individual values
         result[f"{stat_type}_values"] = parsed_numeric_parts
