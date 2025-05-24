@@ -127,6 +127,12 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         }
         self._command_function = command_function
 
+        # Initialize new attributes for custom payloads and states
+        self._payload_on = attributes.get("payload_on")
+        self._payload_off = attributes.get("payload_off")
+        self._state_on = attributes.get("state_on")
+        self._state_off = attributes.get("state_off")
+
         # Explicitly set entity_id - this ensures consistent naming
         if hass:
             self.entity_id = async_generate_entity_id(
@@ -193,7 +199,13 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
 
     def _parse_state(self, state: str) -> bool:
         """Parse the state string to a boolean."""
-        _LOGGER.debug("Parsing switch state: %s", state)
+        _LOGGER.debug("Parsing switch state: %s for %s", state, self.name)
+
+        # Check for custom on/off states first
+        if self._state_on is not None and isinstance(state, str) and state.strip().lower() == self._state_on.strip().lower():
+            return True
+        if self._state_off is not None and isinstance(state, str) and state.strip().lower() == self._state_off.strip().lower():
+            return False
 
         # Try to parse as JSON first
         try:
@@ -337,7 +349,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         # Use the command function to send the command
         result = await self._command_function(
             command=self._command,
-            parameters="on",
+            parameters=self._payload_on if self._payload_on is not None else "on",
         )
 
         if result["success"]:
@@ -353,7 +365,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         # Use the command function to send the command
         result = await self._command_function(
             command=self._command,
-            parameters="off",
+            parameters=self._payload_off if self._payload_off is not None else "off",
         )
 
         if result["success"]:

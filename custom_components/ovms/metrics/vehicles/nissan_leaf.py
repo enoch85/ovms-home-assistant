@@ -309,4 +309,30 @@ NISSAN_LEAF_METRICS = {
         "device_class": BinarySensorDeviceClass.RUNNING,
         "category": "nissan_leaf",
     },
+
+    # Switch entities
+    "xnl.v.c.climate_control": {
+        "name": "Nissan Leaf Climate Control",
+        "description": "Controls the vehicle's climate system.",
+        "icon": "mdi:air-conditioner",
+        "entity_type": "switch",
+        "command": "climatecontrol",
+        "category": "climate",
+        "state_topic_suffix": "STATE.CCL",
+        "state_on": "Climate Control \non\n",
+        "state_off": "Climate Control \noff\n",
+    },
+    "xnl.v.c.charge_control": {
+        "name": "Nissan Leaf Charge Control",
+        "description": "Controls the vehicle's charging.",
+        "icon": "mdi:ev-station",
+        "entity_type": "switch",
+        "command": "charge",
+        "payload_on": "start",
+        "payload_off": "stop",
+        "category": "charging",
+        "state_topic_suffix": "STATE.CHG",
+        "state_on": "Charge has been started\n",
+        "state_off": "Charge has been stopped\n",
+    },
 }
