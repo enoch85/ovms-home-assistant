@@ -52,6 +52,29 @@ async def async_setup_entry(
                 _LOGGER.error("Error creating cell sensors: %s", ex)
             return
 
+        # Handle tire pressure sensors differently  
+        if "tire_sensors" in data:
+            _LOGGER.debug("Adding tire pressure sensors from parent entity: %s", data.get("parent_entity"))
+            try:
+                sensors = []
+                for tire_config in data["tire_sensors"]:
+                    sensor = CellVoltageSensor(  # Reuse CellVoltageSensor for individual tire sensors
+                        tire_config["unique_id"],
+                        tire_config["name"],
+                        tire_config.get("topic", ""),
+                        tire_config.get("state"),
+                        tire_config.get("device_info", {}),
+                        tire_config.get("attributes", {}),
+                        tire_config.get("friendly_name"),
+                        hass,
+                    )
+                    sensors.append(sensor)
+
+                async_add_entities(sensors)
+            except Exception as ex:
+                _LOGGER.error("Error creating tire pressure sensors: %s", ex)
+            return
+
         try:
             sensor = OVMSSensor(
                 data.get("unique_id", ""),

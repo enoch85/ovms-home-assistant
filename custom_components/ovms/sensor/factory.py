@@ -242,3 +242,73 @@ def create_cell_sensors(topic: str, cell_values: List[float],
         sensor_configs.append(sensor_config)
 
     return sensor_configs
+
+def create_tire_pressure_sensors(topic: str, pressure_values: List[float],
+                               vehicle_id: str, parent_unique_id: str,
+                               device_info: Dict[str, Any], attributes: Dict[str, Any],
+                               create_individual_sensors: bool = False) -> List[Dict[str, Any]]:
+    """Create configuration for individual tire pressure sensors.
+
+    Args:
+        topic: The original MQTT topic
+        pressure_values: List of pressure values for each tire
+        vehicle_id: Vehicle identifier
+        parent_unique_id: Unique ID of the parent sensor
+        device_info: Device information
+        attributes: Sensor attributes
+        create_individual_sensors: If True, create individual sensors for tires
+    """
+    if not create_individual_sensors or len(pressure_values) != 4:
+        return []
+
+    # Add topic hash to make unique IDs truly unique
+    topic_hash = hashlib.md5(topic.encode()).hexdigest()[:8]
+    
+    # Tire position names
+    tire_positions = [
+        {"name": "Front Left", "abbreviation": "fl", "index": 0},
+        {"name": "Front Right", "abbreviation": "fr", "index": 1},
+        {"name": "Rear Left", "abbreviation": "rl", "index": 2},
+        {"name": "Rear Right", "abbreviation": "rr", "index": 3}
+    ]
+
+    sensor_configs = []
+
+    for position in tire_positions:
+        i = position["index"]
+        if i < len(pressure_values):
+            value = pressure_values[i]
+            
+            # Generate unique entity name
+            entity_name = f"ovms_{vehicle_id}_tire_pressure_{position['abbreviation']}".lower()
+            
+            # Generate unique ID using hash
+            tire_unique_id = f"{vehicle_id}_tire_pressure_{topic_hash}_{position['abbreviation']}"
+            
+            # Create friendly name
+            friendly_name = f"Tire Pressure {position['name']}"
+            
+            # Create sensor config
+            sensor_config = {
+                "unique_id": tire_unique_id,
+                "name": entity_name,
+                "friendly_name": friendly_name,
+                "state": value,
+                "device_info": device_info,
+                "topic": f"{topic}/tire/{position['abbreviation']}",
+                "attributes": {
+                    "tire_position": position["name"],
+                    "tire_index": i,
+                    "parent_unique_id": parent_unique_id,
+                    "parent_topic": topic,
+                    "category": "tire",
+                    "device_class": SensorDeviceClass.PRESSURE,
+                    "state_class": SensorStateClass.MEASUREMENT,
+                    "unit_of_measurement": attributes.get("unit_of_measurement", "kPa"),
+                    "icon": "mdi:gauge",
+                },
+            }
+
+            sensor_configs.append(sensor_config)
+
+    return sensor_configs

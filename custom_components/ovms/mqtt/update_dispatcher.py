@@ -79,7 +79,7 @@ class UpdateDispatcher:
             # Dispatch the update signal
             signal = f"{SIGNAL_UPDATE_ENTITY}_{entity_id}"
 
-            _LOGGER.debug("Dispatching update for %s", entity_id)
+            # _LOGGER.debug("Dispatching update for %s", entity_id)  # Commented out to reduce log spam
             async_dispatcher_send(self.hass, signal, payload)
 
         except Exception as ex:

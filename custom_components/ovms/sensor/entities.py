@@ -14,7 +14,7 @@ from homeassistant.const import UnitOfTime
 
 from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
 from .parsers import parse_value, process_json_payload, requires_numeric_value, is_special_state_value, calculate_median
-from .factory import determine_sensor_type, add_device_specific_attributes, create_cell_sensors
+from .factory import determine_sensor_type, add_device_specific_attributes, create_cell_sensors, create_tire_pressure_sensors
 from .duration_formatter import format_duration, parse_duration
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -339,6 +339,10 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Initialize cell sensors tracking
         self._cell_sensors_created = False
         self._cell_sensors = []
+        
+        # Initialize tire pressure sensors tracking
+        self._tire_sensors_created = False
+        self._tire_sensors = []
 
         device_class_for_parsing = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
         state_class_for_parsing = self._attr_extra_state_attributes.get("original_state_class") or self._attr_state_class
@@ -516,24 +520,60 @@ class OVMSSensor(SensorEntity, RestoreEntity):
     def _handle_cell_values(self, payload: str) -> None:
         """Handle cell values in payload."""
         try:
-            # Parse comma-separated values
-            values = [float(part.strip()) for part in payload.split(",") if part.strip()]
+            separator = ";" if ";" in payload else ","
+            values = [float(val.strip()) for val in payload.split(separator) if val.strip()]
+
             if not values:
                 return
 
-            # Store values with consistent naming
-            self._attr_extra_state_attributes[f"{self._stat_type}_values"] = values
+            # Check if this is a tire pressure sensor with 4 values
+            if (self._stat_type == "pressure" and 
+                self._attr_extra_state_attributes.get("category") == "tire" and 
+                len(values) == 4):
+                self._handle_tire_pressure_values(values)
+            else:
+                # Handle regular cell values (battery cells, etc.)
+                self._handle_regular_cell_values(values)
+                
+        except Exception as ex:
+            _LOGGER.exception("Error handling cell values: %s", ex)
+    
+    def _handle_tire_pressure_values(self, pressure_values: List[float]) -> None:
+        """Handle tire pressure values specifically."""
+        try:
+            # Store tire pressure statistics
+            self._attr_extra_state_attributes["count"] = len(pressure_values)
+            self._attr_extra_state_attributes["min"] = min(pressure_values)
+            self._attr_extra_state_attributes["max"] = max(pressure_values)
+            self._attr_extra_state_attributes["mean"] = round(sum(pressure_values) / len(pressure_values), 4)
+            self._attr_extra_state_attributes["median"] = calculate_median(pressure_values)
+
+            # Store individual tire pressure values with descriptive names
+            tire_positions = ["front_left", "front_right", "rear_left", "rear_right"]
+            for i, (position, value) in enumerate(zip(tire_positions, pressure_values)):
+                self._attr_extra_state_attributes[f"tire_{position}"] = value
+                self._attr_extra_state_attributes[f"pressure_{i+1}"] = value  # Keep numeric indexing too
+
+            # Create individual tire sensors if enabled
+            if CREATE_INDIVIDUAL_CELL_SENSORS:  # Reuse the same configuration flag
+                self._create_tire_pressure_sensors(pressure_values)
+
+            # Update tire sensor values if they exist
+            if hasattr(self, '_tire_sensors_created') and self._tire_sensors_created:
+                self._update_tire_sensor_values(pressure_values)
+                
+        except Exception as ex:
+            _LOGGER.exception("Error handling tire pressure values: %s", ex)
+    
+    def _handle_regular_cell_values(self, values: List[float]) -> None:
+        """Handle regular cell values (battery cells, etc.)."""
+        try:
+            # Store cell statistics
             self._attr_extra_state_attributes["count"] = len(values)
-
-            # Remove legacy names
-            for old_key in ["cell_values", "values", "cell_count"]:
-                if old_key in self._attr_extra_state_attributes and (old_key != "cell_values" or self._stat_type != "cell"):
-                    del self._attr_extra_state_attributes[old_key]
-
-            # Calculate statistics
-            self._attr_extra_state_attributes["median"] = calculate_median(values)
             self._attr_extra_state_attributes["min"] = min(values)
             self._attr_extra_state_attributes["max"] = max(values)
+            self._attr_extra_state_attributes["mean"] = round(sum(values) / len(values), 4)
+            self._attr_extra_state_attributes["median"] = calculate_median(values)
 
             # Remove legacy stats
             for legacy_key in ["min_value", "max_value", "mean_value", "median_value"]:
@@ -551,47 +591,40 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             for i, val in enumerate(values):
                 self._attr_extra_state_attributes[f"{self._stat_type}_{i+1}"] = val
 
+            # Create individual cell sensors if enabled
+            if CREATE_INDIVIDUAL_CELL_SENSORS:
+                self._create_cell_sensors(values)
+
             # Update cell sensors if created
             if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created and CREATE_INDIVIDUAL_CELL_SENSORS:
                 self._update_cell_sensor_values(values)
+                
         except Exception as ex:
-            _LOGGER.exception("Error handling cell values: %s", ex)
+            _LOGGER.exception("Error handling regular cell values: %s", ex)
 
-    def _update_cell_sensor_values(self, cell_values: List[float]) -> None:
-        """Update existing cell sensors."""
-        if not self.hass or not hasattr(self, '_cell_sensors'):
-            return
-
-        for i, value in enumerate(cell_values):
-            if i < len(self._cell_sensors):
-                cell_id = self._cell_sensors[i]
-                async_dispatcher_send(
-                    self.hass, f"{SIGNAL_UPDATE_ENTITY}_{cell_id}", value,
-                )
-
-    def _create_cell_sensors(self, cell_values: List[float]) -> None:
-        """Create individual sensors for each cell value."""
-        if self._cell_sensors_created or not self.hass:
+    def _create_tire_pressure_sensors(self, pressure_values: List[float]) -> None:
+        """Create individual sensors for each tire pressure value."""
+        if self._tire_sensors_created or not self.hass or len(pressure_values) != 4:
             return
 
         # Extract vehicle_id
         vehicle_id = self.unique_id.split('_')[0]
 
         # Create sensor configs
-        sensor_configs = create_cell_sensors(
-            self._topic, cell_values, vehicle_id, self.unique_id, self.device_info,
+        sensor_configs = create_tire_pressure_sensors(
+            self._topic, pressure_values, vehicle_id, self.unique_id, self.device_info,
             {
                 "name": self.name,
-                "category": self._attr_extra_state_attributes.get("category", "battery"),
+                "category": self._attr_extra_state_attributes.get("category", "tire"),
                 "device_class": self._attr_device_class,
                 "unit_of_measurement": self._attr_native_unit_of_measurement,
             },
-            CREATE_INDIVIDUAL_CELL_SENSORS
+            CREATE_INDIVIDUAL_CELL_SENSORS  # Reuse the same configuration flag
         )
 
-        # Store cell sensor IDs
-        self._cell_sensors = [config["unique_id"] for config in sensor_configs]
-        self._cell_sensors_created = True
+        # Store tire sensor IDs
+        self._tire_sensors = [config["unique_id"] for config in sensor_configs]
+        self._tire_sensors_created = True
 
         # Add entities
         if sensor_configs:
@@ -599,7 +632,19 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 self.hass, SIGNAL_ADD_ENTITIES,
                 {
                     "entity_type": "sensor",
-                    "cell_sensors": sensor_configs,
+                    "tire_sensors": sensor_configs,
                     "parent_entity": self.entity_id,
                 }
             )
+
+    def _update_tire_sensor_values(self, pressure_values: List[float]) -> None:
+        """Update existing tire pressure sensors."""
+        if not self.hass or not hasattr(self, '_tire_sensors'):
+            return
+
+        for i, value in enumerate(pressure_values):
+            if i < len(self._tire_sensors):
+                tire_id = self._tire_sensors[i]
+                async_dispatcher_send(
+                    self.hass, f"{SIGNAL_UPDATE_ENTITY}_{tire_id}", value,
+                )

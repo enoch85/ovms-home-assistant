@@ -3,7 +3,7 @@ import json
 import logging
 import re
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.util import dt as dt_util
@@ -20,6 +20,7 @@ NUMERIC_DEVICE_CLASSES = [
     SensorDeviceClass.ENERGY,
     SensorDeviceClass.HUMIDITY,
     SensorDeviceClass.POWER,
+    SensorDeviceClass.PRESSURE,
     SensorDeviceClass.TEMPERATURE,
     SensorDeviceClass.VOLTAGE,
     SensorDeviceClass.DISTANCE,
@@ -167,57 +168,83 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
     # If this is a pressure sensor and the value is a string, it might be a comma-separated list
     if device_class == SensorDeviceClass.PRESSURE and isinstance(value, str) and ("," in value or ";" in value):
         _LOGGER.debug("Attempting to parse '%s' as comma-separated pressure value for entity '%s'", value, entity_name)
-        # Call parse_comma_separated_values. 
-        # Note: is_cell_sensor is passed as True to enable parsing, or adjust the condition in parse_comma_separated_values
-        # For pressure, we want to parse it regardless of cell_sensor status.
-        # The 'stat_type' can be generic like 'part' or 'reading' if not 'cell'.
         parsed_pressure_data = parse_comma_separated_values(
             value, 
             entity_name=entity_name, 
-            is_cell_sensor=True, # This allows the function to proceed. Consider making this more generic.
-                                 # Or, modify parse_comma_separated_values to not strictly require is_cell_sensor=True
-                                 # if device_class is PRESSURE. (Already done in the snippet above)
+            is_cell_sensor=True, 
             stat_type="pressure", 
             device_class=device_class
         )
         if parsed_pressure_data and "value" in parsed_pressure_data:
-            # The 'value' (mean) and 'detected_unit' are now available.
-            # The entity creation logic will need to use 'detected_unit' for native_unit_of_measurement.
-            # For now, parse_value returns the numeric state. The unit is handled by the entity.
             _LOGGER.debug("Parsed pressure data for %s: %s. Returning mean value: %s", entity_name, parsed_pressure_data, parsed_pressure_data["value"])
-            return parsed_pressure_data # Return the whole dict so entity can get unit and other stats
+            return parsed_pressure_data 
         else:
             _LOGGER.warning("Could not parse comma-separated pressure value '%s' for entity '%s'. Falling back.", value, entity_name)
-            # Fallback to standard parsing if comma-separated parsing fails to produce a value
+            # Fallback to standard parsing
 
     # Handle timestamp device class specifically
-    if device_class == SensorDeviceClass.TIMESTAMP and isinstance(value, str):
-        try:
-            # Try Home Assistant's built-in datetime parser first
-            parsed = dt_util.parse_datetime(value)
-            if parsed:
-                return parsed
+    if device_class == SensorDeviceClass.TIMESTAMP:
+        if isinstance(value, (int, float)):
+            try:
+                # Attempt to parse as Unix timestamp (seconds)
+                # Clamp to a reasonable date range to avoid issues with very small/large numbers
+                if datetime(1980, 1, 1).timestamp() < value < datetime(2038, 1, 19).timestamp(): # Typical 32-bit Unix time range
+                    dt_obj = datetime.fromtimestamp(value, tz=dt_util.UTC)
+                    _LOGGER.debug("Parsed numeric value '%s' as Unix timestamp to %s for entity '%s'", value, dt_obj.isoformat(), entity_name)
+                    return dt_obj
+                else:
+                    _LOGGER.warning("Numeric value '%s' for timestamp entity '%s' is out of expected Unix timestamp range. Returning current time.", value, entity_name)
+                    return dt_util.now().astimezone(dt_util.UTC)
+            except Exception as e:
+                _LOGGER.error("Error parsing numeric value '%s' as Unix timestamp for entity '%s': %s. Returning current time.", value, entity_name, e)
+                return dt_util.now().astimezone(dt_util.UTC)
+        elif isinstance(value, str):
+            try:
+                stripped_value = value.strip()
+                # Attempt 1: Home Assistant's built-in datetime parser first
+                parsed = dt_util.parse_datetime(stripped_value)
+                if parsed:
+                    if parsed.tzinfo is None:
+                        _LOGGER.debug("dt_util.parse_datetime for '%s' (stripped) returned naive datetime. Interpreting as local and converting to UTC.", stripped_value)
+                        return dt_util.as_local(parsed).astimezone(dt_util.UTC)
+                    return parsed.astimezone(dt_util.UTC)
 
-            # For OVMS timestamp format, extract just the datetime part
-            import datetime # Moved import here
-            import re # Moved import here
-
-            # Match format "2025-03-25 17:42:57 TIMEZONE" and extract datetime part
-            match = re.match(r'(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})', value)
-            if match:
-                dt_str = match.group(1)
-                # Create a datetime object without timezone info
-                dt_obj = datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
-                # Home Assistant requires tzinfo, but we'll use local time zone
-                return dt_util.as_local(dt_obj)
-
-            # Return current time if we can't parse it instead of failing
-            _LOGGER.warning("Could not parse timestamp string '%s' for entity '%s'. Returning current time.", value, entity_name)
-            return dt_util.now()
-        except Exception as e: # Catch specific exceptions if possible
-            _LOGGER.error("Error parsing timestamp string '%s' for entity '%s': %s. Returning current time.", value, entity_name, e)
-            # Return current time on parse failure instead of None
-            return dt_util.now()
+                # Attempt 2: Custom regex parsing if dt_util.parse_datetime fails
+                match = re.match(r'(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})\\s*([A-Z]{3,5})?', stripped_value)
+                if match:
+                    dt_str = match.group(1)
+                    tz_abbr = match.group(2)
+                    try:
+                        dt_naive = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+                        if tz_abbr == "UTC":
+                            return dt_naive.replace(tzinfo=dt_util.UTC)
+                        elif tz_abbr == "CEST":
+                            dt_utc = dt_naive - timedelta(hours=2)
+                            return dt_utc.replace(tzinfo=dt_util.UTC)
+                        else:
+                            _LOGGER.debug(
+                                "Timestamp '%s' (stripped) for entity '%s' - TZ part '%s' not explicitly handled or missing. Interpreting as local and converting to UTC.",
+                                stripped_value, entity_name, tz_abbr
+                            )
+                            return dt_util.as_local(dt_naive).astimezone(dt_util.UTC)
+                    except ValueError:
+                        _LOGGER.warning(
+                            "Could not parse extracted datetime string '%s' from value '%s' for entity '%s'.",
+                            dt_str, stripped_value, entity_name
+                        )
+                
+                _LOGGER.warning(
+                    "Could not parse timestamp string '%s' (stripped value: '%s') for entity '%s'. Returning current time.",
+                    value, stripped_value, entity_name
+                )
+                return dt_util.now().astimezone(dt_util.UTC)
+            except Exception as e:
+                _LOGGER.error("Error parsing timestamp string '%s' for entity '%s': %s. Returning current time.", value, entity_name, e)
+                return dt_util.now().astimezone(dt_util.UTC)
+        else:
+            # Value is not a string, int, or float for a timestamp sensor
+            _LOGGER.warning("Timestamp entity '%s' received value '%s' of unexpected type %s. Returning current time.", entity_name, value, type(value))
+            return dt_util.now().astimezone(dt_util.UTC)
 
     # For duration sensors, use our dedicated parser
     if device_class == SensorDeviceClass.DURATION:
@@ -262,6 +289,30 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
         except (ValueError, TypeError):
             _LOGGER.warning("Could not parse comma-separated cell value '%s' for entity '%s'. Falling back.", value, entity_name)
             pass # Fall through to JSON/direct parsing
+
+    # Generic handler for comma-separated numeric values for other numeric sensors
+    if requires_numeric_value(device_class, state_class) and \
+       isinstance(value, str) and \
+       ("," in value or ";" in value):
+        # This block is reached if the value is a list-like string for a numeric sensor
+        # and was not handled by the more specific pressure or cell-sensor comma list handlers.
+        _LOGGER.debug("Attempting to parse '%s' as generic comma-separated numeric value for entity '%s'", value, entity_name)
+        try:
+            separator = ";" if ";" in value else ","
+            parts = [p.strip() for p in value.split(separator) if p.strip()]
+            # Attempt to convert all parts to float
+            numeric_values = [float(part) for part in parts]
+            
+            if numeric_values: # Ensure we have some numbers
+                avg_value = sum(numeric_values) / len(numeric_values)
+                _LOGGER.debug("Parsed generic list for %s: %s. Returning mean: %s", entity_name, numeric_values, round(avg_value, 4))
+                return round(avg_value, 4)
+            else:
+                _LOGGER.warning("No valid numeric parts found in generic list value '%s' for entity '%s'", value, entity_name)
+                # Fall through to subsequent parsing attempts
+        except (ValueError, TypeError):
+            _LOGGER.warning("Could not parse generic comma-separated list '%s' for entity '%s'. Falling back.", value, entity_name)
+            # Fall through to subsequent parsing attempts
 
     # Try parsing as JSON first
     try:
