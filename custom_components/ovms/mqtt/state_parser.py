@@ -47,7 +47,11 @@ class StateParser:
         # Check if this is a comma-separated list of numbers (including negative numbers)
         if isinstance(value, str) and "," in value:
             try:
-                parts_str = [s.strip() for s in value.split(",") if s.strip()]
+                # Clean the entire value first to remove units from comma-separated values
+                # Remove non-numeric characters except numbers, dots, commas, and minus signs
+                cleaned_value = re.sub(r"[^0-9.,-]", "", value)
+                
+                parts_str = [s.strip() for s in cleaned_value.split(",") if s.strip()]
                 
                 if not parts_str:
                     # If all parts were empty after splitting,

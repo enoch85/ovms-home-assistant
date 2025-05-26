@@ -1,12 +1,13 @@
 """OVMS sensor entities."""
 import logging
+import re
 from typing import Any, Dict, Optional, List
 from datetime import datetime
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass, SensorDeviceClass
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
@@ -93,7 +94,9 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             "topic": topic,
             "last_updated": dt_util.utcnow().isoformat(),
         }
-        self.hass = hass
+        # Store hass but handle None case properly
+        if hass is not None:
+            self.hass = hass
 
         # Initialize device class and other attributes
         self._attr_device_class = attributes.get("device_class")
@@ -274,7 +277,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             "topic": topic,
             "last_updated": dt_util.utcnow().isoformat(),
         }
-        self.hass = hass
+        # Store hass but handle None case properly
+        if hass is not None:
+            self.hass = hass
 
         # Set entity_id
         if hass:
@@ -472,8 +477,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
     def _handle_cell_values(self, payload: str) -> None:
         """Handle cell values in payload."""
         try:
+            # Clean the payload first to remove units from comma-separated values
+            # Remove non-numeric characters except numbers, dots, commas, and minus signs
+            cleaned_payload = re.sub(r"[^0-9.,-]", "", payload)
+            
             # Parse comma-separated values
-            values = [float(part.strip()) for part in payload.split(",") if part.strip()]
+            values = [float(part.strip()) for part in cleaned_payload.split(",") if part.strip()]
             if not values:
                 return
 
@@ -530,12 +539,20 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         if self._cell_sensors_created or not self.hass:
             return
 
-        # Extract vehicle_id
-        vehicle_id = self.unique_id.split('_')[0]
+        # Extract vehicle_id - handle case where unique_id might be None
+        if self.unique_id:
+            vehicle_id = self.unique_id.split('_')[0]
+        else:
+            # Fallback if unique_id is None
+            vehicle_id = "unknown"
 
-        # Create sensor configs
+        # Create sensor configs - ensure we have required parameters
+        if not self.unique_id:
+            return  # Cannot create cell sensors without unique_id
+            
         sensor_configs = create_cell_sensors(
-            self._topic, cell_values, vehicle_id, self.unique_id, self.device_info,
+            self._topic, cell_values, vehicle_id, self.unique_id, 
+            dict(self.device_info) if self.device_info else {},
             {
                 "name": self.name,
                 "category": self._attr_extra_state_attributes.get("category", "battery"),

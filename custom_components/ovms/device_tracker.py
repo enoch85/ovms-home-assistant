@@ -4,13 +4,15 @@ import re
 import time
 from typing import Any, Dict, Optional, List
 
-from homeassistant.components.device_tracker import SourceType
+from homeassistant.components.device_tracker.const import SourceType
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import async_generate_entity_id
+from homeassistant.core import HomeAssistant # Ensure HomeAssistant is imported
+from typing import Optional # Ensure Optional is imported
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
@@ -40,7 +42,7 @@ async def async_setup_entry(
             _LOGGER.info("Adding device tracker: %s", data.get("friendly_name", data.get("name", "unknown")))
 
             # Create naming and attribute services
-            config = entry.data
+            config = dict(entry.data)  # Convert to dict to avoid MappingProxyType issues
             naming_service = EntityNamingService(config)
             attribute_manager = AttributeManager(config)
 
@@ -70,20 +72,24 @@ async def async_setup_entry(
 class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     """OVMS Device Tracker Entity."""
 
+    _attr_device_info: Optional[DeviceInfo] = None
+
     def __init__(
         self,
         unique_id: str,
         name: str,
         topic: str,
         initial_payload: Any,
-        device_info: DeviceInfo,
+        device_info: DeviceInfo, # Keep as DeviceInfo
         attributes: Dict[str, Any],
-        hass: Optional[HomeAssistant] = None,
+        hass: HomeAssistant, # Change to HomeAssistant (non-optional)
         friendly_name: Optional[str] = None,
         naming_service: Optional[EntityNamingService] = None,
         attribute_manager: Optional[AttributeManager] = None
     ) -> None:
         """Initialize the device tracker."""
+        super().__init__() # Call super().__init__ for TrackerEntity
+        self.hass = hass # Assign hass directly
         self._attr_unique_id = unique_id
         self._internal_name = name
 
@@ -124,7 +130,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         if "last_updated" not in self._attr_extra_state_attributes:
             self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
 
-        self.hass = hass
         self._latitude = None
         self._longitude = None
         self._source_type = SourceType.GPS
@@ -145,10 +150,20 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
             )
 
     async def async_added_to_hass(self) -> None:
-        """Subscribe to updates and sync with related sensors."""
+        """Handle when entity is added to hass."""
         await super().async_added_to_hass()
+        if self.hass is None: # Add a check for self.hass
+            _LOGGER.error("Hass object not available for %s", self.entity_id)
+            return
 
-        # Restore previous state if available
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, 
+                SIGNAL_UPDATE_ENTITY, 
+                self._async_handle_update # This line was causing the error
+            )
+        )
+        # Restore last known state
         if (state := await self.async_get_last_state()) is not None:
             # Restore attributes if available
             if state.attributes:
@@ -206,9 +221,9 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 related_entities_sent = False
                 if hasattr(self.hass.data.get(DOMAIN, {}), "entity_registry"):
                     # Try to get entity registry from domain data
-                    for entry_id, data in self.hass.data[DOMAIN].items():
-                        if hasattr(data, "entity_registry") and data.entity_registry:
-                            entity_registry = data.entity_registry
+                    for entry_id, data_item in self.hass.data[DOMAIN].items(): # renamed data to data_item
+                        if hasattr(data_item, "entity_registry") and data_item.entity_registry:
+                            entity_registry = data_item.entity_registry
                             if hasattr(entity_registry, "get_related_entities"):
                                 related_entities = entity_registry.get_related_entities(self.unique_id)
                                 for related_id in related_entities:
@@ -264,6 +279,114 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 update_state,
             )
         )
+
+    @callback
+    async def _async_handle_update(self, data: Dict[str, Any]) -> None:
+        """Handle an update dispatch."""
+        if not self.hass: # Add a check for self.hass
+            _LOGGER.error("Hass object not available in _async_handle_update for %s", self.entity_id)
+            return
+        
+        # Find the update_state callback. 
+        # This is a bit of a workaround as the callback is defined within async_added_to_hass
+        # A more robust solution might involve passing the callback or storing it on the instance.
+        # For now, we'll assume it's available via a closure or similar mechanism if this path is hit.
+        # This part of the logic might need review if issues arise.
+        
+        # Call the existing update_state logic if it can be resolved
+        # This assumes update_state is accessible here, which might not be true
+        # depending on how it's defined and captured by async_dispatcher_connect.
+        # If `update_state` is not in scope here, this will fail.
+        # We need to ensure `update_state` is a method of the class or passed appropriately.
+
+        # Let's redefine update_state as a method of the class for clarity and accessibility
+        await self._update_state_method(data.get("payload"))
+
+    @callback
+    async def _update_state_method(self, payload: Any) -> None:
+        """Update the tracker state. (Moved from async_added_to_hass)"""
+        self._process_payload(payload)
+
+        # Update timestamp attribute
+        self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
+
+        # Process any JSON attributes if applicable
+        if isinstance(payload, str):
+            self._attr_extra_state_attributes = self.attribute_manager.process_json_payload(
+                payload, self._attr_extra_state_attributes
+            )
+
+        # Also update corresponding sensor entities
+        try:
+            # Signal sensor entities to update
+            if self.latitude is not None:
+                async_dispatcher_send(
+                    self.hass,
+                    f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}_sensor",
+                    self.latitude,
+                )
+
+            if self.longitude is not None:
+                async_dispatcher_send(
+                    self.hass,
+                    f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}_sensor",
+                    self.longitude,
+                )
+
+            # If there are related entities we should update them too
+            related_entities_sent = False
+            if hasattr(self.hass.data.get(DOMAIN, {}), "entity_registry"):
+                # Try to get entity registry from domain data
+                for entry_id, data_item in self.hass.data[DOMAIN].items(): # renamed data to data_item
+                    if hasattr(data_item, "entity_registry") and data_item.entity_registry:
+                        entity_registry = data_item.entity_registry
+                        if hasattr(entity_registry, "get_related_entities"):
+                            related_entities = entity_registry.get_related_entities(self.unique_id)
+                            for related_id in related_entities:
+                                # Create a location payload for sensors
+                                sensor_payload = {
+                                    "value": self.latitude if "latitude" in related_id else self.longitude,
+                                    "latitude": self.latitude,
+                                    "longitude": self.longitude,
+                                    "last_updated": dt_util.utcnow().isoformat()
+                                }
+
+                                async_dispatcher_send(
+                                    self.hass,
+                                    f"{SIGNAL_UPDATE_ENTITY}_{related_id}",
+                                    sensor_payload,
+                                )
+                            related_entities_sent = True
+                            break
+
+            # If we didn't update via entity registry, try a more direct approach
+            if not related_entities_sent and self.latitude is not None and self.longitude is not None:
+                # Create a coordinates payload
+                location_payload = {
+                    "latitude": self.latitude,
+                    "longitude": self.longitude,
+                    "last_updated": dt_util.utcnow().isoformat()
+                }
+
+                # Dispatch to latitude/longitude sensors based on their name pattern
+                lat_sensor_id = f"{self.unique_id}_latitude"
+                lon_sensor_id = f"{self.unique_id}_longitude"
+
+                async_dispatcher_send(
+                    self.hass,
+                    f"{SIGNAL_UPDATE_ENTITY}_{lat_sensor_id}",
+                    location_payload,
+                )
+
+                async_dispatcher_send(
+                    self.hass,
+                    f"{SIGNAL_UPDATE_ENTITY}_{lon_sensor_id}",
+                    location_payload,
+                )
+        except Exception as ex:
+            _LOGGER.exception("Error updating related entities: %s", ex)
+
+        self.async_write_ha_state()
 
     def _process_payload(self, payload: Any) -> None:
         """Process the payload and update coordinates."""
