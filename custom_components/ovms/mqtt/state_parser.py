@@ -47,18 +47,13 @@ class StateParser:
         # Check if this is a comma-separated list of numbers (including negative numbers)
         if isinstance(value, str) and "," in value:
             try:
-                # Clean the string to remove units and unexpected characters from the whole string
-                # Regex from sensor.parsers.parse_comma_separated_values
-                # This allows dots, commas, and minus signs, removing others.
-                cleaned_value_str = re.sub(r"[^0-9.,-]", "", value)
-                
-                parts_str = [s.strip() for s in cleaned_value_str.split(",") if s.strip()]
+                parts_str = [s.strip() for s in value.split(",") if s.strip()]
                 
                 if not parts_str:
-                    # If all parts were empty after cleaning/splitting,
+                    # If all parts were empty after splitting,
                     # raise ValueError to fall through to 'pass'
                     # This will then correctly result in None for a numeric sensor.
-                    raise ValueError("No valid numeric parts found after cleaning comma-separated value")
+                    raise ValueError("No valid numeric parts found in comma-separated value")
 
                 parts = [float(p) for p in parts_str]
                 if parts:

@@ -9,6 +9,7 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.util import dt as dt_util
 
 from ..const import LOGGER_NAME, MAX_STATE_LENGTH, truncate_state_value
+from ..metrics.common.tire import TIRE_POSITIONS
 from .duration_formatter import parse_duration
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -28,6 +29,19 @@ NUMERIC_DEVICE_CLASSES = [
 
 # Special string values that should be converted to None for numeric sensors
 SPECIAL_STATE_VALUES = ["unavailable", "unknown", "none", "", "null", "nan"]
+
+
+def is_tire_sensor(device_class: Any = None, category: Optional[str] = None) -> bool:
+    """Check if this is a tire sensor based on device class and category."""
+    # Check if device class indicates tire data (pressure or temperature)
+    if device_class in [SensorDeviceClass.PRESSURE, SensorDeviceClass.TEMPERATURE]:
+        # For pressure sensors, assume tire if device class is pressure
+        if device_class == SensorDeviceClass.PRESSURE:
+            return True
+        # For temperature sensors, check if category indicates tire
+        if device_class == SensorDeviceClass.TEMPERATURE and category == "tire":
+            return True
+    return False
 
 
 def requires_numeric_value(device_class: Any, state_class: Any) -> bool:
@@ -88,30 +102,18 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
         result["min"] = min(parts)
         result["max"] = max(parts)
 
-        # If it's a cell sensor, store individual values with descriptive names
+        # If it's a cell sensor, store individual values with appropriate names
         # These will become attributes of the main sensor.
         if is_cell_sensor:
             for i, val in enumerate(parts):
-                # Use a more generic naming that doesn't assume "tire"
-                # The actual sensor name/description will provide context (e.g. "Tire Pressure FL")
-                # For now, we'll use a common prefix like "value_1", "value_2"
-                # or rely on the calling function to map these if needed.
-                # For tire pressure, we can assume FL, FR, RL, RR based on typical OVMS order.
-                # A more robust solution might involve configuration or dynamic naming.
-                # For now, let's use a generic "part_N" or specific if stat_type hints at it.
-                # Given the context of tire pressure, let's assume a standard order.
-                # This part might need more sophisticated handling if the number of values
-                # or their meaning varies greatly between "cell_data" sensors.
-                
-                # Standard tire order: FL, FR, RL, RR (for 4 values)
-                # If other sensors use has_cell_data, this naming might need to be more generic
-                # or have specific handlers.
-                tire_positions = ["fl", "fr", "rl", "rr"] # Front-Left, Front-Right, Rear-Left, Rear-Right
-                if len(parts) == 4 and stat_type == "tire": # Make it specific for tires for now
-                    result[f"pressure_{tire_positions[i]}"] = val
-                else: # Generic fallback
-                    result[f"{stat_type}_{i+1}"] = val
-
+                if stat_type == "tire" and i < 4:
+                    # Use tire position labels for tire sensors (up to 4 tires)
+                    position_name, position_code = TIRE_POSITIONS[i]
+                    result[f"tire_{position_name}"] = val
+                    result[f"tire_{position_code.lower()}"] = val  # Also provide short codes
+                else:
+                    # Use generic naming for other sensors or additional values beyond 4 tires
+                    result[f"cell_{i+1}"] = val
 
         # The main 'value' of the sensor will be the mean if has_cell_data is true,
         # otherwise, the calling context might decide not to create a main sensor
@@ -172,24 +174,23 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
         if value.lower() in ["no", "off", "false", "disabled"]:
             return 0
         if value.lower() in ["yes", "on", "true", "enabled"]:
-            return 1
-
-    # Check if this is a comma-separated list of numbers for a cell sensor
-    # The string cleaning (removing units) is now done in StateParser.parse_value
-    if isinstance(value, str) and "," in value:
-        # If it's a cell sensor, parse_comma_separated_values will handle creating attributes
-        # and will return a dict. The 'value' key from that dict will be used as the sensor's state.
-        if is_cell_sensor:
-            # Call the dedicated parser which returns a dict of values & attributes
-            # The main state of the sensor will be the 'value' from this dict (e.g., average)
-            # and the individual values will be in its attributes.
-            parsed_data = parse_comma_separated_values(value, "", is_cell_sensor, stat_type="tire" if device_class == SensorDeviceClass.PRESSURE else "cell")
-            if parsed_data and "value" in parsed_data:
-                # The main sensor state will be the average. Attributes are handled by process_json_payload later.
-                return parsed_data["value"] 
-            else:
-                # Fallback or if parsing failed to produce a 'value'
-                return None
+            return 1        # Check if this is a comma-separated list of numbers for a cell sensor
+        # The string cleaning (removing units) is now done in StateParser.parse_value
+        if isinstance(value, str) and "," in value:
+            # If it's a cell sensor, parse_comma_separated_values will handle creating attributes
+            # and will return a dict. The 'value' key from that dict will be used as the sensor's state.
+            if is_cell_sensor:
+                # Call the dedicated parser which returns a dict of values & attributes
+                # The main state of the sensor will be the 'value' from this dict (e.g., average)
+                # and the individual values will be in its attributes.
+                stat_type = "tire" if is_tire_sensor(device_class) else "cell"
+                parsed_data = parse_comma_separated_values(value, "", is_cell_sensor, stat_type)
+                if parsed_data and "value" in parsed_data:
+                    # The main sensor state will be the average. Attributes are handled by process_json_payload later.
+                    return parsed_data["value"] 
+                else:
+                    # Fallback or if parsing failed to produce a 'value'
+                    return None
 
 
         # If NOT a cell_sensor, but still comma-separated (e.g. old behavior or other sensors)
@@ -300,7 +301,8 @@ def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: 
         # parse it for individual values and statistics to add as attributes.
         if is_cell_sensor and isinstance(payload, str) and "," in payload:
             # The payload string should be pre-cleaned by StateParser by this point
-            parsed_cells = parse_comma_separated_values(payload, entity_name, is_cell_sensor, stat_type="tire" if attributes.get("device_class") == SensorDeviceClass.PRESSURE else "cell")
+            stat_type = "tire" if is_tire_sensor(attributes.get("device_class"), attributes.get("category")) else "cell"
+            parsed_cells = parse_comma_separated_values(payload, entity_name, is_cell_sensor, stat_type)
             if parsed_cells:
                 for key, val in parsed_cells.items():
                     if key != "value": # 'value' is the main state, others are attributes
