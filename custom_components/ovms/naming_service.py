@@ -3,12 +3,9 @@ import logging
 import re
 from typing import Dict, Any, Optional, List
 
-from homeassistant.helpers.device_registry import DeviceInfo  # Add this import
-
 from .const import LOGGER_NAME, DOMAIN
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
-
 
 class EntityNamingService:
     """Service for creating consistent entity names."""
@@ -18,9 +15,8 @@ class EntityNamingService:
         self.config = config
         self.vehicle_id = config.get("vehicle_id", "")
 
-    def create_friendly_name(
-        self, parts: List[str], metric_info: Optional[Dict], topic: str, raw_name: str
-    ) -> str:
+    def create_friendly_name(self, parts: List[str], metric_info: Optional[Dict],
+                            topic: str, raw_name: str) -> str:
         """Create a friendly name based on topic parts and metric info."""
         # Handle status topics specially
         if topic and topic.endswith("/status"):
@@ -33,7 +29,7 @@ class EntityNamingService:
             return metric_info["name"]
 
         # Check if this is a VW eUP! metric by looking for 'xvu' prefix
-        has_xvu = any(p == "xvu" for p in parts) if parts else ("xvu" in topic)
+        has_xvu = any(p == "xvu" for p in parts) if parts else ('xvu' in topic)
         if has_xvu:
             if parts and len(parts) > 0:
                 last_part = parts[-1].replace("_", " ").title()
@@ -41,7 +37,7 @@ class EntityNamingService:
             return f"VW eUP! {raw_name.replace('_', ' ').title()}" if raw_name else "VW eUP! Sensor"
 
         # Check if this is a Smart ForTwo metric by looking for 'xsq' prefix
-        has_xsq = any(p == "xsq" for p in parts) if parts else ("xsq" in topic)
+        has_xsq = any(p == "xsq" for p in parts) if parts else ('xsq' in topic)
         if has_xsq:
             if parts and len(parts) > 0:
                 last_part = parts[-1].replace("_", " ").title()
@@ -49,7 +45,7 @@ class EntityNamingService:
             return f"Smart ForTwo {raw_name.replace('_', ' ').title()}" if raw_name else "Smart ForTwo Sensor"
 
         # Check if this is an MG ZS-EV metric by looking for 'xmg' prefix
-        has_xmg = any(p == "xmg" for p in parts) if parts else ("xmg" in topic)
+        has_xmg = any(p == "xmg" for p in parts) if parts else ('xmg' in topic)
         if has_xmg:
             if parts and len(parts) > 0:
                 last_part = parts[-1].replace("_", " ").title()
@@ -57,7 +53,7 @@ class EntityNamingService:
             return f"MG ZS-EV {raw_name.replace('_', ' ').title()}" if raw_name else "MG ZS-EV Sensor"
 
         # Check if this is a Nissan Leaf metric by looking for 'xnl' prefix
-        has_xnl = any(p == "xnl" for p in parts) if parts else ("xnl" in topic)
+        has_xnl = any(p == "xnl" for p in parts) if parts else ('xnl' in topic)
         if has_xnl:
             if parts and len(parts) > 0:
                 last_part = parts[-1].replace("_", " ").title()
@@ -65,7 +61,7 @@ class EntityNamingService:
             return f"Nissan Leaf {raw_name.replace('_', ' ').title()}" if raw_name else "Nissan Leaf Sensor"
 
         # Check if this is a Renault Twizy metric by looking for 'xrt' prefix
-        has_xrt = any(p == "xrt" for p in parts) if parts else ("xrt" in topic)
+        has_xrt = any(p == "xrt" for p in parts) if parts else ('xrt' in topic)
         if has_xrt:
             if parts and len(parts) > 0:
                 last_part = parts[-1].replace("_", " ").title()
@@ -87,18 +83,11 @@ class EntityNamingService:
             vehicle_id = self.vehicle_id
         return f"{vehicle_id} Location"
 
-    def extract_vehicle_id_from_device_info(self, device_info: DeviceInfo) -> Optional[str]:  # Changed Dict to DeviceInfo
+    def extract_vehicle_id_from_device_info(self, device_info: Dict) -> Optional[str]:
         """Extract vehicle ID from device info."""
         try:
-            # Check for DeviceInfo object (which is a TypedDict)
-            identifiers = device_info.get("identifiers")
-            if identifiers:
-                for identifier in identifiers:
-                    if isinstance(identifier, tuple) and len(identifier) > 1 and identifier[0] == DOMAIN:
-                        return identifier[1]
-            # Fallback for older dict-based device_info
-            elif isinstance(device_info, dict) and "identifiers" in device_info:
-                for identifier in device_info["identifiers"]: # type: ignore
+            if isinstance(device_info, dict) and "identifiers" in device_info:
+                for identifier in device_info["identifiers"]:
                     if isinstance(identifier, tuple) and len(identifier) > 1 and identifier[0] == DOMAIN:
                         return identifier[1]
         except Exception as ex:
@@ -108,7 +97,7 @@ class EntityNamingService:
     def extract_vehicle_id_from_name(self, name: str) -> Optional[str]:
         """Extract vehicle ID from entity name."""
         try:
-            match = re.search(r"ovms_([a-zA-Z0-9]+)_", name)
+            match = re.search(r'ovms_([a-zA-Z0-9]+)_', name)
             if match:
                 return match.group(1)
         except Exception as ex:
