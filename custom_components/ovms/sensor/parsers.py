@@ -210,7 +210,7 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
                     return parsed.astimezone(dt_util.UTC)
 
                 # Attempt 2: Custom regex parsing if dt_util.parse_datetime fails
-                match = re.match(r'(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})\\s*([A-Z]{3,5})?', stripped_value)
+                match = re.match(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*([A-Z]{3,5})?', stripped_value)
                 if match:
                     dt_str = match.group(1)
                     tz_abbr = match.group(2)
@@ -382,34 +382,36 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
         return truncate_state_value(str(json_val))
 
     except (ValueError, json.JSONDecodeError): # Added TypeError to catch non-string inputs to json.loads
-        _LOGGER.debug("Value '%s' for entity '%s' is not valid JSON. Trying direct numeric conversion.", value, entity_name)
-        try:
-            if isinstance(value, (int, float)): # Already a number
-                 _LOGGER.debug("Value for %s is already numeric: %s", entity_name, value)
-                 return value
-            if isinstance(value, str):
-                # Check if it's a float
-                if "." in value:
-                    num_val = float(value)
-                    _LOGGER.debug("Converted string '%s' to float %s for entity '%s'", value, num_val, entity_name)
+        _LOGGER.debug("Value '%s' for entity '%s' is not valid JSON. Checking if numeric conversion needed.", value, entity_name)
+        
+        # Only attempt numeric conversion if this sensor actually requires numeric values
+        if requires_numeric_value(device_class, state_class):
+            _LOGGER.debug("Entity '%s' requires numeric value. Attempting numeric conversion for '%s'.", entity_name, value)
+            try:
+                if isinstance(value, (int, float)): # Already a number
+                     _LOGGER.debug("Value for %s is already numeric: %s", entity_name, value)
+                     return value
+                if isinstance(value, str):
+                    # Check if it's a float
+                    if "." in value:
+                        num_val = float(value)
+                        _LOGGER.debug("Converted string '%s' to float %s for entity '%s'", value, num_val, entity_name)
+                        return num_val
+                    # Check if it's an int
+                    num_val = int(value)
+                    _LOGGER.debug("Converted string '%s' to int %s for entity '%s'", value, num_val, entity_name)
                     return num_val
-                # Check if it's an int
-                num_val = int(value)
-                _LOGGER.debug("Converted string '%s' to int %s for entity '%s'", value, num_val, entity_name)
-                return num_val
-            # If it's not a string, int, or float at this point, and numeric is required, it's an issue.
-            if requires_numeric_value(device_class, state_class):
+                # If it's not a string, int, or float at this point, and numeric is required, it's an issue.
                 _LOGGER.warning("Value '%s' (type %s) for entity '%s' could not be converted to numeric. Returning None.", value, type(value), entity_name)
                 return None
-            # Otherwise return as is, truncated
-            _LOGGER.debug("Value for %s is not numeric, returning as truncated string: %s", entity_name, value)
-            return truncate_state_value(str(value))
 
-        except (ValueError, TypeError):
-            _LOGGER.warning("Could not convert value '%s' to numeric for entity '%s'. Returning None if numeric, else original (truncated).", value, entity_name)
-            if requires_numeric_value(device_class, state_class):
+            except (ValueError, TypeError):
+                _LOGGER.warning("Could not convert value '%s' to numeric for entity '%s'. Returning None.", value, entity_name)
                 return None
-            return truncate_state_value(str(value)) # Ensure it's a string before returning
+        else:
+            # For non-numeric sensors, return the value as-is (truncated string)
+            _LOGGER.debug("Entity '%s' does not require numeric value. Returning as truncated string: %s", entity_name, value)
+            return truncate_state_value(str(value))
 
 def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: str = "",
                         is_cell_sensor: bool = False, stat_type: str = "cell") -> Dict[str, Any]:
