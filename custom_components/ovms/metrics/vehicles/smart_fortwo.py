@@ -17,8 +17,8 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfTime,
     UnitOfFrequency,
+    EntityCategory,
 )
-from homeassistant.helpers.entity import EntityCategory
 
 # Smart ForTwo specific metrics
 SMART_FORTWO_METRICS = {

@@ -17,8 +17,8 @@ from homeassistant.const import (
     UnitOfTemperature,  # noqa: F401
     UnitOfTime,
     UnitOfPressure,
+    EntityCategory,
 )
-from homeassistant.helpers.entity import EntityCategory
 
 # Custom unit constants
 UNIT_AMPERE_HOUR = "Ah"
@@ -371,6 +371,7 @@ VW_EUP_METRICS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPressure.KPA,
         "category": "vw_eup",
+        "has_cell_data": True,
     },
     "xvu.v.t.emgcy": {
         "name": "VW eUP! Tire Emergency Values",
@@ -379,5 +380,6 @@ VW_EUP_METRICS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPressure.KPA,
         "category": "vw_eup",
+        "has_cell_data": True,
     },
 }

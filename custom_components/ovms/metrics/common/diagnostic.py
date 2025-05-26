@@ -10,7 +10,7 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.const import (
     UnitOfLength,
 )
-from homeassistant.helpers.entity import EntityCategory  # noqa: F401
+from homeassistant.const import EntityCategory  # noqa: F401
 
 # Diagnostic metrics
 DIAGNOSTIC_METRICS = {

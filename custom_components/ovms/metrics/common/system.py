@@ -11,7 +11,7 @@ from homeassistant.const import (
     UnitOfTime,
     UnitOfInformation,
 )
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import EntityCategory
 
 # System metrics
 SYSTEM_METRICS = {

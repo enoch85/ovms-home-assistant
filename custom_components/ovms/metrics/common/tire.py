@@ -34,6 +34,7 @@ TIRE_METRICS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPressure.KPA,
         "category": "tire",
+        "has_cell_data": True,
     },
     "v.t.temp": {
         "name": "Tire Temperature",
@@ -43,6 +44,7 @@ TIRE_METRICS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfTemperature.CELSIUS,
         "category": "tire",
+        "has_cell_data": True,
     },
     "v.t.diff": {
         "name": "Tire Pressure Difference",
@@ -51,5 +53,6 @@ TIRE_METRICS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPressure.KPA,
         "category": "tire",
+        "has_cell_data": True,
     },
 }

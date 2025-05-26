@@ -20,8 +20,8 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfTime,
     UnitOfFrequency,
+    EntityCategory,
 )
-from homeassistant.helpers.entity import EntityCategory
 
 # Import from common metrics
 from .common import (

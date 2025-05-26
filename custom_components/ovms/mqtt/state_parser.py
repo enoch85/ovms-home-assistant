@@ -47,16 +47,28 @@ class StateParser:
         # Check if this is a comma-separated list of numbers (including negative numbers)
         if isinstance(value, str) and "," in value:
             try:
-                # Try to parse all parts as floats
-                parts = [float(part.strip()) for part in value.split(",") if part.strip()]
+                # Clean the string to remove units and unexpected characters from the whole string
+                # Regex from sensor.parsers.parse_comma_separated_values
+                # This allows dots, commas, and minus signs, removing others.
+                cleaned_value_str = re.sub(r"[^0-9.,-]", "", value)
+                
+                parts_str = [s.strip() for s in cleaned_value_str.split(",") if s.strip()]
+                
+                if not parts_str:
+                    # If all parts were empty after cleaning/splitting,
+                    # raise ValueError to fall through to 'pass'
+                    # This will then correctly result in None for a numeric sensor.
+                    raise ValueError("No valid numeric parts found after cleaning comma-separated value")
+
+                parts = [float(p) for p in parts_str]
                 if parts:
                     # Calculate and return statistics
                     avg_value = sum(parts) / len(parts)
                     # Return the average as the main value, rounded to 4 decimal places
                     return round(avg_value, 4)
             except (ValueError, TypeError):
-                # If any part can't be converted to float, fall through to other methods
-                pass
+                # If any part can't be converted to float, or cleaning fails to produce valid parts
+                pass # Fall through to other parsing methods or return None
 
         # Try parsing as JSON first
         try:

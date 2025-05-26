@@ -1,7 +1,7 @@
 """OVMS sensor factory functions."""
 import logging
 import hashlib
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import (
@@ -14,7 +14,7 @@ from homeassistant.const import (
     UnitOfSpeed,
     UnitOfTemperature,
 )
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import EntityCategory
 
 from ..const import LOGGER_NAME
 from ..metrics import get_metric_by_path, get_metric_by_pattern
@@ -24,7 +24,7 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 
 def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
     """Determine the sensor type based on metrics definitions."""
-    result = {
+    result: Dict[str, Any] = {
         "device_class": None,
         "state_class": None,
         "native_unit_of_measurement": None,
