@@ -13,7 +13,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.const import UnitOfTime
 
 from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
-from .parsers import parse_value, process_json_payload, requires_numeric_value, is_special_state_value, calculate_median
+from .parsers import parse_value, process_json_payload, requires_numeric_value, is_special_state_value, calculate_median # Removed unused 'parse_timestamp'
 from .factory import determine_sensor_type, add_device_specific_attributes, create_cell_sensors, create_tire_pressure_sensors
 from .duration_formatter import format_duration, parse_duration
 
@@ -52,17 +52,30 @@ def format_sensor_value(value, device_class, attributes):
         # Return the short format as the main value
         return formatted_short
     elif device_class == SensorDeviceClass.TIMESTAMP:
-        # For timestamp, store datetime object as attribute and return ISO string
-        attributes["timestamp_object"] = value
-        if isinstance(value, datetime):
-            formatted = value.isoformat()
-            # Make it more readable by just keeping date and time
-            if 'T' in formatted:
-                date_part, time_part = formatted.split('T')
-                time_part = time_part.split('+')[0].split('.')[0]  # Remove milliseconds and timezone
-                return f"{date_part} at {time_part}"
-            return formatted
-        return str(value)
+        if not isinstance(value, datetime):
+            # This should ideally not happen if parse_value is correct
+            _LOGGER.warning(f"Timestamp sensor received non-datetime value: {value} (type: {type(value)}). Attempting to re-parse.")
+            # Attempt to re-parse, assuming it might be a raw string/number from MQTT not yet processed
+            # Pass None for state_class as it's not directly relevant for timestamp parsing itself here
+            parsed_dt = parse_value(value, SensorDeviceClass.TIMESTAMP, None) 
+            if not isinstance(parsed_dt, datetime):
+                _LOGGER.error(f"Failed to re-parse timestamp value: {value}. Sensor state might be incorrect.")
+                return str(value) # Fallback to string representation
+            value = parsed_dt
+
+        # Ensure the datetime object is UTC. If naive, assume UTC.
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            value_utc = value.replace(tzinfo=dt_util.UTC)
+        else:
+            value_utc = value.astimezone(dt_util.UTC)
+
+        attributes["timestamp_object"] = value_utc # Store the UTC datetime object
+        
+        # Format for display: YYYY-MM-DD at HH:MM:SS (in local time if HA is configured, else UTC)
+        # Home Assistant handles localization of timestamps for display automatically
+        # when a proper datetime object is set as the state.
+        # The native_value should be the datetime object itself.
+        return value_utc # Return the datetime object directly for HA to handle
     else:
         # Normal handling
         return truncate_state_value(value)
@@ -103,211 +116,18 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
 
         # For timestamp sensors, set explicit metadata values
         if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
-            self._attr_state_class = None
-            self._attr_native_unit_of_measurement = None
-
+            self._attr_state_class = None # Timestamps don't have a state class like 'measurement'
+            self._attr_native_unit_of_measurement = None # Timestamps don't have a unit of measurement
+            # HA will automatically format the datetime object for display
         # For certain sensors, we need special handling to display formatted values
-        if self._attr_device_class in (SensorDeviceClass.DURATION, SensorDeviceClass.TIMESTAMP):
+        # This block is primarily for DURATION. TIMESTAMP is now handled by returning datetime object.
+        if self._attr_device_class == SensorDeviceClass.DURATION: # Removed TIMESTAMP from this condition
             # Store metadata in attributes but clear from entity properties
             self._attr_extra_state_attributes["original_device_class"] = self._attr_device_class
+            self._attr_extra_state_attributes["original_state_class"] = self._attr_state_class
+            self._attr_extra_state_attributes["original_unit"] = self._attr_native_unit_of_measurement
 
-            if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
-                self._attr_extra_state_attributes["original_state_class"] = "timestamp"
-                self._attr_extra_state_attributes["original_unit"] = "timestamp"
-            else:
-                self._attr_extra_state_attributes["original_state_class"] = self._attr_state_class
-                self._attr_extra_state_attributes["original_unit"] = self._attr_native_unit_of_measurement
-
-            # Clear properties so HA doesn't enforce type validation
-            self._attr_device_class = None
-            self._attr_state_class = None
-            self._attr_native_unit_of_measurement = None
-
-        # Parse the value
-        if requires_numeric_value(self._attr_device_class, self._attr_state_class) and is_special_state_value(initial_state):
-            self._parsed_value = None
-        else:
-            try:
-                if isinstance(initial_state, (int, float)) or (isinstance(initial_state, str) and initial_state.replace('.', '', 1).isdigit()):
-                    self._parsed_value = float(initial_state)
-                else:
-                    self._parsed_value = initial_state
-            except (ValueError, TypeError):
-                self._parsed_value = initial_state
-
-        # Format the value based on original device class for formatted types
-        device_class_for_formatting = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
-        self._attr_native_value = format_sensor_value(
-            self._parsed_value, device_class_for_formatting, self._attr_extra_state_attributes
-        )
-
-        # Set entity_id
-        if hass:
-            self.entity_id = async_generate_entity_id(
-                "sensor.{}", name.lower(),
-                hass=hass,
-            )
-
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to updates."""
-        await super().async_added_to_hass()
-
-        # Restore previous state if available
-        if (state := await self.async_get_last_state()) is not None:
-            if state.state not in ["unavailable", "unknown", None]:
-                device_class_for_restoring = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
-
-                if device_class_for_restoring == SensorDeviceClass.TIMESTAMP:
-                    if state.attributes and "timestamp_object" in state.attributes:
-                        self._parsed_value = state.attributes["timestamp_object"]
-                    else:
-                        # Try to parse the state if it's a timestamp string
-                        self._parsed_value = parse_value(
-                            state.state,
-                            device_class_for_restoring,
-                            SensorStateClass.MEASUREMENT,
-                            False
-                        )
-                    # Just use the formatted state directly
-                    self._attr_native_value = state.state
-                elif device_class_for_restoring == SensorDeviceClass.DURATION:
-                    # For duration, try to extract raw value from attributes first
-                    if state.attributes and "raw_value" in state.attributes:
-                        self._parsed_value = state.attributes["raw_value"]
-                        # Use the formatted string as the main value
-                        device_class_for_formatting = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
-                        self._attr_native_value = format_sensor_value(
-                            self._parsed_value, device_class_for_formatting, self._attr_extra_state_attributes
-                        )
-                    else:
-                        # Try to parse the state if it looks like a formatted duration
-                        raw_value = parse_duration(state.state)
-                        if raw_value is not None:
-                            self._parsed_value = raw_value
-                            self._attr_native_value = state.state  # Keep the formatted string
-                            self._attr_extra_state_attributes["raw_value"] = raw_value
-                            self._attr_extra_state_attributes["formatted_short"] = state.state
-
-                            # Remove any debug or legacy attributes
-                            for field in ["formatted_duration", "determined_unit", "unit_uncertain",
-                                         "unit_defaulted", "debug_unit_used"]:
-                                if field in self._attr_extra_state_attributes:
-                                    del self._attr_extra_state_attributes[field]
-                        else:
-                            # Just use the state value directly
-                            self._attr_native_value = state.state
-                else:
-                    # For other sensors, use the state directly
-                    self._attr_native_value = state.state
-
-            # Restore attributes if available, but clean up inconsistent ones
-            if state.attributes:
-                # Don't overwrite entity attributes like unit, etc.
-                saved_attributes = {
-                    k: v for k, v in state.attributes.items()
-                    if k not in ["device_class", "state_class", "unit_of_measurement"]
-                }
-
-                # Remove stale/inconsistent formatted attributes
-                if "formatted_duration" in saved_attributes:
-                    del saved_attributes["formatted_duration"]
-
-                self._attr_extra_state_attributes.update(saved_attributes)
-
-        @callback
-        def update_state(payload: Any) -> None:
-            """Update the sensor state."""
-            # Parse the value
-            if requires_numeric_value(self._attr_device_class, self._attr_state_class) and is_special_state_value(payload):
-                self._parsed_value = None
-            else:
-                try:
-                    if isinstance(payload, (int, float)) or (isinstance(payload, str) and payload.replace('.', '', 1).isdigit()):
-                        self._parsed_value = float(payload)
-                    else:
-                        self._parsed_value = payload
-                except (ValueError, TypeError):
-                    self._parsed_value = payload
-
-            # Format the value using original device class for formatted types
-            device_class_for_formatting = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
-            self._attr_native_value = format_sensor_value(
-                self._parsed_value, device_class_for_formatting, self._attr_extra_state_attributes
-            )
-
-            # Update timestamp
-            self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
-            self.async_write_ha_state()
-
-        # Subscribe to updates
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
-                update_state,
-            )
-        )
-
-
-class OVMSSensor(SensorEntity, RestoreEntity):
-    """Representation of an OVMS sensor."""
-
-    def __init__(
-        self,
-        unique_id: str,
-        name: str,
-        topic: str,
-        initial_state: str,
-        device_info: DeviceInfo,
-        attributes: Dict[str, Any],
-        friendly_name: Optional[str] = None,
-        hass: Optional[HomeAssistant] = None,
-    ) -> None:
-        """Initialize the sensor."""
-        self._attr_unique_id = unique_id
-        self._internal_name = name  # Used for logging and entity_name in parsers
-        self._attr_name = friendly_name or name.replace("_", " ").title()
-        self._topic = topic
-        self._attr_device_info = device_info or {}
-        self._attr_extra_state_attributes = {
-            **attributes,
-            "topic": topic,
-            "last_updated": dt_util.utcnow().isoformat(),
-        }
-        self.hass = hass
-
-        # Set entity_id
-        if hass:
-            self.entity_id = async_generate_entity_id(
-                "sensor.{}", name.lower(), hass=hass,
-            )
-
-        # Determine sensor type
-        sensor_type = determine_sensor_type(self._internal_name, self._topic, self._attr_extra_state_attributes)
-        self._attr_device_class = sensor_type["device_class"]
-        self._attr_state_class = sensor_type["state_class"]
-        self._attr_native_unit_of_measurement = sensor_type["native_unit_of_measurement"]
-        self._attr_entity_category = sensor_type["entity_category"]
-        self._attr_icon = sensor_type["icon"]
-
-        # For timestamp sensors, set explicit metadata values
-        if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
-            self._attr_state_class = None
-            self._attr_native_unit_of_measurement = None
-
-        # For certain sensors, we need special handling to display formatted values
-        if self._attr_device_class in (SensorDeviceClass.DURATION, SensorDeviceClass.TIMESTAMP):
-            # Store metadata in attributes but clear from entity properties
-            self._attr_extra_state_attributes["original_device_class"] = self._attr_device_class
-
-            if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
-                self._attr_extra_state_attributes["original_state_class"] = "timestamp"
-                self._attr_extra_state_attributes["original_unit"] = "timestamp"
-            else:
-                self._attr_extra_state_attributes["original_state_class"] = self._attr_state_class
-                self._attr_extra_state_attributes["original_unit"] = self._attr_native_unit_of_measurement
-
-            # Clear properties so HA doesn't enforce type validation
+            # Clear properties so HA doesn't enforce type validation for DURATION string display
             self._attr_device_class = None
             self._attr_state_class = None
             self._attr_native_unit_of_measurement = None
@@ -403,25 +223,34 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         if (state := await self.async_get_last_state()) is not None:
             if state.state not in ["unavailable", "unknown", None]:
                 device_class_for_restoring = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
+                # Ensure state_class_for_restoring is defined at this scope
+                current_state_class = self._attr_state_class # Default to current entity state_class
+                if self._attr_extra_state_attributes.get("original_state_class"):
+                    current_state_class = self._attr_extra_state_attributes.get("original_state_class")
+                state_class_for_restoring = current_state_class
 
-                if device_class_for_restoring == SensorDeviceClass.TIMESTAMP:
-                    if state.attributes and "timestamp_object" in state.attributes:
-                        self._parsed_value = state.attributes["timestamp_object"]
+                if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
+                    # The state.state from HA for a timestamp is typically an ISO string
+                    # parse_value will convert this to a datetime object
+                    parsed_val = parse_value(state.state, SensorDeviceClass.TIMESTAMP, None)
+                    if isinstance(parsed_val, datetime):
+                        self._parsed_value = parsed_val
+                        self._attr_native_value = parsed_val
+                        if "timestamp_object" in state.attributes:
+                            restored_ts_obj = parse_value(state.attributes["timestamp_object"], SensorDeviceClass.TIMESTAMP, None)
+                            if isinstance(restored_ts_obj, datetime):
+                                self._attr_extra_state_attributes["timestamp_object"] = restored_ts_obj
+                            else:
+                                self._attr_extra_state_attributes["timestamp_object"] = parsed_val
+                        else:
+                            self._attr_extra_state_attributes["timestamp_object"] = parsed_val
                     else:
-                        # Try to parse the state if it's a timestamp string
-                        self._parsed_value = parse_value(
-                            state.state,
-                            device_class_for_restoring,
-                            self._attr_state_class,
-                            self._is_cell_sensor
-                        )
-                    # Just use the formatted state directly
-                    self._attr_native_value = state.state
+                        _LOGGER.warning(f"Could not restore timestamp for {self.entity_id} from state '{state.state}'. Parsed as: {parsed_val}")
+                        self._attr_native_value = state.state # Fallback
                 elif device_class_for_restoring == SensorDeviceClass.DURATION:
                     # For duration, try to extract raw value from attributes first
                     if state.attributes and "raw_value" in state.attributes:
                         self._parsed_value = state.attributes["raw_value"]
-                        # Use the formatted string as the main value
                         device_class_for_formatting = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
                         self._attr_native_value = format_sensor_value(
                             self._parsed_value, device_class_for_formatting, self._attr_extra_state_attributes
@@ -432,20 +261,270 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                         if raw_value is not None:
                             self._parsed_value = raw_value
                             self._attr_extra_state_attributes["raw_value"] = raw_value
-                            self._attr_native_value = state.state  # Keep the formatted string
+                            self._attr_native_value = state.state
                             self._attr_extra_state_attributes["formatted_short"] = state.state
-
-                            # Remove any debug or legacy attributes
                             for field in ["formatted_duration", "determined_unit", "unit_uncertain",
                                          "unit_defaulted", "debug_unit_used"]:
                                 if field in self._attr_extra_state_attributes:
                                     del self._attr_extra_state_attributes[field]
                         else:
-                            # Just use the state value directly
                             self._attr_native_value = state.state
                 else:
-                    # For other sensors, use the state directly
-                    self._attr_native_value = state.state
+                    # For other sensors, parse the state value appropriately
+                    # Now state_class_for_restoring is correctly defined and used here
+                    self._parsed_value = parse_value(state.state, device_class_for_restoring, state_class_for_restoring, self._is_cell_sensor, entity_name=self._internal_name)
+                    self._attr_native_value = format_sensor_value(self._parsed_value, device_class_for_restoring, self._attr_extra_state_attributes)
+
+            # Restore attributes if available, but clean up inconsistent ones
+            if state.attributes:
+                # Don't overwrite entity attributes like unit, etc.
+                saved_attributes = {
+                    k: v for k, v in state.attributes.items()
+                    if k not in ["device_class", "state_class", "unit_of_measurement"]
+                }
+
+                # Remove stale/inconsistent formatted attributes
+                if "formatted_duration" in saved_attributes:
+                    del saved_attributes["formatted_duration"]
+
+                self._attr_extra_state_attributes.update(saved_attributes)
+
+        @callback
+        def update_state(payload: Any) -> None:
+            """Update the sensor state."""
+            # Parse the value
+            if requires_numeric_value(self._attr_device_class, self._attr_state_class) and is_special_state_value(payload):
+                self._parsed_value = None
+            else:
+                try:
+                    if isinstance(payload, (int, float)) or (isinstance(payload, str) and payload.replace('.', '', 1).isdigit()):
+                        self._parsed_value = float(payload)
+                    else:
+                        self._parsed_value = payload
+                except (ValueError, TypeError):
+                    self._parsed_value = payload
+
+            # Format the value using original device class for formatted types
+            device_class_for_formatting = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
+            self._attr_native_value = format_sensor_value(
+                self._parsed_value, device_class_for_formatting, self._attr_extra_state_attributes
+            )
+
+            # Update timestamp
+            self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
+            self.async_write_ha_state()
+
+        # Subscribe to updates
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
+                update_state,
+            )
+        )
+
+
+class OVMSSensor(SensorEntity, RestoreEntity):
+    """Representation of an OVMS sensor."""
+
+    def __init__(
+        self,
+        unique_id: str,
+        name: str,
+        topic: str,
+        initial_state: str,
+        device_info: DeviceInfo,
+        attributes: Dict[str, Any],
+        friendly_name: Optional[str] = None,
+        hass: Optional[HomeAssistant] = None,
+    ) -> None:
+        """Initialize the sensor."""
+        self._attr_unique_id = unique_id
+        self._internal_name = name  # Used for logging and entity_name in parsers
+        self._attr_name = friendly_name or name.replace("_", " ").title()
+        self._topic = topic
+        self._attr_device_info = device_info or {}
+        self._attr_extra_state_attributes = {
+            **attributes,
+            "topic": topic,
+            "last_updated": dt_util.utcnow().isoformat(),
+        }
+        self.hass = hass
+
+        # Set entity_id
+        if hass:
+            self.entity_id = async_generate_entity_id(
+                "sensor.{}", name.lower(), hass=hass,
+            )
+
+        # Determine sensor type
+        sensor_type = determine_sensor_type(self._internal_name, self._topic, self._attr_extra_state_attributes)
+        self._attr_device_class = sensor_type["device_class"]
+        self._attr_state_class = sensor_type["state_class"]
+        self._attr_native_unit_of_measurement = sensor_type["native_unit_of_measurement"]
+        self._attr_entity_category = sensor_type["entity_category"]
+        self._attr_icon = sensor_type["icon"]
+
+        # For timestamp sensors, set explicit metadata values
+        if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
+            self._attr_state_class = None # Timestamps don't have a state class like 'measurement'
+            self._attr_native_unit_of_measurement = None # Timestamps don't have a unit of measurement
+            # HA will automatically format the datetime object for display
+        # For certain sensors, we need special handling to display formatted values
+        # This block is primarily for DURATION. TIMESTAMP is now handled by returning datetime object.
+        if self._attr_device_class == SensorDeviceClass.DURATION: # Removed TIMESTAMP from this condition
+            # Store metadata in attributes but clear from entity properties
+            self._attr_extra_state_attributes["original_device_class"] = self._attr_device_class
+            self._attr_extra_state_attributes["original_state_class"] = self._attr_state_class
+            self._attr_extra_state_attributes["original_unit"] = self._attr_native_unit_of_measurement
+
+            # Clear properties so HA doesn't enforce type validation for DURATION string display
+            self._attr_device_class = None
+            self._attr_state_class = None
+            self._attr_native_unit_of_measurement = None
+
+        # Add unit to attributes if not already set by metric definition's attributes
+        if self._attr_native_unit_of_measurement and "unit" not in self._attr_extra_state_attributes:
+            self._attr_extra_state_attributes["unit"] = self._attr_native_unit_of_measurement
+
+        # Cell sensor configuration
+        self._is_cell_sensor = (
+            (("cell" in self._topic.lower() or "voltage" in self._topic.lower() or
+              "temp" in self._topic.lower()) and
+             self._attr_extra_state_attributes.get("category") == "battery") or
+            self._attr_extra_state_attributes.get("has_cell_data", False) or
+            (("health" in self._topic.lower() or "pressure" in self._topic.lower()) and # Added pressure here for robust check
+             self._attr_extra_state_attributes.get("category") == "tire")
+        )
+        
+        # Determine stat type
+        self._stat_type = "cell" # Default
+        if self._attr_extra_state_attributes.get("category") == "tire" and self._attr_device_class == SensorDeviceClass.PRESSURE:
+            self._stat_type = "pressure"
+        elif "temp" in self._internal_name.lower():
+            self._stat_type = "temp"
+        elif "voltage" in self._internal_name.lower():
+            self._stat_type = "voltage"
+
+
+        # Initialize cell sensors tracking
+        self._cell_sensors_created = False
+        self._cell_sensors = []
+        
+        # Initialize tire pressure sensors tracking
+        self._tire_sensors_created = False
+        self._tire_sensors = []
+
+        device_class_for_parsing = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
+        state_class_for_parsing = self._attr_extra_state_attributes.get("original_state_class") or self._attr_state_class
+        
+        parsed_data_or_value = parse_value(
+            initial_state, 
+            device_class_for_parsing,
+            state_class_for_parsing, 
+            self._is_cell_sensor, # This flag might need re-evaluation for pressure sensors if it causes issues
+            entity_name=self._internal_name
+        )
+
+        attributes_processed_from_dict = False
+        if isinstance(parsed_data_or_value, dict) and device_class_for_parsing == SensorDeviceClass.PRESSURE:
+            self._parsed_value = parsed_data_or_value.get("value")
+            detected_unit = parsed_data_or_value.get("detected_unit")
+            if detected_unit:
+                self._attr_native_unit_of_measurement = detected_unit
+                self._attr_extra_state_attributes["unit"] = detected_unit
+            
+            for key, val in parsed_data_or_value.items():
+                if key not in ["value", "detected_unit"]:
+                    self._attr_extra_state_attributes[key] = val
+            attributes_processed_from_dict = True
+        else:
+            self._parsed_value = parsed_data_or_value
+
+        self._attr_native_value = format_sensor_value(
+            self._parsed_value, device_class_for_parsing, self._attr_extra_state_attributes
+        )
+
+        if not attributes_processed_from_dict:
+            # Check if this is a cell sensor (non-pressure) with comma-separated values
+            is_non_pressure_comma_separated_cell_sensor = (
+                self._is_cell_sensor and 
+                isinstance(initial_state, str) and 
+                ("," in initial_state or ";" in initial_state) and 
+                device_class_for_parsing != SensorDeviceClass.PRESSURE
+            )
+            if is_non_pressure_comma_separated_cell_sensor:
+                 self._handle_cell_values(initial_state) # Handles its own attribute extraction
+            else:
+                # For other cases (including if initial_state is JSON, or simple string not handled above)
+                updated_attrs = process_json_payload(initial_state, self._attr_extra_state_attributes,
+                                                   self._internal_name, self._is_cell_sensor, self._stat_type)
+                self._attr_extra_state_attributes.update(updated_attrs)
+        
+        updated_attrs_device_specific = add_device_specific_attributes(
+            self._attr_extra_state_attributes, device_class_for_parsing, self._parsed_value
+        )
+        self._attr_extra_state_attributes.update(updated_attrs_device_specific)
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to updates."""
+        await super().async_added_to_hass()
+
+        # Restore previous state if available
+        if (state := await self.async_get_last_state()) is not None:
+            if state.state not in ["unavailable", "unknown", None]:
+                device_class_for_restoring = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
+                # Ensure state_class_for_restoring is defined at this scope
+                current_state_class = self._attr_state_class # Default to current entity state_class
+                if self._attr_extra_state_attributes.get("original_state_class"):
+                    current_state_class = self._attr_extra_state_attributes.get("original_state_class")
+                state_class_for_restoring = current_state_class
+
+                if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
+                    # The state.state from HA for a timestamp is typically an ISO string
+                    # parse_value will convert this to a datetime object
+                    parsed_val = parse_value(state.state, SensorDeviceClass.TIMESTAMP, None)
+                    if isinstance(parsed_val, datetime):
+                        self._parsed_value = parsed_val
+                        self._attr_native_value = parsed_val
+                        if "timestamp_object" in state.attributes:
+                            restored_ts_obj = parse_value(state.attributes["timestamp_object"], SensorDeviceClass.TIMESTAMP, None)
+                            if isinstance(restored_ts_obj, datetime):
+                                self._attr_extra_state_attributes["timestamp_object"] = restored_ts_obj
+                            else:
+                                self._attr_extra_state_attributes["timestamp_object"] = parsed_val
+                        else:
+                            self._attr_extra_state_attributes["timestamp_object"] = parsed_val
+                    else:
+                        _LOGGER.warning(f"Could not restore timestamp for {self.entity_id} from state '{state.state}'. Parsed as: {parsed_val}")
+                        self._attr_native_value = state.state # Fallback
+                elif device_class_for_restoring == SensorDeviceClass.DURATION:
+                    # For duration, try to extract raw value from attributes first
+                    if state.attributes and "raw_value" in state.attributes:
+                        self._parsed_value = state.attributes["raw_value"]
+                        device_class_for_formatting = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
+                        self._attr_native_value = format_sensor_value(
+                            self._parsed_value, device_class_for_formatting, self._attr_extra_state_attributes
+                        )
+                    else:
+                        # Try to parse the state if it looks like a formatted duration
+                        raw_value = parse_duration(state.state)
+                        if raw_value is not None:
+                            self._parsed_value = raw_value
+                            self._attr_extra_state_attributes["raw_value"] = raw_value
+                            self._attr_native_value = state.state
+                            self._attr_extra_state_attributes["formatted_short"] = state.state
+                            for field in ["formatted_duration", "determined_unit", "unit_uncertain",
+                                         "unit_defaulted", "debug_unit_used"]:
+                                if field in self._attr_extra_state_attributes:
+                                    del self._attr_extra_state_attributes[field]
+                        else:
+                            self._attr_native_value = state.state
+                else:
+                    # For other sensors, parse the state value appropriately
+                    # Now state_class_for_restoring is correctly defined and used here
+                    self._parsed_value = parse_value(state.state, device_class_for_restoring, state_class_for_restoring, self._is_cell_sensor, entity_name=self._internal_name)
+                    self._attr_native_value = format_sensor_value(self._parsed_value, device_class_for_restoring, self._attr_extra_state_attributes)
 
             # Restore attributes if available, but clean up inconsistent ones
             if state.attributes:
@@ -464,57 +543,76 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         @callback
         def update_state(payload: str) -> None:
             """Update the sensor state."""
-            device_class_for_parsing = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
-            state_class_for_parsing = self._attr_extra_state_attributes.get("original_state_class") or self._attr_state_class
+            # Determine the correct device_class for parsing and formatting
+            # If original_device_class exists (duration/timestamp special handling), use that.
+            # Otherwise, use the entity's current device_class.
+            device_class_for_processing = self._attr_extra_state_attributes.get("original_device_class") or self._attr_device_class
+            state_class_for_processing = self._attr_extra_state_attributes.get("original_state_class") or self._attr_state_class
 
-            parsed_result = parse_value(
-                payload, 
-                device_class_for_parsing,
-                state_class_for_parsing, 
-                self._is_cell_sensor, # This flag might need re-evaluation
-                entity_name=self._internal_name
-            )
-
-            attributes_processed_from_dict = False
-            if isinstance(parsed_result, dict) and device_class_for_parsing == SensorDeviceClass.PRESSURE:
-                self._parsed_value = parsed_result.get("value")
-                detected_unit = parsed_result.get("detected_unit")
-                if detected_unit:
-                    self._attr_native_unit_of_measurement = detected_unit
-                    self._attr_extra_state_attributes["unit"] = detected_unit
-                
-                for key, val in parsed_result.items():
-                    if key not in ["value", "detected_unit"]:
-                        self._attr_extra_state_attributes[key] = val
-                attributes_processed_from_dict = True
+            # If this entity is a timestamp sensor, its _attr_device_class is SensorDeviceClass.TIMESTAMP
+            if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
+                parsed_val = parse_value(payload, SensorDeviceClass.TIMESTAMP, None) # state_class not needed for timestamp parsing
+                if isinstance(parsed_val, datetime):
+                    self._parsed_value = parsed_val
+                    self._attr_native_value = parsed_val # Set native_value to the datetime object
+                    self._attr_extra_state_attributes["timestamp_object"] = parsed_val
+                else:
+                    _LOGGER.warning(f"Failed to parse timestamp payload '{payload}' for {self.entity_id}. Current state: {self._attr_native_value}")
+                    # Optionally, decide if you want to set to None or keep old value
+                    # For now, let's not change native_value if parsing fails, to avoid flapping to unavailable
+                    # self._attr_native_value = None 
+                    # self._parsed_value = None
             else:
-                self._parsed_value = parsed_result
+                # Existing logic for non-timestamp sensors
+                parsed_result = parse_value(
+                    payload, 
+                    device_class_for_processing, # Use determined device_class for parsing
+                    state_class_for_processing, 
+                    self._is_cell_sensor, 
+                    entity_name=self._internal_name
+                )
 
-            self._attr_native_value = format_sensor_value(
-                self._parsed_value, device_class_for_parsing, self._attr_extra_state_attributes
-            )
+                attributes_processed_from_dict = False
+                if isinstance(parsed_result, dict) and device_class_for_processing == SensorDeviceClass.PRESSURE:
+                    self._parsed_value = parsed_result.get("value")
+                    detected_unit = parsed_result.get("detected_unit")
+                    if detected_unit:
+                        self._attr_native_unit_of_measurement = detected_unit
+                        self._attr_extra_state_attributes["unit"] = detected_unit
+                    
+                    for key, val in parsed_result.items():
+                        if key not in ["value", "detected_unit"]:
+                            self._attr_extra_state_attributes[key] = val
+                    attributes_processed_from_dict = True
+                else:
+                    self._parsed_value = parsed_result
+
+                # Format the value based on its actual device_class (not original_device_class for formatting here, except for DURATION)
+                # For DURATION, format_sensor_value uses original_device_class from attributes
+                self._attr_native_value = format_sensor_value(
+                    self._parsed_value, device_class_for_processing, self._attr_extra_state_attributes
+                )
+
+                if not attributes_processed_from_dict:
+                    is_non_pressure_comma_separated_cell_sensor = (
+                        self._is_cell_sensor and 
+                        isinstance(payload, str) and 
+                        ("," in payload or ";" in payload) and 
+                        device_class_for_processing != SensorDeviceClass.PRESSURE
+                    )
+                    if is_non_pressure_comma_separated_cell_sensor:
+                        self._handle_cell_values(payload)
+                    else:
+                        updated_attrs = process_json_payload(payload, self._attr_extra_state_attributes,
+                                                          self._internal_name, self._is_cell_sensor, self._stat_type)
+                        self._attr_extra_state_attributes.update(updated_attrs)
+                
+                updated_attrs_device_specific = add_device_specific_attributes(
+                    self._attr_extra_state_attributes, device_class_for_processing, self._parsed_value
+                )
+                self._attr_extra_state_attributes.update(updated_attrs_device_specific)
 
             self._attr_extra_state_attributes["last_updated"] = dt_util.utcnow().isoformat()
-
-            if not attributes_processed_from_dict:
-                is_non_pressure_comma_separated_cell_sensor = (
-                    self._is_cell_sensor and 
-                    isinstance(payload, str) and 
-                    ("," in payload or ";" in payload) and 
-                    device_class_for_parsing != SensorDeviceClass.PRESSURE
-                )
-                if is_non_pressure_comma_separated_cell_sensor:
-                    self._handle_cell_values(payload)
-                else:
-                    updated_attrs = process_json_payload(payload, self._attr_extra_state_attributes,
-                                                      self._internal_name, self._is_cell_sensor, self._stat_type)
-                    self._attr_extra_state_attributes.update(updated_attrs)
-            
-            updated_attrs_device_specific = add_device_specific_attributes(
-                self._attr_extra_state_attributes, device_class_for_parsing, self._parsed_value
-            )
-            self._attr_extra_state_attributes.update(updated_attrs_device_specific)
-
             self.async_write_ha_state()
 
     def _handle_cell_values(self, payload: str) -> None:

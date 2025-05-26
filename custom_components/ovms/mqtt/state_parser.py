@@ -3,6 +3,7 @@ import json
 import logging
 import re
 from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone # Added timezone
 
 from homeassistant.components.sensor import SensorDeviceClass
 
@@ -32,6 +33,63 @@ class StateParser:
     @staticmethod
     def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None) -> Any:
         """Parse the value from the payload."""
+
+        if device_class == SensorDeviceClass.TIMESTAMP:
+            if value is None:
+                return None
+            # Handle common "empty" or "invalid" string values for timestamps
+            if isinstance(value, str) and value.lower() in SPECIAL_STATE_VALUES:
+                return None
+
+            # If it's already a datetime object (e.g. from restoration or internal processing)
+            if isinstance(value, datetime):
+                # Ensure it's timezone-aware, default to UTC if naive
+                if value.tzinfo is None:
+                    return value.replace(tzinfo=timezone.utc)
+                return value
+
+            original_value_for_debug = value
+            try:
+                # Attempt to parse as a Unix timestamp (integer or float)
+                numeric_value = float(value)
+                # Check for common placeholder values like 0 or -1 that might mean "unknown"
+                if numeric_value <= 0: # Consider 0 or negative as invalid for typical epoch timestamps
+                     _LOGGER.debug(f"Timestamp value {numeric_value} considered invalid, returning None.")
+                     return None
+                return datetime.fromtimestamp(numeric_value, tz=timezone.utc)
+            except (ValueError, TypeError):
+                # Not a simple number, proceed to string parsing
+                pass
+
+            if isinstance(value, str):
+                # Attempt to parse as an ISO 8601 string
+                try:
+                    iso_value = value.upper()
+                    # Python's fromisoformat handles Z and +/-HH:MM offsets correctly
+                    # Forcing Z to +00:00 can be helpful for wider compatibility if issues arise
+                    if iso_value.endswith("Z"):
+                        dt_obj = datetime.fromisoformat(iso_value[:-1] + "+00:00")
+                    else:
+                        dt_obj = datetime.fromisoformat(iso_value)
+                    
+                    if dt_obj.tzinfo is None or dt_obj.tzinfo.utcoffset(dt_obj) is None:
+                        dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+                    return dt_obj
+                except ValueError:
+                    pass # Not a standard ISO format, try other formats
+
+                # Fallback for "YYYY-MM-DD at HH:MM:SS" if it's being fed back from HA state
+                try:
+                    dt_obj = datetime.strptime(value, "%Y-%m-%d at %H:%M:%S")
+                    return dt_obj.replace(tzinfo=timezone.utc) 
+                except ValueError:
+                    _LOGGER.debug(f"Could not parse string '{value}' as a known timestamp format.")
+                    return None 
+            
+            _LOGGER.warning(f"Unhandled timestamp format or type for value: {original_value_for_debug} (type: {type(original_value_for_debug)})")
+            return None
+
+        # --- Existing parse_value logic continues below ---
         # Handle special state values for numeric sensors
         if StateParser.requires_numeric_value(device_class, state_class) and StateParser.is_special_state_value(value):
             return None
