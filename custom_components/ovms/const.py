@@ -94,6 +94,13 @@ DEFAULT_COMMAND_RATE_PERIOD = 60.0  # seconds
 # Maximum length for state values in Home Assistant
 MAX_STATE_LENGTH = 255
 
+# Topic Classification Constants
+class TopicTypes:
+    """Topic type classification constants."""
+    COORDINATE_KEYWORDS = frozenset(["latitude", "lat", "longitude", "long", "lon", "lng"])
+    GPS_QUALITY_KEYWORDS = frozenset(["gpssq", "gps_sq", "gpshdop", "gps_hdop"])
+    VERSION_KEYWORDS = frozenset(["version", "m.version"])
+
 def truncate_state_value(value, max_length=MAX_STATE_LENGTH):
     """Truncate state value to the maximum allowed length.
 
