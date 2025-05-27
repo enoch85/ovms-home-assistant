@@ -260,6 +260,9 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             # If we need a numeric value but got a string, try to convert it
             if requires_numeric_value(device_class, state_class):
                 try:
+                    # Try to preserve integer type when possible
+                    if "." not in json_val.strip():
+                        return int(json_val)
                     return float(json_val)
                 except (ValueError, TypeError):
                     return None

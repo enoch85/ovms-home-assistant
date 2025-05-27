@@ -112,6 +112,9 @@ class StateParser:
                 # If we need a numeric value but got a string, try to convert it
                 if StateParser.requires_numeric_value(device_class, state_class):
                     try:
+                        # Try to preserve integer type when possible
+                        if "." not in json_val.strip():
+                            return int(json_val)
                         return float(json_val)
                     except (ValueError, TypeError):
                         return None
@@ -131,10 +134,10 @@ class StateParser:
         except (ValueError, json.JSONDecodeError):
             # Not JSON, try numeric
             try:
-                # Check if it's a float
+                # Check if it's a float first (contains a decimal point)
                 if isinstance(value, str) and "." in value:
                     return float(value)
-                # Check if it's an int
+                # Try to parse as integer first to preserve integer type
                 return int(value)
             except (ValueError, TypeError):
                 # If we need a numeric value but couldn't convert, return None

@@ -7,7 +7,8 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import DeviceInfo, EntityCategory
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.const import EntityCategory
 from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -170,7 +171,8 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             """Update the switch state."""
             # Ensure payload is properly truncated if it's a string
             if isinstance(payload, str) and len(payload) > 255:
-                payload = truncate_state_value(payload)
+                truncated_payload = truncate_state_value(payload)
+                payload = truncated_payload if truncated_payload is not None else payload
 
             self._attr_is_on = self._parse_state(payload)
 
@@ -220,7 +222,8 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
 
         # Make sure state is truncated if needed
         if isinstance(state, str):
-            state = truncate_state_value(state)
+            truncated_state = truncate_state_value(state)
+            state = truncated_state if truncated_state is not None else state
 
         # Check for boolean-like values in string form
         if isinstance(state, str):
@@ -312,7 +315,8 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         try:
             # Ensure payload is properly truncated if it's a string
             if isinstance(payload, str) and len(payload) > 255:
-                payload = truncate_state_value(payload)
+                truncated_payload = truncate_state_value(payload)
+                payload = truncated_payload if truncated_payload is not None else payload
 
             json_data = json.loads(payload)
             if isinstance(json_data, dict):

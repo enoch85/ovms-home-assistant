@@ -70,13 +70,7 @@ BATTERY_METRICS = {
         "category": "battery",
         "has_cell_data": True,
     },
-    "v.b.c.temp.alert": {
-        "name": "Cell Temperature Alerts",
-        "description": "Cell temperature deviation alert level",
-        "icon": "mdi:alert",
-        "category": "battery",
-        "has_cell_data": True,
-    },
+
     "v.b.c.temp.dev.max": {
         "name": "Max Cell Temperature Deviation",
         "description": "Cell maximum temperature deviation observed",
@@ -117,13 +111,7 @@ BATTERY_METRICS = {
         "category": "battery",
         "has_cell_data": True,
     },
-    "v.b.c.voltage.alert": {
-        "name": "Cell Voltage Alerts",
-        "description": "Cell voltage deviation alert level",
-        "icon": "mdi:alert",
-        "category": "battery",
-        "has_cell_data": True,
-    },
+
     "v.b.c.voltage.dev.max": {
         "name": "Max Cell Voltage Deviation",
         "description": "Cell maximum voltage deviation observed",

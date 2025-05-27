@@ -49,6 +49,9 @@ class EntityFactory:
 
             # Check if we already processed this entity
             unique_id = entity_data.get("unique_id")
+            if not unique_id:
+                _LOGGER.error("No unique_id generated for topic: %s", topic)
+                return
             if unique_id in self.created_entities:
                 _LOGGER.debug("Entity already created for topic: %s", topic)
                 return
