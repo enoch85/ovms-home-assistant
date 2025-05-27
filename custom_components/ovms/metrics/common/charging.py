@@ -215,4 +215,18 @@ CHARGING_METRICS = {
         "unit": UnitOfElectricPotential.VOLT,
         "category": "charging",
     },
+    "v.e.charging12v": {
+        "name": "12V Battery Charging",
+        "description": "12V battery charging state",
+        "icon": "mdi:battery-charging",
+        "device_class": BinarySensorDeviceClass.BATTERY_CHARGING,
+        "category": "charging",
+    },
+    "v.d.cp": {
+        "name": "Charge Port",
+        "description": "Charge port open state",
+        "icon": "mdi:ev-station",
+        "device_class": BinarySensorDeviceClass.DOOR,
+        "category": "charging",
+    },
 }

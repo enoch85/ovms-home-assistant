@@ -10,7 +10,7 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.const import (
     UnitOfLength,
 )
-from homeassistant.helpers.entity import EntityCategory  # noqa: F401
+from homeassistant.const import EntityCategory  # noqa: F401
 
 # Diagnostic metrics
 DIAGNOSTIC_METRICS = {
@@ -19,13 +19,6 @@ DIAGNOSTIC_METRICS = {
         "description": "Alarm sounding state",
         "icon": "mdi:bell-ring",
         "device_class": BinarySensorDeviceClass.PROBLEM,
-        "category": "diagnostic",
-    },
-    "v.e.aux12v": {
-        "name": "12V System",
-        "description": "12V auxiliary system state (base system awake)",
-        "icon": "mdi:power-plug",
-        "device_class": BinarySensorDeviceClass.POWER,
         "category": "diagnostic",
     },
     "v.e.awake": {
@@ -48,13 +41,6 @@ DIAGNOSTIC_METRICS = {
         "icon": "mdi:login",
         "category": "diagnostic",
         "device_class": BinarySensorDeviceClass.CONNECTIVITY,
-    },
-    "v.e.charging12v": {
-        "name": "12V Battery Charging",
-        "description": "12V battery charging state",
-        "icon": "mdi:battery-charging",
-        "device_class": BinarySensorDeviceClass.BATTERY_CHARGING,
-        "category": "diagnostic",
     },
     "v.e.drivemode": {
         "name": "Drive Mode",
@@ -111,5 +97,19 @@ DIAGNOSTIC_METRICS = {
         "icon": "mdi:account-key",
         "device_class": BinarySensorDeviceClass.RUNNING,
         "category": "diagnostic",
+    },
+    "v.b.c.temp.alert": {
+        "name": "Cell Temperature Alerts",
+        "description": "Cell temperature deviation alert level",
+        "icon": "mdi:alert",
+        "category": "diagnostic",
+        "has_cell_data": True,
+    },
+    "v.b.c.voltage.alert": {
+        "name": "Cell Voltage Alerts",
+        "description": "Cell voltage deviation alert level",
+        "icon": "mdi:alert",
+        "category": "diagnostic",
+        "has_cell_data": True,
     },
 }

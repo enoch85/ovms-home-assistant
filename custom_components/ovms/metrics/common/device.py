@@ -1,6 +1,6 @@
 """Device identification metrics for OVMS integration."""
 
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import EntityCategory
 
 # Device metrics
 DEVICE_METRICS = {

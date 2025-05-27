@@ -2,35 +2,12 @@
 
 from .patterns import TOPIC_PATTERNS
 
-# Placeholders for initial definition to avoid circular imports
-# These will be populated on first use
-METRIC_DEFINITIONS = None
-CATEGORY_BATTERY = None
-CATEGORY_CHARGING = None
-CATEGORY_CLIMATE = None
-CATEGORY_DOOR = None
-CATEGORY_LOCATION = None
-CATEGORY_MOTOR = None
-CATEGORY_TRIP = None
-CATEGORY_DIAGNOSTIC = None
-CATEGORY_POWER = None
-CATEGORY_NETWORK = None
-CATEGORY_SYSTEM = None
-CATEGORY_TIRE = None
-CATEGORY_VW_EUP = None
-CATEGORY_SMART_FORTWO = None
-CATEGORY_MG_ZS_EV = None
-CATEGORY_NISSAN_LEAF = None
-CATEGORY_RENAULT_TWIZY = None
-PREFIX_CATEGORIES = None
+# Note: Category constants are imported directly in functions to avoid circular import issues
 
 def get_metric_by_path(metric_path):
     """Get metric definition by exact path match."""
-    global METRIC_DEFINITIONS
-    if METRIC_DEFINITIONS is None:
-        # Import only when needed
-        from . import METRIC_DEFINITIONS as MD
-        METRIC_DEFINITIONS = MD
+    # Import only when needed to avoid circular imports
+    from . import METRIC_DEFINITIONS
 
     # First try exact match
     if metric_path in METRIC_DEFINITIONS:
@@ -106,8 +83,9 @@ def get_metric_by_path(metric_path):
 
 def get_metric_by_pattern(topic_parts):
     """Try to match a metric by pattern in topic parts."""
-    global METRIC_DEFINITIONS  # Move the global declaration to the beginning of the function
-
+    # Import only when needed to avoid circular imports
+    from . import METRIC_DEFINITIONS
+    
     # First, try to find an exact match of the last path component
     if topic_parts:
         last_part = topic_parts[-1].lower()
@@ -130,10 +108,6 @@ def get_metric_by_pattern(topic_parts):
             if part == "xvu":
                 # This is a VW eUP metric, try to construct a matching key
                 metric_key = ".".join(topic_parts)
-                if METRIC_DEFINITIONS is None:
-                    # Import only when needed
-                    from . import METRIC_DEFINITIONS as MD
-                    METRIC_DEFINITIONS = MD
 
                 # Try several variations to handle different path formats
                 variations = [
@@ -152,10 +126,6 @@ def get_metric_by_pattern(topic_parts):
             if part == "xmg":
                 # This is an MG ZS-EV metric, try to construct a matching key
                 metric_key = ".".join(topic_parts)
-                if METRIC_DEFINITIONS is None:
-                    # Import only when needed
-                    from . import METRIC_DEFINITIONS as MD
-                    METRIC_DEFINITIONS = MD
 
                 # Try several variations to handle different path formats
                 variations = [
@@ -174,10 +144,6 @@ def get_metric_by_pattern(topic_parts):
             if part == "xsq":
                 # This is a Smart ForTwo metric, try to construct a matching key
                 metric_key = ".".join(topic_parts)
-                if METRIC_DEFINITIONS is None:
-                    # Import only when needed
-                    from . import METRIC_DEFINITIONS as MD
-                    METRIC_DEFINITIONS = MD
 
                 # Try several variations to handle different path formats
                 variations = [
@@ -196,10 +162,6 @@ def get_metric_by_pattern(topic_parts):
             if part == "xrt":
                 # This is a Renault Twizy metric, try to construct a matching key
                 metric_key = ".".join(topic_parts)
-                if METRIC_DEFINITIONS is None:
-                    # Import only when needed
-                    from . import METRIC_DEFINITIONS as MD
-                    METRIC_DEFINITIONS = MD
 
                 # Try several variations to handle different path formats
                 variations = [
@@ -218,10 +180,6 @@ def get_metric_by_pattern(topic_parts):
             if part == "xnl":
                 # This is a Nissan Leaf metric, try to construct a matching key
                 metric_key = ".".join(topic_parts)
-                if METRIC_DEFINITIONS is None:
-                    # Import only when needed
-                    from . import METRIC_DEFINITIONS as MD
-                    METRIC_DEFINITIONS = MD
 
                 # Try several variations to handle different path formats
                 variations = [
@@ -245,21 +203,14 @@ def get_metric_by_pattern(topic_parts):
 
 def determine_category_from_topic(topic_parts):
     """Determine the most likely category from topic parts."""
-    global CATEGORY_BATTERY, CATEGORY_CHARGING, CATEGORY_CLIMATE, CATEGORY_DOOR
-    global CATEGORY_LOCATION, CATEGORY_MOTOR, CATEGORY_TRIP, CATEGORY_DIAGNOSTIC
-    global CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE
-    global CATEGORY_VW_EUP, CATEGORY_SMART_FORTWO, CATEGORY_MG_ZS_EV, CATEGORY_NISSAN_LEAF, CATEGORY_RENAULT_TWIZY
-    global PREFIX_CATEGORIES
-
-    # Initialize categories if not already done
-    if CATEGORY_BATTERY is None:
-        from . import (
-            CATEGORY_BATTERY, CATEGORY_CHARGING, CATEGORY_CLIMATE, CATEGORY_DOOR,
-            CATEGORY_LOCATION, CATEGORY_MOTOR, CATEGORY_TRIP, CATEGORY_DIAGNOSTIC,
-            CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE,
-            CATEGORY_VW_EUP, CATEGORY_SMART_FORTWO, CATEGORY_MG_ZS_EV, CATEGORY_NISSAN_LEAF,
-            CATEGORY_RENAULT_TWIZY, PREFIX_CATEGORIES
-        )
+    # Import constants directly to avoid global state issues
+    from . import (
+        CATEGORY_BATTERY, CATEGORY_CHARGING, CATEGORY_CLIMATE, CATEGORY_DOOR,
+        CATEGORY_LOCATION, CATEGORY_MOTOR, CATEGORY_TRIP, CATEGORY_DIAGNOSTIC,
+        CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE,
+        CATEGORY_VW_EUP, CATEGORY_SMART_FORTWO, CATEGORY_MG_ZS_EV, CATEGORY_NISSAN_LEAF,
+        CATEGORY_RENAULT_TWIZY, PREFIX_CATEGORIES
+    )
 
     # Special handling for vehicle-specific topics
     if "xvu" in topic_parts:

@@ -20,7 +20,7 @@ from homeassistant.const import (
     UnitOfFrequency,
     UnitOfTime,
 )
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import EntityCategory
 
 # Simplified mapping for lookup by keyword/pattern
 TOPIC_PATTERNS = {

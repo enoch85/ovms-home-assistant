@@ -8,7 +8,6 @@ from ..metrics import (
     BINARY_METRICS,
     get_metric_by_path,
     get_metric_by_pattern,
-    determine_category_from_topic,
 )
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -124,7 +123,8 @@ class TopicParser:
 
             # Determine entity type and category
             entity_type = self._determine_entity_type(parts, metric_path, topic)
-            category = determine_category_from_topic(parts)
+            # Use raw topic parts for category determination
+            category = self._determine_category_from_raw_topic(parts)
 
             # Create entity name and add extra attributes
             raw_name = "_".join(parts) if parts else "unknown"
@@ -340,3 +340,84 @@ class TopicParser:
             
         # Fallback to default
         return DEFAULT_TOPIC_BLACKLIST
+
+    def _determine_category_from_raw_topic(self, topic_parts: List[str]) -> str:
+        """Determine category from raw topic parts without converting to metric path."""
+        from .. import metrics
+        
+        if not topic_parts:
+            return metrics.CATEGORY_SYSTEM
+            
+        # Special handling for vehicle-specific topics - check for presence anywhere in the topic
+        vehicle_specific_mappings = {
+            "xvu": metrics.CATEGORY_VW_EUP,
+            "xsq": metrics.CATEGORY_SMART_FORTWO,
+            "xmg": metrics.CATEGORY_MG_ZS_EV,
+            "xnl": metrics.CATEGORY_NISSAN_LEAF,
+            "xrt": metrics.CATEGORY_RENAULT_TWIZY,
+        }
+        
+        for prefix, category in vehicle_specific_mappings.items():
+            if prefix in topic_parts:
+                return category
+                
+        # Handle standard OVMS topic structure using safe indexing
+        def safe_get(parts: List[str], index: int, default: str = "") -> str:
+            """Safely get an element from a list by index."""
+            return parts[index] if index < len(parts) else default
+            
+        # Define category mappings for metric topics
+        # Format: (part1, part2, part3, expected_category)
+        metric_patterns = [
+            # Location metrics: metric/v/p/* 
+            ("metric", "v", "p", metrics.CATEGORY_LOCATION),
+            # Battery metrics: metric/v/b/*
+            ("metric", "v", "b", metrics.CATEGORY_BATTERY),
+            # Charging metrics: metric/v/c/*
+            ("metric", "v", "c", metrics.CATEGORY_CHARGING),
+            # Door metrics: metric/v/d/*
+            ("metric", "v", "d", metrics.CATEGORY_DOOR),
+            # Power metrics: metric/v/g/*
+            ("metric", "v", "g", metrics.CATEGORY_POWER),
+            # Motor metrics: metric/v/i/* and metric/v/m/*
+            ("metric", "v", "i", metrics.CATEGORY_MOTOR),
+            ("metric", "v", "m", metrics.CATEGORY_MOTOR),
+            # Tire metrics: metric/v/t/*
+            ("metric", "v", "t", metrics.CATEGORY_TIRE),
+            # Network metrics: metric/m/net/*
+            ("metric", "m", "net", metrics.CATEGORY_NETWORK),
+        ]
+        
+        # Check metric patterns
+        for pattern in metric_patterns:
+            part1, part2, part3, category = pattern
+            if (safe_get(topic_parts, 0) == part1 and 
+                safe_get(topic_parts, 1) == part2 and 
+                safe_get(topic_parts, 2) == part3):
+                return category
+                
+        # Special case for climate metrics: metric/v/e/cabin/*
+        if (len(topic_parts) >= 4 and
+            safe_get(topic_parts, 0) == "metric" and
+            safe_get(topic_parts, 1) == "v" and
+            safe_get(topic_parts, 2) == "e" and
+            safe_get(topic_parts, 3) == "cabin"):
+            return metrics.CATEGORY_CLIMATE
+            
+        # Other diagnostic metrics: metric/v/e/* (not cabin)
+        if (safe_get(topic_parts, 0) == "metric" and
+            safe_get(topic_parts, 1) == "v" and
+            safe_get(topic_parts, 2) == "e"):
+            return metrics.CATEGORY_DIAGNOSTIC
+            
+        # System metrics: metric/m/* or metric/s/*
+        if (safe_get(topic_parts, 0) == "metric" and
+            safe_get(topic_parts, 1) in ["m", "s"]):
+            return metrics.CATEGORY_SYSTEM
+            
+        # Non-metric system topics: status, notify, etc.
+        if safe_get(topic_parts, 0) in ["status", "notify"]:
+            return metrics.CATEGORY_SYSTEM
+                
+        # Default category
+        return metrics.CATEGORY_SYSTEM

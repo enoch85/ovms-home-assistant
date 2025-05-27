@@ -3,7 +3,7 @@ import json
 import logging
 from typing import Dict, Any, Optional, List
 
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import EntityCategory
 from homeassistant.util import dt as dt_util
 
 from .const import LOGGER_NAME

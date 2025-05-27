@@ -253,4 +253,11 @@ POWER_METRICS = {
         "unit": UnitOfElectricPotential.VOLT,
         "category": "power",
     },
+    "v.e.aux12v": {
+        "name": "12V System",
+        "description": "12V auxiliary system state (base system awake)",
+        "icon": "mdi:power-plug",
+        "device_class": BinarySensorDeviceClass.POWER,
+        "category": "power",
+    },
 }

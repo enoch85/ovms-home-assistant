@@ -6,13 +6,6 @@ from homeassistant.components.binary_sensor import (
 
 # Door metrics
 DOOR_METRICS = {
-    "v.d.cp": {
-        "name": "Charge Port",
-        "description": "Charge port open state",
-        "icon": "mdi:ev-station",
-        "device_class": BinarySensorDeviceClass.DOOR,
-        "category": "door",
-    },
     "v.d.fl": {
         "name": "Front Left Door",
         "description": "Front left door open state",
