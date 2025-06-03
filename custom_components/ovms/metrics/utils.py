@@ -203,15 +203,20 @@ def get_metric_by_pattern(topic_parts):
 
 def determine_category_from_topic(topic_parts):
     """Determine the most likely category from topic parts."""
-    # Import constants directly to avoid global state issues
-    from . import (
+    # Import constants from const.py to maintain single source of truth
+    from ..const import (
         CATEGORY_BATTERY, CATEGORY_CHARGING, CATEGORY_CLIMATE, CATEGORY_DOOR,
         CATEGORY_LOCATION, CATEGORY_MOTOR, CATEGORY_TRIP, CATEGORY_DIAGNOSTIC,
         CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE,
         CATEGORY_VW_EUP, CATEGORY_SMART_FORTWO, CATEGORY_MG_ZS_EV, CATEGORY_NISSAN_LEAF,
-        CATEGORY_RENAULT_TWIZY, PREFIX_CATEGORIES
+        CATEGORY_RENAULT_TWIZY
     )
+    # Import PREFIX_CATEGORIES from current module (still defined here)
+    from . import PREFIX_CATEGORIES
 
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # Special handling for vehicle-specific topics
     if "xvu" in topic_parts:
         return CATEGORY_VW_EUP
@@ -224,7 +229,70 @@ def determine_category_from_topic(topic_parts):
     if "xrt" in topic_parts:
         return CATEGORY_RENAULT_TWIZY
 
-    # Check for known categories in topic
+    # Special handling for precise categorization (backup to PREFIX_CATEGORIES)
+    full_path = ".".join(topic_parts)
+    
+    # Define precise metric categorizations for backup detection
+    specific_categorizations = {
+        # GPS/Location metrics
+        "v.p.altitude": CATEGORY_LOCATION,
+        "v.p.direction": CATEGORY_LOCATION,
+        "v.p.gpshdop": CATEGORY_LOCATION,
+        "v.p.gpslock": CATEGORY_LOCATION,
+        "v.p.gpsmode": CATEGORY_LOCATION,
+        "v.p.gpssq": CATEGORY_LOCATION,
+        "v.p.gpsspeed": CATEGORY_LOCATION,
+        "v.p.gpstime": CATEGORY_LOCATION,
+        "v.p.latitude": CATEGORY_LOCATION,
+        "v.p.longitude": CATEGORY_LOCATION,
+        "v.p.satcount": CATEGORY_LOCATION,
+        "v.p.location": CATEGORY_LOCATION,
+        "v.p.valet.latitude": CATEGORY_LOCATION,
+        "v.p.valet.longitude": CATEGORY_LOCATION,
+        
+        # Trip metrics from v.p namespace
+        "v.p.acceleration": CATEGORY_TRIP,
+        "v.p.deceleration": CATEGORY_TRIP,
+        "v.p.odometer": CATEGORY_TRIP,
+        "v.p.speed": CATEGORY_TRIP,
+        "v.p.trip": CATEGORY_TRIP,
+        
+        # Climate-specific environment metrics
+        "v.e.heating": CATEGORY_CLIMATE,
+        "v.e.cooling": CATEGORY_CLIMATE,
+        "v.e.hvac": CATEGORY_CLIMATE,
+        "v.e.cabin.temp": CATEGORY_CLIMATE,
+        "v.e.cabin.fan": CATEGORY_CLIMATE,
+        
+        # Motor-specific inverter metrics
+        "v.i.temp": CATEGORY_MOTOR,
+        "v.i.rpm": CATEGORY_MOTOR,
+        "v.i.pwr": CATEGORY_MOTOR,
+        
+        # Network-specific metrics
+        "m.net.provider": CATEGORY_NETWORK,
+        "m.net.sq": CATEGORY_NETWORK,
+        "m.net.type": CATEGORY_NETWORK,
+        
+        # System-specific metrics
+        "m.freeram": CATEGORY_SYSTEM,
+        "m.hardware": CATEGORY_SYSTEM,
+        "m.serial": CATEGORY_SYSTEM,
+        "m.version": CATEGORY_SYSTEM,
+    }
+    
+    # Check for specific categorization first
+    if full_path in specific_categorizations:
+        category = specific_categorizations[full_path]
+        logger.debug(f"Specific categorization detected - Parts: {topic_parts}, Full Path: {full_path}, Category: {category}")
+        return category
+
+    # Try matching by prefix FIRST (this is the primary categorization method)
+    for prefix, category in PREFIX_CATEGORIES.items():
+        if full_path.startswith(prefix):
+            return category
+
+    # Check for known categories in topic parts as fallback
     for part in topic_parts:
         part_lower = part.lower()
         if part_lower in [
@@ -247,12 +315,6 @@ def determine_category_from_topic(topic_parts):
             CATEGORY_RENAULT_TWIZY,
         ]:
             return part_lower
-
-    # Try matching by prefix
-    full_path = ".".join(topic_parts)
-    for prefix, category in PREFIX_CATEGORIES.items():
-        if full_path.startswith(prefix):
-            return category
 
     # Default category
     return CATEGORY_SYSTEM

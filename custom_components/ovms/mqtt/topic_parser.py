@@ -129,6 +129,10 @@ class TopicParser:
             entity_type = self._determine_entity_type(parts, metric_path, topic)
             # Use centralized category determination from metrics module
             category = metrics.determine_category_from_topic(parts)
+            
+            # Additional logging for GPS location topics
+            if any(keyword in topic.lower() for keyword in ["latitude", "longitude", "gps"]) or (len(parts) >= 2 and parts[0] == "v" and parts[1] == "p"):
+                _LOGGER.info(f"GPS Location Topic Processing - Topic: {topic}, Parts: {parts}, Category: {category}")
 
             # Create entity name and add extra attributes
             raw_name = "_".join(parts) if parts else "unknown"

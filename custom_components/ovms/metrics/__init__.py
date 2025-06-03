@@ -52,28 +52,30 @@ from .utils import (
     create_friendly_name,
 )
 
+# Import category constants from const.py to maintain single source of truth
+from ..const import (
+    CATEGORY_BATTERY,
+    CATEGORY_CHARGING,
+    CATEGORY_CLIMATE,
+    CATEGORY_DOOR,
+    CATEGORY_LOCATION,
+    CATEGORY_MOTOR,
+    CATEGORY_TRIP,
+    CATEGORY_DEVICE,
+    CATEGORY_DIAGNOSTIC,
+    CATEGORY_POWER,
+    CATEGORY_NETWORK,
+    CATEGORY_SYSTEM,
+    CATEGORY_TIRE,
+    CATEGORY_VW_EUP,
+    CATEGORY_SMART_FORTWO,
+    CATEGORY_MG_ZS_EV,
+    CATEGORY_NISSAN_LEAF,
+    CATEGORY_RENAULT_TWIZY,
+)
+
 # Custom unit constants
 UNIT_AMPERE_HOUR = "Ah"
-
-# Categories of metrics
-CATEGORY_BATTERY = "battery"
-CATEGORY_CHARGING = "charging"
-CATEGORY_CLIMATE = "climate"
-CATEGORY_DOOR = "door"
-CATEGORY_LOCATION = "location"
-CATEGORY_MOTOR = "motor"
-CATEGORY_TRIP = "trip"
-CATEGORY_DEVICE = "device"
-CATEGORY_DIAGNOSTIC = "diagnostic"
-CATEGORY_POWER = "power"
-CATEGORY_NETWORK = "network"
-CATEGORY_SYSTEM = "system"
-CATEGORY_TIRE = "tire"
-CATEGORY_VW_EUP = "vw_eup"
-CATEGORY_SMART_FORTWO = "smart_fortwo"
-CATEGORY_MG_ZS_EV = "mg_zs_ev"
-CATEGORY_NISSAN_LEAF = "nissan_leaf"
-CATEGORY_RENAULT_TWIZY = "renault_twizy"
 
 # Combine all metrics into the master dictionary
 METRIC_DEFINITIONS = {
@@ -186,19 +188,79 @@ BINARY_METRICS = [
 
 # Prefix patterns to detect entity categories
 PREFIX_CATEGORIES = {
+    # Battery metrics
     "v.b": CATEGORY_BATTERY,
+    
+    # Charging metrics
     "v.c": CATEGORY_CHARGING,
+    
+    # Door metrics
     "v.d": CATEGORY_DOOR,
+    
+    # Environment metrics - split climate from diagnostic
     "v.e.cabin": CATEGORY_CLIMATE,
-    "v.e": CATEGORY_DIAGNOSTIC,
+    "v.e.heating": CATEGORY_CLIMATE,
+    "v.e.cooling": CATEGORY_CLIMATE,
+    "v.e.hvac": CATEGORY_CLIMATE,
+    "v.e.temp": CATEGORY_CLIMATE,
+    "v.e": CATEGORY_DIAGNOSTIC,  # Fallback for other environment metrics
+    
+    # Power metrics
     "v.g": CATEGORY_POWER,
-    "v.i": CATEGORY_MOTOR,
+    
+    # Inverter/Motor metrics - split by type
+    "v.i.temp": CATEGORY_MOTOR,  # Motor temperatures
+    "v.i.rpm": CATEGORY_MOTOR,   # Motor RPM
+    "v.i.pwr": CATEGORY_MOTOR,   # Motor power
+    "v.i": CATEGORY_DIAGNOSTIC,  # General inverter diagnostics
+    
+    # Motor metrics
     "v.m": CATEGORY_MOTOR,
-    "v.p": CATEGORY_LOCATION,
+    
+    # Position/Location metrics - specific GPS mappings
+    "v.p.altitude": CATEGORY_LOCATION,
+    "v.p.direction": CATEGORY_LOCATION,
+    "v.p.gpshdop": CATEGORY_LOCATION,
+    "v.p.gpslock": CATEGORY_LOCATION,
+    "v.p.gpsmode": CATEGORY_LOCATION,
+    "v.p.gpssq": CATEGORY_LOCATION,
+    "v.p.gpsspeed": CATEGORY_LOCATION,
+    "v.p.gpstime": CATEGORY_LOCATION,
+    "v.p.latitude": CATEGORY_LOCATION,
+    "v.p.longitude": CATEGORY_LOCATION,
+    "v.p.location": CATEGORY_LOCATION,
+    "v.p.satcount": CATEGORY_LOCATION,
+    "v.p.valet.latitude": CATEGORY_LOCATION,
+    "v.p.valet.longitude": CATEGORY_LOCATION,
+    # Trip metrics from v.p namespace
+    "v.p.acceleration": CATEGORY_TRIP,
+    "v.p.deceleration": CATEGORY_TRIP,
+    "v.p.odometer": CATEGORY_TRIP,
+    "v.p.speed": CATEGORY_TRIP,
+    "v.p.trip": CATEGORY_TRIP,
+    
+    # Tire metrics
     "v.t": CATEGORY_TIRE,
+    
+    # Network metrics - more specific mappings
+    "m.net.provider": CATEGORY_NETWORK,
+    "m.net.sq": CATEGORY_NETWORK,
+    "m.net.type": CATEGORY_NETWORK,
     "m.net": CATEGORY_NETWORK,
-    "m": CATEGORY_SYSTEM,
-    "s": CATEGORY_SYSTEM,
+    
+    # System metrics - more specific mappings
+    "m.freeram": CATEGORY_SYSTEM,
+    "m.hardware": CATEGORY_SYSTEM,
+    "m.serial": CATEGORY_SYSTEM,
+    "m.version": CATEGORY_SYSTEM,
+    "m": CATEGORY_SYSTEM,  # Fallback for other module metrics
+    
+    # Server metrics
+    "s.v2": CATEGORY_SYSTEM,
+    "s.v3": CATEGORY_SYSTEM,
+    "s": CATEGORY_SYSTEM,  # Fallback for other server metrics
+    
+    # Vehicle-specific metrics
     "xvu.b": CATEGORY_VW_EUP,
     "xvu.c": CATEGORY_VW_EUP,
     "xvu.e": CATEGORY_VW_EUP,
