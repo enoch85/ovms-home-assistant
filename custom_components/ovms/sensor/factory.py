@@ -184,7 +184,7 @@ def create_cell_sensors(topic: str, cell_values: List[float],
         return []
 
     # Add topic hash to make unique IDs truly unique
-    topic_hash = hashlib.md5(topic.encode()).hexdigest()[:8]
+    topic_hash = hashlib.md5(topic.encode()).hexdigest()[:6]
     category = attributes.get("category", "battery")
 
     # Parse topic to extract just the metric path

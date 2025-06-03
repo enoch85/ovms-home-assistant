@@ -109,8 +109,10 @@ class TopicParser:
             parts = topic_suffix.split("/")
             parts = [p for p in parts if p]
 
-            # Log the topic and the derived parts before category determination
-            _LOGGER.info(f"Pre-categorization: Topic='{topic}', Suffix='{topic_suffix}', Derived Parts='{parts}'")
+            # Log the topic and the derived parts only during initial setup
+            # This prevents the "logging too frequently" warning
+            if len(parts) < 5:  # Only log for shorter, likely important paths
+                _LOGGER.debug(f"Pre-categorization: Topic='{topic}', Suffix='{topic_suffix}', Derived Parts='{parts}'")
 
             if len(parts) < 2:
                 return None

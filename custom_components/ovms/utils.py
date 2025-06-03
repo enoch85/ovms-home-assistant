@@ -158,7 +158,7 @@ def generate_unique_id(components: List[str]) -> str:
 
     # Create a hash if the string is too long
     if len(combined) > 32:
-        return hashlib.md5(combined.encode()).hexdigest()
+        return hashlib.md5(combined.encode()).hexdigest()[:8]
 
     # Otherwise just clean up the string
     return re.sub(r'[^a-zA-Z0-9_]', '_', combined)

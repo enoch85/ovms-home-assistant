@@ -57,10 +57,12 @@ class EntityFactory:
 
             # Enhanced logging for debugging entity stability
             if unique_id in self.created_entities:
-                _LOGGER.debug("Entity already created for topic: %s (unique_id: %s)", topic, unique_id)
+                # Reduce logging frequency - only log at debug level if specifically needed
                 return
             else:
-                _LOGGER.debug("Creating new entity for topic: %s (unique_id: %s)", topic, unique_id)
+                # Only log entity creation during initial setup or if debug logging is specifically enabled
+                if len(self.created_entities) < 10:  # First 10 entities for setup verification
+                    _LOGGER.debug("Creating new entity for topic: %s (unique_id: %s)", topic, unique_id)
 
             # Get parts and metric info
             parts = entity_data.get("parts", [])
@@ -72,7 +74,9 @@ class EntityFactory:
                 parts, metric_info, topic, raw_name
             )
 
-            _LOGGER.info("Creating %s: %s", entity_type, friendly_name)
+            # Reduce logging frequency - only log entity creation for important entities or during setup
+            if len(self.created_entities) < 20 or entity_type in ["device_tracker", "binary_sensor"]:
+                _LOGGER.info("Creating %s: %s", entity_type, friendly_name)
 
             # Record that we've processed this entity
             self.created_entities.add(unique_id)
@@ -250,53 +254,20 @@ class EntityFactory:
 
     def _generate_unique_ids(self, topic: str, entity_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate unique IDs for entities."""
-        try:
-            # Extract necessary parts with safe fallbacks
-            entity_type = entity_data.get("entity_type", "sensor")
-            name = entity_data.get("name", "")
-            vehicle_id = self.config.get("vehicle_id", "unknown").lower()
-
-            # Create a stable hash of the topic for uniqueness
-            # Use a longer hash to reduce collision probability
-            topic_hash = hashlib.md5(topic.encode()).hexdigest()[:12]
-
-            # Extract category from attributes with safe fallback
-            attributes = entity_data.get("attributes", {})
-            if isinstance(attributes, dict):
-                category = attributes.get("category", "unknown")
-            else:
-                category = "unknown"
-
-            # Clean the name to ensure consistency with safe fallback
-            if name:
-                try:
-                    clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', name.lower())
-                except Exception:
-                    clean_name = "sensor"
-            else:
-                clean_name = "sensor"
-
-            # Create a more consistent unique ID that reduces conflicts
-            # Include entity_type to differentiate sensors/binary_sensors with same topic
-            unique_id = f"{vehicle_id}_{entity_type}_{category}_{clean_name}_{topic_hash}"
-
-            # Update entity data
-            updated_data = entity_data.copy()
-            updated_data["unique_id"] = unique_id
-
-            return updated_data
-
-        except Exception as ex:
-            _LOGGER.exception("Error generating unique IDs: %s", ex)
-            # Fallback to a deterministic unique ID based on topic
-            # This ensures the same topic always gets the same unique ID
-            topic_hash = hashlib.md5(topic.encode()).hexdigest()[:16]
-            fallback_unique_id = f"ovms_fallback_{topic_hash}"
-            _LOGGER.warning("Using fallback unique ID: %s for topic: %s", fallback_unique_id, topic)
-            return {
-                **entity_data,
-                "unique_id": fallback_unique_id,
-            }
+        vehicle_id = self.config.get("vehicle_id", "unknown").lower()
+        topic_hash = hashlib.md5(topic.encode()).hexdigest()[:6]
+        
+        # Extract metric path from topic (everything after vehicle ID)
+        topic_parts = topic.split('/')
+        if len(topic_parts) >= 4:
+            metric_path = '_'.join(topic_parts[3:])
+            metric_path = re.sub(r'[^a-zA-Z0-9_]', '_', metric_path.lower())
+            unique_id = f"ovms_{vehicle_id}_{metric_path}_{topic_hash}"
+        else:
+            unique_id = f"ovms_{vehicle_id}_{topic_hash}"
+        
+        entity_data["unique_id"] = unique_id
+        return entity_data
 
     def _get_device_info(self) -> Dict[str, Any]:
         """Get device info for the OVMS module."""
