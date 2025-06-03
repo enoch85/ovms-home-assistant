@@ -82,7 +82,7 @@ class UpdateDispatcher:
             # Reduce excessive logging - only log for critical entities or periodically
             if entity_id.endswith("_location") or len(self.hass.data.get("ovms", {}).get("dispatched_updates", set())) < 20:
                 _LOGGER.debug("Dispatching update for %s", entity_id)
-            
+
             async_dispatcher_send(self.hass, signal, payload)
 
         except Exception as ex:

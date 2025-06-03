@@ -256,7 +256,7 @@ class EntityFactory:
         """Generate unique IDs for entities."""
         vehicle_id = self.config.get("vehicle_id", "unknown").lower()
         topic_hash = hashlib.md5(topic.encode()).hexdigest()[:6]
-        
+
         # Extract metric path from topic (everything after vehicle ID)
         topic_parts = topic.split('/')
         if len(topic_parts) >= 4:
@@ -265,7 +265,7 @@ class EntityFactory:
             unique_id = f"ovms_{vehicle_id}_{metric_path}_{topic_hash}"
         else:
             unique_id = f"ovms_{vehicle_id}_{topic_hash}"
-        
+
         entity_data["unique_id"] = unique_id
         return entity_data
 
