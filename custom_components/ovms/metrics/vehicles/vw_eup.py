@@ -371,7 +371,6 @@ VW_EUP_METRICS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPressure.KPA,
         "category": "vw_eup",
-        "has_cell_data": True,
     },
     "xvu.v.t.emgcy": {
         "name": "VW eUP! Tire Emergency Values",
@@ -380,6 +379,5 @@ VW_EUP_METRICS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPressure.KPA,
         "category": "vw_eup",
-        "has_cell_data": True,
     },
 }
