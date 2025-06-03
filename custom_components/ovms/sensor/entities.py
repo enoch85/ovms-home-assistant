@@ -6,13 +6,11 @@ from datetime import datetime
 from homeassistant.components.sensor import SensorEntity, SensorStateClass, SensorDeviceClass
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
-from homeassistant.const import UnitOfTime
-
-from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
+from ..const import LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
 from .parsers import parse_value, process_json_payload, requires_numeric_value, is_special_state_value, calculate_median
 from .factory import determine_sensor_type, add_device_specific_attributes, create_cell_sensors
 from .duration_formatter import format_duration, parse_duration
@@ -51,7 +49,7 @@ def format_sensor_value(value, device_class, attributes):
 
         # Return the short format as the main value
         return formatted_short
-    elif device_class == SensorDeviceClass.TIMESTAMP:
+    if device_class == SensorDeviceClass.TIMESTAMP:
         # For timestamp, store datetime object as attribute and return ISO string
         attributes["timestamp_object"] = value
         if isinstance(value, datetime):
@@ -63,9 +61,8 @@ def format_sensor_value(value, device_class, attributes):
                 return f"{date_part} at {time_part}"
             return formatted
         return str(value)
-    else:
-        # Normal handling
-        return truncate_state_value(value)
+    # Normal handling
+    return truncate_state_value(value)
 
 
 class CellVoltageSensor(SensorEntity, RestoreEntity):
@@ -93,7 +90,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             "topic": topic,
             "last_updated": dt_util.utcnow().isoformat(),
         }
-        self.hass = hass
+        self.hass: Optional[HomeAssistant] = hass
 
         # Initialize device class and other attributes
         self._attr_device_class = attributes.get("device_class")
@@ -240,13 +237,14 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             self.async_write_ha_state()
 
         # Subscribe to updates
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
-                update_state,
+        if self.hass:
+            self.async_on_remove(
+                async_dispatcher_connect(
+                    self.hass,
+                    f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
+                    update_state,
+                )
             )
-        )
 
 
 class OVMSSensor(SensorEntity, RestoreEntity):
@@ -274,7 +272,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             "topic": topic,
             "last_updated": dt_util.utcnow().isoformat(),
         }
-        self.hass = hass
+        self.hass: Optional[HomeAssistant] = hass
 
         # Set entity_id
         if hass:
@@ -463,11 +461,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self.async_write_ha_state()
 
         # Subscribe to updates
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}", update_state,
+        if self.hass:
+            self.async_on_remove(
+                async_dispatcher_connect(
+                    self.hass, f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}", update_state,
+                )
             )
-        )
 
     def _handle_cell_values(self, payload: str) -> None:
         """Handle cell values in payload."""
@@ -531,11 +530,26 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             return
 
         # Extract vehicle_id
-        vehicle_id = self.unique_id.split('_')[0]
+        vehicle_id = (self.unique_id or "unknown").split('_')[0]
 
         # Create sensor configs
+        device_info_dict: Dict[str, Any] = {}
+        if self.device_info:
+            if isinstance(self.device_info, dict):
+                device_info_dict = self.device_info  # type: ignore
+            else:
+                # Extract relevant fields from DeviceInfo
+                try:
+                    device_info_dict = {
+                        "identifiers": getattr(self.device_info, 'identifiers', set()),
+                        "name": getattr(self.device_info, 'name', ""),
+                        "manufacturer": getattr(self.device_info, 'manufacturer', ""),
+                        "model": getattr(self.device_info, 'model', ""),
+                    }
+                except Exception:
+                    device_info_dict = {}
         sensor_configs = create_cell_sensors(
-            self._topic, cell_values, vehicle_id, self.unique_id, self.device_info,
+            self._topic, cell_values, vehicle_id, self.unique_id or "unknown", device_info_dict,
             {
                 "name": self.name,
                 "category": self._attr_extra_state_attributes.get("category", "battery"),

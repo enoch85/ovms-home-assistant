@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import hashlib
+import re
 import uuid
 from typing import Dict, Any, Optional, List
 
@@ -250,14 +251,19 @@ class EntityFactory:
             name = entity_data.get("name", "")
             vehicle_id = self.config.get("vehicle_id", "").lower()
 
-            # Create a hash of the topic for uniqueness
-            topic_hash = hashlib.md5(topic.encode()).hexdigest()[:8]
+            # Create a stable hash of the topic for uniqueness
+            # Use a longer hash to reduce collision probability
+            topic_hash = hashlib.md5(topic.encode()).hexdigest()[:12]
 
             # Extract category from attributes
             category = entity_data.get("attributes", {}).get("category", "unknown")
 
-            # Create a unique ID
-            unique_id = f"{vehicle_id}_{category}_{name}_{topic_hash}"
+            # Clean the name to ensure consistency
+            clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', name.lower()) if name else "sensor"
+
+            # Create a more consistent unique ID that reduces conflicts
+            # Include entity_type to differentiate sensors/binary_sensors with same topic
+            unique_id = f"{vehicle_id}_{entity_type}_{category}_{clean_name}_{topic_hash}"
 
             # Update entity data
             updated_data = entity_data.copy()

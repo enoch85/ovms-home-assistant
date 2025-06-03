@@ -30,8 +30,9 @@ class StateParser:
     """Parser for OVMS state values."""
 
     @staticmethod
-    def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None) -> Any:
-        """Parse the value from the payload."""
+    def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None, 
+                   topic: str = "") -> Any:
+        """Parse the value from the payload with enhanced precision and validation."""
         # Handle special state values for numeric sensors
         if StateParser.requires_numeric_value(device_class, state_class) and StateParser.is_special_state_value(value):
             return None
@@ -59,8 +60,14 @@ class StateParser:
                 if parts:
                     # Calculate and return statistics
                     avg_value = sum(parts) / len(parts)
-                    # Return the average as the main value, rounded to 4 decimal places
-                    return round(avg_value, 4)
+                    # Return the average as the main value, rounded to 6 decimal places for better precision
+                    result = round(avg_value, 6)
+                    
+                    # Additional validation for power metrics
+                    if device_class == SensorDeviceClass.POWER:
+                        result = StateParser._validate_power_value(result, topic)
+                    
+                    return result
             except (ValueError, TypeError):
                 # If any part can't be converted to float, or cleaning fails to produce valid parts
                 pass # Fall through to other parsing methods or return None
@@ -273,3 +280,30 @@ class StateParser:
         except Exception as ex:
             _LOGGER.exception("Error parsing GPS coordinates: %s", ex)
             return {}
+
+    @staticmethod
+    def _validate_power_value(value: float, topic: str = "") -> float:
+        """Validate and correct power values based on common issues."""
+        try:
+            # Check for common power value issues
+            
+            # 1. Values that are likely in milliwatts but should be watts
+            if value > 100000:  # > 100kW, probably milliwatts
+                _LOGGER.debug(f"Converting suspected milliwatts to watts for topic {topic}: {value} -> {value/1000}")
+                return round(value / 1000, 3)
+            
+            # 2. Negative power values for charging should be positive
+            if "charg" in topic.lower() and value < 0:
+                _LOGGER.debug(f"Converting negative charging power to positive for topic {topic}: {value} -> {abs(value)}")
+                return abs(value)
+            
+            # 3. Very small values that might be in wrong units
+            if 0 < value < 0.001:  # Very small, might be kW instead of W
+                _LOGGER.debug(f"Converting suspected kW to watts for topic {topic}: {value} -> {value*1000}")
+                return round(value * 1000, 3)
+            
+            return value
+            
+        except Exception as ex:
+            _LOGGER.exception(f"Error validating power value {value} for topic {topic}: {ex}")
+            return value

@@ -80,6 +80,15 @@ TOPIC_PATTERNS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPower.WATT,
         "category": "power",
+        # Additional validation patterns for power metrics
+        "validation": {
+            "unit_variants": ["w", "watt", "watts", "kw", "kilowatt", "kilowatts"],
+            "unit_mappings": {
+                "kw": UnitOfPower.KILO_WATT,
+                "kilowatt": UnitOfPower.KILO_WATT,
+                "kilowatts": UnitOfPower.KILO_WATT,
+            }
+        }
     },
     "energy": {
         "name": "Energy",
