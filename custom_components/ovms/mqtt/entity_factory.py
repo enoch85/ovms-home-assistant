@@ -43,6 +43,7 @@ class EntityFactory:
         try:
             entity_type = entity_data.get("entity_type")
             if not entity_type:
+                _LOGGER.warning("No entity_type provided for topic: %s", topic)
                 return
 
             # Generate unique IDs
@@ -53,9 +54,13 @@ class EntityFactory:
             if not unique_id:
                 _LOGGER.error("No unique_id generated for topic: %s", topic)
                 return
+            
+            # Enhanced logging for debugging entity stability
             if unique_id in self.created_entities:
-                _LOGGER.debug("Entity already created for topic: %s", topic)
+                _LOGGER.debug("Entity already created for topic: %s (unique_id: %s)", topic, unique_id)
                 return
+            else:
+                _LOGGER.debug("Creating new entity for topic: %s (unique_id: %s)", topic, unique_id)
 
             # Get parts and metric info
             parts = entity_data.get("parts", [])
@@ -246,20 +251,30 @@ class EntityFactory:
     def _generate_unique_ids(self, topic: str, entity_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate unique IDs for entities."""
         try:
-            # Extract necessary parts
-            entity_type = entity_data.get("entity_type")
+            # Extract necessary parts with safe fallbacks
+            entity_type = entity_data.get("entity_type", "sensor")
             name = entity_data.get("name", "")
-            vehicle_id = self.config.get("vehicle_id", "").lower()
+            vehicle_id = self.config.get("vehicle_id", "unknown").lower()
 
             # Create a stable hash of the topic for uniqueness
             # Use a longer hash to reduce collision probability
             topic_hash = hashlib.md5(topic.encode()).hexdigest()[:12]
 
-            # Extract category from attributes
-            category = entity_data.get("attributes", {}).get("category", "unknown")
+            # Extract category from attributes with safe fallback
+            attributes = entity_data.get("attributes", {})
+            if isinstance(attributes, dict):
+                category = attributes.get("category", "unknown")
+            else:
+                category = "unknown"
 
-            # Clean the name to ensure consistency
-            clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', name.lower()) if name else "sensor"
+            # Clean the name to ensure consistency with safe fallback
+            if name:
+                try:
+                    clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', name.lower())
+                except Exception:
+                    clean_name = "sensor"
+            else:
+                clean_name = "sensor"
 
             # Create a more consistent unique ID that reduces conflicts
             # Include entity_type to differentiate sensors/binary_sensors with same topic
@@ -273,10 +288,14 @@ class EntityFactory:
 
         except Exception as ex:
             _LOGGER.exception("Error generating unique IDs: %s", ex)
-            # Fallback to a simple unique ID
+            # Fallback to a deterministic unique ID based on topic
+            # This ensures the same topic always gets the same unique ID
+            topic_hash = hashlib.md5(topic.encode()).hexdigest()[:16]
+            fallback_unique_id = f"ovms_fallback_{topic_hash}"
+            _LOGGER.warning("Using fallback unique ID: %s for topic: %s", fallback_unique_id, topic)
             return {
                 **entity_data,
-                "unique_id": str(uuid.uuid4()),
+                "unique_id": fallback_unique_id,
             }
 
     def _get_device_info(self) -> Dict[str, Any]:
