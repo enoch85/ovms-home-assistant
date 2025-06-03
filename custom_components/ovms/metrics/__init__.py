@@ -190,13 +190,13 @@ BINARY_METRICS = [
 PREFIX_CATEGORIES = {
     # Battery metrics
     "v.b": CATEGORY_BATTERY,
-    
+
     # Charging metrics
     "v.c": CATEGORY_CHARGING,
-    
+
     # Door metrics
     "v.d": CATEGORY_DOOR,
-    
+
     # Environment metrics - split climate from diagnostic
     "v.e.cabin": CATEGORY_CLIMATE,
     "v.e.heating": CATEGORY_CLIMATE,
@@ -204,19 +204,19 @@ PREFIX_CATEGORIES = {
     "v.e.hvac": CATEGORY_CLIMATE,
     "v.e.temp": CATEGORY_CLIMATE,
     "v.e": CATEGORY_DIAGNOSTIC,  # Fallback for other environment metrics
-    
+
     # Power metrics
     "v.g": CATEGORY_POWER,
-    
+
     # Inverter/Motor metrics - split by type
     "v.i.temp": CATEGORY_MOTOR,  # Motor temperatures
     "v.i.rpm": CATEGORY_MOTOR,   # Motor RPM
     "v.i.pwr": CATEGORY_MOTOR,   # Motor power
     "v.i": CATEGORY_DIAGNOSTIC,  # General inverter diagnostics
-    
+
     # Motor metrics
     "v.m": CATEGORY_MOTOR,
-    
+
     # Position/Location metrics - specific GPS mappings
     "v.p.altitude": CATEGORY_LOCATION,
     "v.p.direction": CATEGORY_LOCATION,
@@ -238,28 +238,28 @@ PREFIX_CATEGORIES = {
     "v.p.odometer": CATEGORY_TRIP,
     "v.p.speed": CATEGORY_TRIP,
     "v.p.trip": CATEGORY_TRIP,
-    
+
     # Tire metrics
     "v.t": CATEGORY_TIRE,
-    
+
     # Network metrics - more specific mappings
     "m.net.provider": CATEGORY_NETWORK,
     "m.net.sq": CATEGORY_NETWORK,
     "m.net.type": CATEGORY_NETWORK,
     "m.net": CATEGORY_NETWORK,
-    
+
     # System metrics - more specific mappings
     "m.freeram": CATEGORY_SYSTEM,
     "m.hardware": CATEGORY_SYSTEM,
     "m.serial": CATEGORY_SYSTEM,
     "m.version": CATEGORY_SYSTEM,
     "m": CATEGORY_SYSTEM,  # Fallback for other module metrics
-    
+
     # Server metrics
     "s.v2": CATEGORY_SYSTEM,
     "s.v3": CATEGORY_SYSTEM,
     "s": CATEGORY_SYSTEM,  # Fallback for other server metrics
-    
+
     # Vehicle-specific metrics
     "xvu.b": CATEGORY_VW_EUP,
     "xvu.c": CATEGORY_VW_EUP,

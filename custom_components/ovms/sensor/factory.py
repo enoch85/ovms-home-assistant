@@ -205,11 +205,11 @@ def create_cell_sensors(topic: str, cell_values: List[float],
     sensor_name = attributes.get("name", "").lower()
     category = attributes.get("category", "battery")
     device_class = attributes.get("device_class")
-    
+
     # Check if this is a tire sensor
-    is_tire = (device_class == SensorDeviceClass.PRESSURE or 
+    is_tire = (device_class == SensorDeviceClass.PRESSURE or
                (device_class == SensorDeviceClass.TEMPERATURE and category == "tire"))
-    
+
     if is_tire:
         stat_type = "tire"
     elif "temp" in sensor_name:
@@ -253,7 +253,7 @@ def create_cell_sensors(topic: str, cell_values: List[float],
                 "unit_of_measurement": attributes.get("unit_of_measurement"),
             },
         }
-        
+
         # Add tire-specific attributes
         if is_tire and i < 4:
             position_name, position_code = TIRE_POSITIONS[i]

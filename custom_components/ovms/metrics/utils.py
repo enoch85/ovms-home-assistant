@@ -64,7 +64,7 @@ def get_metric_by_path(metric_path):
         alt_path = metric_path[xnl_index:]
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
-            
+
     # For Renault Twizy metrics, also try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xrt.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
@@ -85,7 +85,7 @@ def get_metric_by_pattern(topic_parts):
     """Try to match a metric by pattern in topic parts."""
     # Import only when needed to avoid circular imports
     from . import METRIC_DEFINITIONS
-    
+
     # First, try to find an exact match of the last path component
     if topic_parts:
         last_part = topic_parts[-1].lower()
@@ -216,7 +216,7 @@ def determine_category_from_topic(topic_parts):
 
     import logging
     logger = logging.getLogger(__name__)
-    
+
     # Special handling for vehicle-specific topics
     if "xvu" in topic_parts:
         return CATEGORY_VW_EUP
@@ -231,7 +231,7 @@ def determine_category_from_topic(topic_parts):
 
     # Special handling for precise categorization (backup to PREFIX_CATEGORIES)
     full_path = ".".join(topic_parts)
-    
+
     # Define precise metric categorizations for backup detection
     specific_categorizations = {
         # GPS/Location metrics
@@ -249,38 +249,38 @@ def determine_category_from_topic(topic_parts):
         "v.p.location": CATEGORY_LOCATION,
         "v.p.valet.latitude": CATEGORY_LOCATION,
         "v.p.valet.longitude": CATEGORY_LOCATION,
-        
+
         # Trip metrics from v.p namespace
         "v.p.acceleration": CATEGORY_TRIP,
         "v.p.deceleration": CATEGORY_TRIP,
         "v.p.odometer": CATEGORY_TRIP,
         "v.p.speed": CATEGORY_TRIP,
         "v.p.trip": CATEGORY_TRIP,
-        
+
         # Climate-specific environment metrics
         "v.e.heating": CATEGORY_CLIMATE,
         "v.e.cooling": CATEGORY_CLIMATE,
         "v.e.hvac": CATEGORY_CLIMATE,
         "v.e.cabin.temp": CATEGORY_CLIMATE,
         "v.e.cabin.fan": CATEGORY_CLIMATE,
-        
+
         # Motor-specific inverter metrics
         "v.i.temp": CATEGORY_MOTOR,
         "v.i.rpm": CATEGORY_MOTOR,
         "v.i.pwr": CATEGORY_MOTOR,
-        
+
         # Network-specific metrics
         "m.net.provider": CATEGORY_NETWORK,
         "m.net.sq": CATEGORY_NETWORK,
         "m.net.type": CATEGORY_NETWORK,
-        
+
         # System-specific metrics
         "m.freeram": CATEGORY_SYSTEM,
         "m.hardware": CATEGORY_SYSTEM,
         "m.serial": CATEGORY_SYSTEM,
         "m.version": CATEGORY_SYSTEM,
     }
-    
+
     # Check for specific categorization first
     if full_path in specific_categorizations:
         category = specific_categorizations[full_path]
@@ -352,7 +352,7 @@ def create_friendly_name(topic_parts, metric_info=None):
         # Format as "Nissan Leaf Sensor Name"
         last_part = topic_parts[-1].replace("_", " ").title()
         return f"Nissan Leaf {last_part}"
-        
+
     # Check for Renault Twizy metrics
     if "xrt" in topic_parts:
         # Format as "Renault Twizy Sensor Name"

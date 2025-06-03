@@ -68,7 +68,7 @@ class OVMSOptionsFlow(OptionsFlow):
                 del user_input["Port"]
                 if "verify_ssl_certificate" in user_input:
                     del user_input["verify_ssl_certificate"]
-                    
+
                 # Process topic blacklist (convert to a list for storage)
                 if CONF_TOPIC_BLACKLIST in user_input and isinstance(user_input[CONF_TOPIC_BLACKLIST], str):
                     blacklist = [x.strip() for x in user_input[CONF_TOPIC_BLACKLIST].split(",") if x.strip()]
@@ -78,7 +78,7 @@ class OVMSOptionsFlow(OptionsFlow):
             if CONF_TOPIC_BLACKLIST in user_input and isinstance(user_input[CONF_TOPIC_BLACKLIST], str):
                 blacklist_str = user_input[CONF_TOPIC_BLACKLIST]
                 user_input[CONF_TOPIC_BLACKLIST] = [item.strip() for item in blacklist_str.split(',') if item.strip()]
-            
+
             _LOGGER.debug("Saving options: %s", user_input)
             return self.async_create_entry(title="", data=user_input)
 

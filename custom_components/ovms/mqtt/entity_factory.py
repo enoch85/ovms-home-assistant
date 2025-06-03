@@ -54,7 +54,7 @@ class EntityFactory:
             if not unique_id:
                 _LOGGER.error("No unique_id generated for topic: %s", topic)
                 return
-            
+
             # Enhanced logging for debugging entity stability
             if unique_id in self.created_entities:
                 _LOGGER.debug("Entity already created for topic: %s (unique_id: %s)", topic, unique_id)

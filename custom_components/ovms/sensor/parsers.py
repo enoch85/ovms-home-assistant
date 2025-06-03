@@ -88,7 +88,7 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
             return None # No valid parts
 
         parts = [float(p) for p in parts_str]
-        
+
         if not parts:
             return None
 
@@ -120,7 +120,7 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
         # or use the first value, etc.
         # For now, parse_value in this file, when is_cell_sensor is true,
         # will take the average. The attributes will hold the individual values.
-        result["value"] = round(sum(parts) / len(parts), 4) 
+        result["value"] = round(sum(parts) / len(parts), 4)
         return result
     except (ValueError, TypeError):
         _LOGGER.warning(f"Could not parse comma-separated values for {entity_name}: '{value}'")
@@ -187,7 +187,7 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
                 parsed_data = parse_comma_separated_values(value, "", is_cell_sensor, stat_type)
                 if parsed_data and "value" in parsed_data:
                     # The main sensor state will be the average. Attributes are handled by process_json_payload later.
-                    return parsed_data["value"] 
+                    return parsed_data["value"]
                 else:
                     # Fallback or if parsing failed to produce a 'value'
                     return None
@@ -310,7 +310,7 @@ def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: 
                 for key, val in parsed_cells.items():
                     if key != "value": # 'value' is the main state, others are attributes
                         updated_attributes[key] = val
-        
+
         # If not a cell sensor or payload is not a comma-separated string, try JSON parsing for attributes.
         # This 'else' ensures we don't try to JSON parse the comma-separated string itself if it was handled above.
         else:

@@ -13,7 +13,7 @@ from homeassistant.const import (
 # Tire position mapping based on OVMS standard: LF, RF, LR, RR
 TIRE_POSITIONS = {
     0: ("front_left", "FL"),
-    1: ("front_right", "FR"), 
+    1: ("front_right", "FR"),
     2: ("rear_left", "LR"),
     3: ("rear_right", "RR")
 }
