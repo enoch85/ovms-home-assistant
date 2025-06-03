@@ -14,6 +14,7 @@ from ..const import LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, trun
 from .parsers import parse_value, process_json_payload, requires_numeric_value, is_special_state_value, calculate_median
 from .factory import determine_sensor_type, add_device_specific_attributes, create_cell_sensors
 from .duration_formatter import format_duration, parse_duration
+from ..metrics.common.tire import TIRE_POSITIONS
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -314,19 +315,32 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         if self._attr_native_unit_of_measurement and "unit" not in self._attr_extra_state_attributes:
             self._attr_extra_state_attributes["unit"] = self._attr_native_unit_of_measurement
 
-        # Cell sensor configuration
+        # Cell sensor configuration - detect by topic patterns and known cell data metrics
         self._is_cell_sensor = (
             (("cell" in self._topic.lower() or "voltage" in self._topic.lower() or
               "temp" in self._topic.lower()) and
              self._attr_extra_state_attributes.get("category") == "battery") or
             self._attr_extra_state_attributes.get("has_cell_data", False) or
-            ("health" in self._topic.lower() and
-             self._attr_extra_state_attributes.get("category") == "tire")
+            self._attr_extra_state_attributes.get("category") == "tire"  # All tire metrics have multiple values
         )
 
-        # Determine stat type
-        self._stat_type = "cell"
-        if "temp" in self._internal_name.lower():
+        # Determine stat type based on category and topic content
+        self._stat_type = "cell"  # Default fallback
+        
+        # Check if this is a tire sensor by category
+        if self._attr_extra_state_attributes.get("category") == "tire":
+            # For tire sensors, determine the metric type
+            if "pressure" in self._topic.lower() or "emgcy" in self._topic.lower() or "diff" in self._topic.lower():
+                self._stat_type = "pressure"
+            elif "temp" in self._topic.lower():
+                self._stat_type = "temp"
+            elif "health" in self._topic.lower():
+                self._stat_type = "health"
+            elif "alert" in self._topic.lower():
+                self._stat_type = "alert"
+            else:
+                self._stat_type = "tire"  # fallback for unknown tire metrics
+        elif "temp" in self._internal_name.lower():
             self._stat_type = "temp"
         elif "voltage" in self._internal_name.lower():
             self._stat_type = "voltage"
@@ -498,13 +512,21 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             # Update individual values
             # First clear existing attributes
             for key in list(self._attr_extra_state_attributes.keys()):
-                if any(key.startswith(prefix) for prefix in ["cell_", "voltage_", "temp_", "value_"]):
-                    if key.split("_")[1].isdigit():
+                if any(key.startswith(prefix) for prefix in ["cell_", "voltage_", "temp_", "value_", "pressure_", "health_", "alert_"]):
+                    # Clear both numeric and tire position keys
+                    key_parts = key.split("_")
+                    if len(key_parts) >= 2 and (key_parts[1].isdigit() or key_parts[1].lower() in ["fl", "fr", "lr", "rr"]):
                         del self._attr_extra_state_attributes[key]
 
-            # Add new values
+            # Add new values with appropriate naming
             for i, val in enumerate(values):
-                self._attr_extra_state_attributes[f"{self._stat_type}_{i+1}"] = val
+                if self._attr_extra_state_attributes.get("category") == "tire" and i < 4:
+                    # Use tire position codes for any tire sensor
+                    position_name, position_code = TIRE_POSITIONS[i]
+                    self._attr_extra_state_attributes[f"{self._stat_type}_{position_code}"] = val
+                else:
+                    # Use numeric naming for other sensors
+                    self._attr_extra_state_attributes[f"{self._stat_type}_{i+1}"] = val
 
             # Update cell sensors if created
             if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created and CREATE_INDIVIDUAL_CELL_SENSORS:
