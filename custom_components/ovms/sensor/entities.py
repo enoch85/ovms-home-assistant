@@ -253,7 +253,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
     def _is_tire_sensor(self) -> bool:
         """Check if this sensor is a tire-related sensor by topic pattern."""
-        tire_patterns = ["v.t.pressure", "v.t.temp", "v.t.health", "v.t.alert", "v.t.diff", "v.t.emgcy"]
+        tire_patterns = ["v.t.pressure", "v.t.temp", "v.t.health", "v.t.alert", "v.t.diff", "v.t.emgcy", "/v/t/pressure", "/v/t/temp", "/v/t/health", "/v/t/alert", "/v/t/diff", "/v/t/emgcy"]
         return any(pattern in self._topic.lower() for pattern in tire_patterns)
 
     def __init__(
@@ -514,13 +514,23 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     del self._attr_extra_state_attributes[legacy_key]
 
             # Update individual values
-            # First clear existing attributes
-            for key in list(self._attr_extra_state_attributes.keys()):
-                if any(key.startswith(prefix) for prefix in ["cell_", "voltage_", "temp_", "value_", "pressure_", "health_", "alert_"]):
-                    # Clear both numeric and tire position keys
+            # First clear existing attributes - be more aggressive for tire sensors
+            keys_to_remove = []
+            for key in self._attr_extra_state_attributes.keys():
+                # Remove any numeric cell/pressure/temp/etc attributes
+                if any(key.startswith(prefix) for prefix in ["cell_", "voltage_", "temp_", "value_", "pressure_", "health_", "alert_", "tire_"]):
                     key_parts = key.split("_")
-                    if len(key_parts) >= 2 and (key_parts[1].isdigit() or key_parts[1].lower() in ["fl", "fr", "lr", "rr"]):
-                        del self._attr_extra_state_attributes[key]
+                    if len(key_parts) >= 2:
+                        # Remove if second part is numeric or tire position
+                        if key_parts[1].isdigit() or key_parts[1].lower() in ["fl", "fr", "lr", "rr", "1", "2", "3", "4"]:
+                            keys_to_remove.append(key)
+                # Also remove standalone "Cell X" or "Pressure X" attributes
+                elif key.startswith("Cell ") or key.startswith("Pressure ") or key.startswith("Temperature "):
+                    keys_to_remove.append(key)
+            
+            # Remove the identified keys
+            for key in keys_to_remove:
+                del self._attr_extra_state_attributes[key]
 
             # Add new values with appropriate naming
             for i, val in enumerate(values):
