@@ -9,6 +9,7 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.util import dt as dt_util
 
 from ..const import LOGGER_NAME, MAX_STATE_LENGTH, truncate_state_value
+from ..metrics.common.tire import TIRE_POSITIONS
 from .duration_formatter import parse_duration
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -28,6 +29,19 @@ NUMERIC_DEVICE_CLASSES = [
 
 # Special string values that should be converted to None for numeric sensors
 SPECIAL_STATE_VALUES = ["unavailable", "unknown", "none", "", "null", "nan"]
+
+
+def is_tire_sensor(device_class: Any = None, category: Optional[str] = None) -> bool:
+    """Check if this is a tire sensor based on device class and category."""
+    # Check if device class indicates tire data (pressure or temperature)
+    if device_class in [SensorDeviceClass.PRESSURE, SensorDeviceClass.TEMPERATURE]:
+        # For pressure sensors, assume tire if device class is pressure
+        if device_class == SensorDeviceClass.PRESSURE:
+            return True
+        # For temperature sensors, check if category indicates tire
+        if device_class == SensorDeviceClass.TEMPERATURE and category == "tire":
+            return True
+    return False
 
 
 def requires_numeric_value(device_class: Any, state_class: Any) -> bool:
@@ -61,36 +75,61 @@ def calculate_median(values: List[float]) -> Optional[float]:
 
 def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sensor: bool = False, stat_type: str = "cell") -> Optional[Dict[str, Any]]:
     """Parse comma-separated values into a dictionary with statistics."""
-    if not is_cell_sensor:
-        return None  # Skip processing if not a cell sensor
+    # Always attempt to parse if it looks like a comma-separated string,
+    # is_cell_sensor will determine if we create individual attributes.
+    # The initial cleaning of the value string (e.g. removing "kPa")
+    # is now expected to happen in StateParser.parse_value before this function is called.
 
     result = {}
     try:
-        # Try to parse all parts as floats
-        parts = [float(part.strip()) for part in value.split(",") if part.strip()]
-        if parts:
-            # Store the array in attributes - use only one consistent naming
-            result[f"{stat_type}_values"] = parts
-            result["count"] = len(parts)
+        # Value is assumed to be cleaned (no units) by StateParser at this point.
+        parts_str = [s.strip() for s in value.split(",") if s.strip()]
+        if not parts_str:
+            return None # No valid parts
 
-            # Calculate and store statistics
-            result["median"] = calculate_median(parts)
-            result["mean"] = sum(parts) / len(parts)
-            result["min"] = min(parts)
-            result["max"] = max(parts)
+        parts = [float(p) for p in parts_str]
 
-            # Store individual values with descriptive names
+        if not parts:
+            return None
+
+        # Store the array in attributes - use only one consistent naming
+        result[f"{stat_type}_values"] = parts
+        result["count"] = len(parts)
+
+        # Calculate and store statistics
+        result["median"] = calculate_median(parts)
+        result["mean"] = sum(parts) / len(parts)
+        result["min"] = min(parts)
+        result["max"] = max(parts)
+
+        # If it's a cell sensor, store individual values with appropriate names
+        # These will become attributes of the main sensor.
+        if is_cell_sensor:
             for i, val in enumerate(parts):
-                result[f"{stat_type}_{i+1}"] = val
+                # Check if this is a tire sensor by stat_type or if it's specifically tire data
+                is_tire_data = (stat_type in ["tire", "pressure"] and
+                               stat_type != "cell" and i < 4)
+                if is_tire_data:
+                    # Use tire position labels for tire sensors (up to 4 tires)
+                    position_name, position_code = TIRE_POSITIONS[i]
+                    result[f"{stat_type}_{position_code}"] = val
+                else:
+                    # Use generic naming for other sensors or additional values beyond 4 tires
+                    result[f"cell_{i+1}"] = val
 
-            # Return average as the main value, rounded to 4 decimal places
-            result["value"] = round(sum(parts) / len(parts), 4)
-            return result
+        # The main 'value' of the sensor will be the mean if has_cell_data is true,
+        # otherwise, the calling context might decide not to create a main sensor
+        # or use the first value, etc.
+        # For now, parse_value in this file, when is_cell_sensor is true,
+        # will take the average. The attributes will hold the individual values.
+        result["value"] = round(sum(parts) / len(parts), 4)
+        return result
     except (ValueError, TypeError):
+        _LOGGER.warning(f"Could not parse comma-separated values for {entity_name}: '{value}'")
         pass
     return None
 
-def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None,
+def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None,\
                 is_cell_sensor: bool = False) -> Any:
     """Parse the value from the payload."""
     # Handle timestamp device class specifically
@@ -137,17 +176,44 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
         if value.lower() in ["no", "off", "false", "disabled"]:
             return 0
         if value.lower() in ["yes", "on", "true", "enabled"]:
-            return 1
+            return 1        # Check if this is a comma-separated list of numbers for a cell sensor
+        # The string cleaning (removing units) is now done in StateParser.parse_value
+        if isinstance(value, str) and "," in value:
+            # If it's a cell sensor, parse_comma_separated_values will handle creating attributes
+            # and will return a dict. The 'value' key from that dict will be used as the sensor's state.
+            if is_cell_sensor:
+                # Call the dedicated parser which returns a dict of values & attributes
+                # The main state of the sensor will be the 'value' from this dict (e.g., average)
+                # and the individual values will be in its attributes.
+                stat_type = "tire" if is_tire_sensor(device_class) else "cell"
+                parsed_data = parse_comma_separated_values(value, "", is_cell_sensor, stat_type)
+                if parsed_data and "value" in parsed_data:
+                    # The main sensor state will be the average. Attributes are handled by process_json_payload later.
+                    return parsed_data["value"]
+                else:
+                    # Fallback or if parsing failed to produce a 'value'
+                    return None
 
-    # Check if this is a comma-separated list of numbers for a cell sensor
-    if is_cell_sensor and isinstance(value, str) and "," in value:
-        # For cell sensors with comma separated values, extract the average
+
+        # If NOT a cell_sensor, but still comma-separated (e.g. old behavior or other sensors)
+        # The StateParser.parse_value is now the primary place for this averaging if not cell_sensor.
+        # This block in sensor.parsers.py's parse_value might become redundant or only for non-cell_sensor cases
+        # if StateParser handles the generic comma-separated averaging.
+        # For now, let's assume StateParser's output is what we get.
+        # If 'value' is still a string here (meaning StateParser didn't average it),
+        # we might average it here as a fallback if it's numeric and not a cell sensor.
+        # However, the previous change to StateParser makes it average comma-separated strings.
+        # So, if is_cell_sensor is False, 'value' should already be an averaged float if it was comma-separated.
+        # This specific block for non-cell_sensor comma-separated values might not be hit often
+        # if StateParser already converted it.
         try:
-            values = [float(part.strip()) for part in value.split(",") if part.strip()]
-            if values:
-                return round(sum(values) / len(values), 4)
+            # This is a simplified averaging if it's not a cell sensor and StateParser didn't average it.
+            # This should ideally be harmonized with StateParser.
+            parts = [float(part.strip()) for part in value.split(",") if part.strip()]
+            if parts:
+                return round(sum(parts) / len(parts), 4)
         except (ValueError, TypeError):
-            pass
+            pass # Fall through if not a simple list of numbers
 
     # Try parsing as JSON first
     try:
@@ -196,6 +262,9 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             # If we need a numeric value but got a string, try to convert it
             if requires_numeric_value(device_class, state_class):
                 try:
+                    # Try to preserve integer type when possible
+                    if "." not in json_val.strip():
+                        return int(json_val)
                     return float(json_val)
                 except (ValueError, TypeError):
                     return None
@@ -227,16 +296,26 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             # Otherwise return as is
             return value
 
-def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: str = "",
+def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: str = "",\
                         is_cell_sensor: bool = False, stat_type: str = "cell") -> Dict[str, Any]:
     """Process JSON payload to extract additional attributes."""
     updated_attributes = attributes.copy()
 
     try:
-        # Skip cell value processing here - handled by _handle_cell_values instead
-        # to avoid duplication of processing
-        if not (is_cell_sensor and isinstance(payload, str) and "," in payload):
-            # Try to parse as JSON
+        # If it's a cell sensor and the payload is a comma-separated string,
+        # parse it for individual values and statistics to add as attributes.
+        if is_cell_sensor and isinstance(payload, str) and "," in payload:
+            # The payload string should be pre-cleaned by StateParser by this point
+            stat_type = "tire" if is_tire_sensor(attributes.get("device_class"), attributes.get("category")) else "cell"
+            parsed_cells = parse_comma_separated_values(payload, entity_name, is_cell_sensor, stat_type)
+            if parsed_cells:
+                for key, val in parsed_cells.items():
+                    if key != "value": # 'value' is the main state, others are attributes
+                        updated_attributes[key] = val
+
+        # If not a cell sensor or payload is not a comma-separated string, try JSON parsing for attributes.
+        # This 'else' ensures we don't try to JSON parse the comma-separated string itself if it was handled above.
+        else:
             try:
                 json_data = json.loads(payload) if isinstance(payload, str) else payload
                 if isinstance(json_data, dict):

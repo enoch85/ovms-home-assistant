@@ -3,12 +3,12 @@ import logging
 import re
 from typing import Dict, Any, Optional, Tuple, List
 
+from .. import metrics
 from ..const import LOGGER_NAME, CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST
 from ..metrics import (
     BINARY_METRICS,
     get_metric_by_path,
     get_metric_by_pattern,
-    determine_category_from_topic,
 )
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -22,7 +22,7 @@ class TopicParser:
         self.entity_registry = entity_registry
         self.structure_prefix = self._format_structure_prefix()
         self.coordinate_entities_created = {}  # Track which coordinate entities we've created
-        
+
         # Get and normalize the topic blacklist
         blacklist = config.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST)
         self.topic_blacklist = self._normalize_blacklist(blacklist)
@@ -71,7 +71,7 @@ class TopicParser:
             # Skip event topics - we don't need entities for these
             if topic.endswith("/event"):
                 return None
-                
+
             # Skip blacklisted topics
             if self.topic_blacklist:
                 for pattern in self.topic_blacklist:
@@ -109,6 +109,11 @@ class TopicParser:
             parts = topic_suffix.split("/")
             parts = [p for p in parts if p]
 
+            # Log the topic and the derived parts only during initial setup
+            # This prevents the "logging too frequently" warning
+            if len(parts) < 5:  # Only log for shorter, likely important paths
+                _LOGGER.debug(f"Pre-categorization: Topic='{topic}', Suffix='{topic_suffix}', Derived Parts='{parts}'")
+
             if len(parts) < 2:
                 return None
 
@@ -124,7 +129,12 @@ class TopicParser:
 
             # Determine entity type and category
             entity_type = self._determine_entity_type(parts, metric_path, topic)
-            category = determine_category_from_topic(parts)
+            # Use centralized category determination from metrics module
+            category = metrics.determine_category_from_topic(parts)
+
+            # Additional logging for GPS location topics
+            if any(keyword in topic.lower() for keyword in ["latitude", "longitude", "gps"]) or (len(parts) >= 2 and parts[0] == "v" and parts[1] == "p"):
+                _LOGGER.info(f"GPS Location Topic Processing - Topic: {topic}, Parts: {parts}, Category: {category}")
 
             # Create entity name and add extra attributes
             raw_name = "_".join(parts) if parts else "unknown"
@@ -329,14 +339,14 @@ class TopicParser:
         """Normalize the blacklist format to always be a list of patterns."""
         if not blacklist:
             return []
-            
+
         # If it's already a list, use it directly
         if isinstance(blacklist, list):
             return [str(item) for item in blacklist if item]
-            
+
         # Convert string to list (handling comma-separated input from UI)
         if isinstance(blacklist, str):
             return [x.strip() for x in blacklist.split(",") if x.strip()]
-            
+
         # Fallback to default
         return DEFAULT_TOPIC_BLACKLIST

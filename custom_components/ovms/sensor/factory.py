@@ -1,7 +1,7 @@
 """OVMS sensor factory functions."""
 import logging
 import hashlib
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import (
@@ -14,17 +14,18 @@ from homeassistant.const import (
     UnitOfSpeed,
     UnitOfTemperature,
 )
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import EntityCategory
 
 from ..const import LOGGER_NAME
 from ..metrics import get_metric_by_path, get_metric_by_pattern
+from ..metrics.common.tire import TIRE_POSITIONS
 from ..metrics.patterns import TOPIC_PATTERNS
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
     """Determine the sensor type based on metrics definitions."""
-    result = {
+    result: Dict[str, Any] = {
         "device_class": None,
         "state_class": None,
         "native_unit_of_measurement": None,
@@ -183,7 +184,7 @@ def create_cell_sensors(topic: str, cell_values: List[float],
         return []
 
     # Add topic hash to make unique IDs truly unique
-    topic_hash = hashlib.md5(topic.encode()).hexdigest()[:8]
+    topic_hash = hashlib.md5(topic.encode()).hexdigest()[:6]
     category = attributes.get("category", "battery")
 
     # Parse topic to extract just the metric path
@@ -202,7 +203,16 @@ def create_cell_sensors(topic: str, cell_values: List[float],
     # Determine the appropriate attribute name type based on sensor context
     stat_type = "cell"  # Default fallback
     sensor_name = attributes.get("name", "").lower()
-    if "temp" in sensor_name:
+    category = attributes.get("category", "battery")
+    device_class = attributes.get("device_class")
+
+    # Check if this is a tire sensor
+    is_tire = (device_class == SensorDeviceClass.PRESSURE or
+               (device_class == SensorDeviceClass.TEMPERATURE and category == "tire"))
+
+    if is_tire:
+        stat_type = "tire"
+    elif "temp" in sensor_name:
         stat_type = "temp"
     elif "voltage" in sensor_name:
         stat_type = "voltage"
@@ -211,14 +221,19 @@ def create_cell_sensors(topic: str, cell_values: List[float],
 
     # Create sensors
     for i, value in enumerate(cell_values):
-        # Generate unique entity name that includes the parent metric path
-        entity_name = f"ovms_{vehicle_id}_{category}_{metric_path}_{stat_type}_{i+1}".lower()
-
-        # Generate unique ID using hash
-        cell_unique_id = f"{vehicle_id}_{category}_{topic_hash}_{stat_type}_{i+1}"
-
-        # Create friendly name for cell
-        friendly_name = f"{attributes.get('name', stat_type.capitalize())} {stat_type.capitalize()} {i+1}"
+        if is_tire and i < 4:
+            # Use tire position names for tire sensors
+            position_name, position_code = TIRE_POSITIONS[i]
+            entity_name = f"ovms_{vehicle_id}_{category}_{metric_path}_{position_code.lower()}".lower()
+            cell_unique_id = f"{vehicle_id}_{category}_{topic_hash}_{position_code.lower()}"
+            friendly_name = f"{attributes.get('name', 'Tire')} {position_name}"
+            topic_suffix = f"{position_code.lower()}"
+        else:
+            # Use generic naming for other sensors or additional values beyond 4 tires
+            entity_name = f"ovms_{vehicle_id}_{category}_{metric_path}_{stat_type}_{i+1}".lower()
+            cell_unique_id = f"{vehicle_id}_{category}_{topic_hash}_{stat_type}_{i+1}"
+            friendly_name = f"{attributes.get('name', stat_type.capitalize())} {stat_type.capitalize()} {i+1}"
+            topic_suffix = f"{stat_type}/{i+1}"
 
         # Create sensor config
         sensor_config = {
@@ -227,7 +242,7 @@ def create_cell_sensors(topic: str, cell_values: List[float],
             "friendly_name": friendly_name,
             "state": value,
             "device_info": device_info,
-            "topic": f"{topic}/{stat_type}/{i+1}",
+            "topic": f"{topic}/{topic_suffix}",
             "attributes": {
                 "cell_index": i,
                 "parent_unique_id": parent_unique_id,
@@ -238,6 +253,12 @@ def create_cell_sensors(topic: str, cell_values: List[float],
                 "unit_of_measurement": attributes.get("unit_of_measurement"),
             },
         }
+
+        # Add tire-specific attributes
+        if is_tire and i < 4:
+            position_name, position_code = TIRE_POSITIONS[i]
+            sensor_config["attributes"]["tire_position"] = position_name
+            sensor_config["attributes"]["tire_position_code"] = position_code
 
         sensor_configs.append(sensor_config)
 

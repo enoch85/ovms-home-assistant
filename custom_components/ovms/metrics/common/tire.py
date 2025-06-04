@@ -10,6 +10,14 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 
+# Tire position mapping based on OVMS standard: LF, RF, LR, RR
+TIRE_POSITIONS = {
+    0: ("front_left", "FL"),
+    1: ("front_right", "FR"),
+    2: ("rear_left", "LR"),
+    3: ("rear_right", "RR")
+}
+
 # Tire metrics
 TIRE_METRICS = {
     "v.t.alert": {
@@ -22,9 +30,9 @@ TIRE_METRICS = {
         "name": "Tire Health",
         "description": "TPMS tire health states",
         "icon": "mdi:car-tire-alert",
+        "state_class": SensorStateClass.MEASUREMENT,
         "unit": PERCENTAGE,
         "category": "tire",
-        "has_cell_data": True,
     },
     "v.t.pressure": {
         "name": "Tire Pressure",

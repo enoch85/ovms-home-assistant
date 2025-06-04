@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import hashlib
+import re
 import uuid
 from typing import Dict, Any, Optional, List
 
@@ -42,6 +43,7 @@ class EntityFactory:
         try:
             entity_type = entity_data.get("entity_type")
             if not entity_type:
+                _LOGGER.warning("No entity_type provided for topic: %s", topic)
                 return
 
             # Generate unique IDs
@@ -49,9 +51,18 @@ class EntityFactory:
 
             # Check if we already processed this entity
             unique_id = entity_data.get("unique_id")
-            if unique_id in self.created_entities:
-                _LOGGER.debug("Entity already created for topic: %s", topic)
+            if not unique_id:
+                _LOGGER.error("No unique_id generated for topic: %s", topic)
                 return
+
+            # Enhanced logging for debugging entity stability
+            if unique_id in self.created_entities:
+                # Reduce logging frequency - only log at debug level if specifically needed
+                return
+            else:
+                # Only log entity creation during initial setup or if debug logging is specifically enabled
+                if len(self.created_entities) < 10:  # First 10 entities for setup verification
+                    _LOGGER.debug("Creating new entity for topic: %s (unique_id: %s)", topic, unique_id)
 
             # Get parts and metric info
             parts = entity_data.get("parts", [])
@@ -63,7 +74,9 @@ class EntityFactory:
                 parts, metric_info, topic, raw_name
             )
 
-            _LOGGER.info("Creating %s: %s", entity_type, friendly_name)
+            # Reduce logging frequency - only log entity creation for important entities or during setup
+            if len(self.created_entities) < 20 or entity_type in ["device_tracker", "binary_sensor"]:
+                _LOGGER.info("Creating %s: %s", entity_type, friendly_name)
 
             # Record that we've processed this entity
             self.created_entities.add(unique_id)
@@ -241,34 +254,20 @@ class EntityFactory:
 
     def _generate_unique_ids(self, topic: str, entity_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate unique IDs for entities."""
-        try:
-            # Extract necessary parts
-            entity_type = entity_data.get("entity_type")
-            name = entity_data.get("name", "")
-            vehicle_id = self.config.get("vehicle_id", "").lower()
+        vehicle_id = self.config.get("vehicle_id", "unknown").lower()
+        topic_hash = hashlib.md5(topic.encode()).hexdigest()[:6]
 
-            # Create a hash of the topic for uniqueness
-            topic_hash = hashlib.md5(topic.encode()).hexdigest()[:8]
+        # Extract metric path from topic (everything after vehicle ID)
+        topic_parts = topic.split('/')
+        if len(topic_parts) >= 4:
+            metric_path = '_'.join(topic_parts[3:])
+            metric_path = re.sub(r'[^a-zA-Z0-9_]', '_', metric_path.lower())
+            unique_id = f"ovms_{vehicle_id}_{metric_path}_{topic_hash}"
+        else:
+            unique_id = f"ovms_{vehicle_id}_{topic_hash}"
 
-            # Extract category from attributes
-            category = entity_data.get("attributes", {}).get("category", "unknown")
-
-            # Create a unique ID
-            unique_id = f"{vehicle_id}_{category}_{name}_{topic_hash}"
-
-            # Update entity data
-            updated_data = entity_data.copy()
-            updated_data["unique_id"] = unique_id
-
-            return updated_data
-
-        except Exception as ex:
-            _LOGGER.exception("Error generating unique IDs: %s", ex)
-            # Fallback to a simple unique ID
-            return {
-                **entity_data,
-                "unique_id": str(uuid.uuid4()),
-            }
+        entity_data["unique_id"] = unique_id
+        return entity_data
 
     def _get_device_info(self) -> Dict[str, Any]:
         """Get device info for the OVMS module."""

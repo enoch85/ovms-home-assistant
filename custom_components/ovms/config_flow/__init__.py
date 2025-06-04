@@ -408,7 +408,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 # Create a stable unique ID that won't change if vehicle_id changes
                 unique_id_base = f"{self.mqtt_config[CONF_HOST]}_{user_input[CONF_VEHICLE_ID]}"
-                unique_id = f"ovms_{hashlib.md5(unique_id_base.encode()).hexdigest()}"
+                unique_id = f"ovms_{hashlib.md5(unique_id_base.encode()).hexdigest()[:8]}"
                 _LOGGER.debug("Generated unique ID for config entry: %s", unique_id)
 
                 await self.async_set_unique_id(unique_id)

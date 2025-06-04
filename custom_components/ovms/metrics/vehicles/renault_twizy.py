@@ -17,8 +17,8 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfTime,
     UnitOfSpeed,
+    EntityCategory,
 )
-from homeassistant.helpers.entity import EntityCategory
 
 # Custom unit constants
 UNIT_AMPERE_HOUR = "Ah"

@@ -6,16 +6,15 @@ from datetime import datetime
 from homeassistant.components.sensor import SensorEntity, SensorStateClass, SensorDeviceClass
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
-from homeassistant.const import UnitOfTime
-
-from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
+from ..const import LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY, truncate_state_value
 from .parsers import parse_value, process_json_payload, requires_numeric_value, is_special_state_value, calculate_median
 from .factory import determine_sensor_type, add_device_specific_attributes, create_cell_sensors
 from .duration_formatter import format_duration, parse_duration
+from ..metrics.common.tire import TIRE_POSITIONS
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -51,7 +50,7 @@ def format_sensor_value(value, device_class, attributes):
 
         # Return the short format as the main value
         return formatted_short
-    elif device_class == SensorDeviceClass.TIMESTAMP:
+    if device_class == SensorDeviceClass.TIMESTAMP:
         # For timestamp, store datetime object as attribute and return ISO string
         attributes["timestamp_object"] = value
         if isinstance(value, datetime):
@@ -63,9 +62,8 @@ def format_sensor_value(value, device_class, attributes):
                 return f"{date_part} at {time_part}"
             return formatted
         return str(value)
-    else:
-        # Normal handling
-        return truncate_state_value(value)
+    # Normal handling
+    return truncate_state_value(value)
 
 
 class CellVoltageSensor(SensorEntity, RestoreEntity):
@@ -93,7 +91,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             "topic": topic,
             "last_updated": dt_util.utcnow().isoformat(),
         }
-        self.hass = hass
+        self.hass: Optional[HomeAssistant] = hass
 
         # Initialize device class and other attributes
         self._attr_device_class = attributes.get("device_class")
@@ -240,17 +238,23 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             self.async_write_ha_state()
 
         # Subscribe to updates
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
-                update_state,
+        if self.hass:
+            self.async_on_remove(
+                async_dispatcher_connect(
+                    self.hass,
+                    f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}",
+                    update_state,
+                )
             )
-        )
 
 
 class OVMSSensor(SensorEntity, RestoreEntity):
     """Representation of an OVMS sensor."""
+
+    def _is_tire_sensor(self) -> bool:
+        """Check if this sensor is a tire-related sensor by topic pattern."""
+        tire_patterns = ["v.t.pressure", "v.t.temp", "v.t.health", "v.t.alert", "v.t.diff", "v.t.emgcy", "/v/t/pressure", "/v/t/temp", "/v/t/health", "/v/t/alert", "/v/t/diff", "/v/t/emgcy"]
+        return any(pattern in self._topic.lower() for pattern in tire_patterns)
 
     def __init__(
         self,
@@ -274,7 +278,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             "topic": topic,
             "last_updated": dt_util.utcnow().isoformat(),
         }
-        self.hass = hass
+        self.hass: Optional[HomeAssistant] = hass
 
         # Set entity_id
         if hass:
@@ -316,19 +320,31 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         if self._attr_native_unit_of_measurement and "unit" not in self._attr_extra_state_attributes:
             self._attr_extra_state_attributes["unit"] = self._attr_native_unit_of_measurement
 
-        # Cell sensor configuration
+        # Cell sensor configuration - detect by topic patterns and known cell data metrics
         self._is_cell_sensor = (
             (("cell" in self._topic.lower() or "voltage" in self._topic.lower() or
               "temp" in self._topic.lower()) and
              self._attr_extra_state_attributes.get("category") == "battery") or
             self._attr_extra_state_attributes.get("has_cell_data", False) or
-            ("health" in self._topic.lower() and
-             self._attr_extra_state_attributes.get("category") == "tire")
+            self._is_tire_sensor()  # All tire metrics have multiple values
         )
 
-        # Determine stat type
-        self._stat_type = "cell"
-        if "temp" in self._internal_name.lower():
+        # Determine stat type based on topic content
+        self._stat_type = "cell"  # Default fallback
+
+        if self._is_tire_sensor():
+            # For tire sensors, determine the metric type
+            if "pressure" in self._topic.lower() or "emgcy" in self._topic.lower() or "diff" in self._topic.lower():
+                self._stat_type = "pressure"
+            elif "temp" in self._topic.lower():
+                self._stat_type = "temp"
+            elif "health" in self._topic.lower():
+                self._stat_type = "health"
+            elif "alert" in self._topic.lower():
+                self._stat_type = "alert"
+            else:
+                self._stat_type = "tire"  # fallback for unknown tire metrics
+        elif "temp" in self._internal_name.lower():
             self._stat_type = "temp"
         elif "voltage" in self._internal_name.lower():
             self._stat_type = "voltage"
@@ -463,11 +479,12 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self.async_write_ha_state()
 
         # Subscribe to updates
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}", update_state,
+        if self.hass:
+            self.async_on_remove(
+                async_dispatcher_connect(
+                    self.hass, f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}", update_state,
+                )
             )
-        )
 
     def _handle_cell_values(self, payload: str) -> None:
         """Handle cell values in payload."""
@@ -497,15 +514,33 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     del self._attr_extra_state_attributes[legacy_key]
 
             # Update individual values
-            # First clear existing attributes
-            for key in list(self._attr_extra_state_attributes.keys()):
-                if any(key.startswith(prefix) for prefix in ["cell_", "voltage_", "temp_", "value_"]):
-                    if key.split("_")[1].isdigit():
-                        del self._attr_extra_state_attributes[key]
+            # First clear existing attributes - be more aggressive for tire sensors
+            keys_to_remove = []
+            for key in self._attr_extra_state_attributes.keys():
+                # Remove any numeric cell/pressure/temp/etc attributes
+                if any(key.startswith(prefix) for prefix in ["cell_", "voltage_", "temp_", "value_", "pressure_", "health_", "alert_", "tire_"]):
+                    key_parts = key.split("_")
+                    if len(key_parts) >= 2:
+                        # Remove if second part is numeric or tire position
+                        if key_parts[1].isdigit() or key_parts[1].lower() in ["fl", "fr", "lr", "rr", "1", "2", "3", "4"]:
+                            keys_to_remove.append(key)
+                # Also remove standalone "Cell X" or "Pressure X" attributes
+                elif key.startswith("Cell ") or key.startswith("Pressure ") or key.startswith("Temperature "):
+                    keys_to_remove.append(key)
 
-            # Add new values
+            # Remove the identified keys
+            for key in keys_to_remove:
+                del self._attr_extra_state_attributes[key]
+
+            # Add new values with appropriate naming
             for i, val in enumerate(values):
-                self._attr_extra_state_attributes[f"{self._stat_type}_{i+1}"] = val
+                if self._is_tire_sensor() and i < 4:
+                    # Use tire position codes for any tire sensor
+                    position_name, position_code = TIRE_POSITIONS[i]
+                    self._attr_extra_state_attributes[f"{self._stat_type}_{position_code}"] = val
+                else:
+                    # Use numeric naming for other sensors
+                    self._attr_extra_state_attributes[f"{self._stat_type}_{i+1}"] = val
 
             # Update cell sensors if created
             if hasattr(self, '_cell_sensors_created') and self._cell_sensors_created and CREATE_INDIVIDUAL_CELL_SENSORS:
@@ -531,11 +566,26 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             return
 
         # Extract vehicle_id
-        vehicle_id = self.unique_id.split('_')[0]
+        vehicle_id = (self.unique_id or "unknown").split('_')[0]
 
         # Create sensor configs
+        device_info_dict: Dict[str, Any] = {}
+        if self.device_info:
+            if isinstance(self.device_info, dict):
+                device_info_dict = self.device_info  # type: ignore
+            else:
+                # Extract relevant fields from DeviceInfo
+                try:
+                    device_info_dict = {
+                        "identifiers": getattr(self.device_info, 'identifiers', set()),
+                        "name": getattr(self.device_info, 'name', ""),
+                        "manufacturer": getattr(self.device_info, 'manufacturer', ""),
+                        "model": getattr(self.device_info, 'model', ""),
+                    }
+                except Exception:
+                    device_info_dict = {}
         sensor_configs = create_cell_sensors(
-            self._topic, cell_values, vehicle_id, self.unique_id, self.device_info,
+            self._topic, cell_values, vehicle_id, self.unique_id or "unknown", device_info_dict,
             {
                 "name": self.name,
                 "category": self._attr_extra_state_attributes.get("category", "battery"),
