@@ -250,7 +250,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
 
 class OVMSSensor(SensorEntity, RestoreEntity):
     """Representation of an OVMS sensor."""
-    
+
     def _is_tire_sensor(self) -> bool:
         """Check if this sensor is a tire-related sensor by topic pattern."""
         tire_patterns = ["v.t.pressure", "v.t.temp", "v.t.health", "v.t.alert", "v.t.diff", "v.t.emgcy"]
@@ -331,7 +331,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
         # Determine stat type based on topic content
         self._stat_type = "cell"  # Default fallback
-        
+
         if self._is_tire_sensor():
             # For tire sensors, determine the metric type
             if "pressure" in self._topic.lower() or "emgcy" in self._topic.lower() or "diff" in self._topic.lower():
