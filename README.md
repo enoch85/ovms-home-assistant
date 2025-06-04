@@ -38,6 +38,7 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 - **Advanced Formatting**: Intelligent formatting for duration values (minutes, hours, days) and timestamps
 - **Dynamic Topic Discovery**: Sophisticated topic detection even with non-standard username patterns
 - **Combined Location Tracking**: Automatically creates unified device tracker from separate latitude/longitude entities
+- **Tire Pressure**: Keep track of your TPMS values
 
 ## Technical Quality
 
@@ -88,6 +89,9 @@ The integration provides comprehensive analysis of cell-level battery data:
 
 *Example of cell statistics in entity attributes - these values are automatically calculated*
 
+![1](/assets/screenshot-tire-pressure|width=50)
+
+*Example of how the TPMS values are displayed*
 ## Data usage
 
 Compared to using the OVMS V2 server, this integration will use more data since it's using the V3 server over MQTT. If you are concerned about data usage, this integration might not be for you. Below are real-life cellular data usage from a car with both V2 and V3 OVMS server activated.
