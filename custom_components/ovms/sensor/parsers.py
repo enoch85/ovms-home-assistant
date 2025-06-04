@@ -107,7 +107,7 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
         if is_cell_sensor:
             for i, val in enumerate(parts):
                 # Check if this is a tire sensor by stat_type or if it's specifically tire data
-                is_tire_data = (stat_type in ["tire", "pressure"] and 
+                is_tire_data = (stat_type in ["tire", "pressure"] and
                                stat_type != "cell" and i < 4)
                 if is_tire_data:
                     # Use tire position labels for tire sensors (up to 4 tires)

@@ -527,7 +527,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 # Also remove standalone "Cell X" or "Pressure X" attributes
                 elif key.startswith("Cell ") or key.startswith("Pressure ") or key.startswith("Temperature "):
                     keys_to_remove.append(key)
-            
+
             # Remove the identified keys
             for key in keys_to_remove:
                 del self._attr_extra_state_attributes[key]
