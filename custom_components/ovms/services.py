@@ -14,6 +14,7 @@ from .const import (
     DOMAIN,
     LOGGER_NAME
 )
+from .utils import get_merged_config
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -75,8 +76,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         for entry_id, data in hass.data[DOMAIN].items():
             if isinstance(data, dict) and "mqtt_client" in data:
                 entry = hass.config_entries.async_get_entry(entry_id)
-                if entry and entry.data.get(CONF_VEHICLE_ID) == vehicle_id:
-                    return data["mqtt_client"]
+                if entry:
+                    # Merge entry.data with entry.options, giving priority to options
+                    config = get_merged_config(entry)
+                    if config.get(CONF_VEHICLE_ID) == vehicle_id:
+                        return data["mqtt_client"]
 
         return None
 

@@ -22,6 +22,7 @@ from .const import (
 )
 from .naming_service import EntityNamingService
 from .attribute_manager import AttributeManager
+from .utils import get_merged_config
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -39,8 +40,8 @@ async def async_setup_entry(
 
             _LOGGER.info("Adding device tracker: %s", data.get("friendly_name", data.get("name", "unknown")))
 
-            # Create naming and attribute services
-            config = entry.data
+            # Create naming and attribute services - merge options with data
+            config = get_merged_config(entry)
             naming_service = EntityNamingService(config)
             attribute_manager = AttributeManager(config)
 

@@ -16,6 +16,7 @@ from .const import (
 
 from .mqtt import OVMSMQTTClient
 from .services import async_setup_services, async_unload_services
+from .utils import get_merged_config
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -25,6 +26,14 @@ PLATFORMS = [
     Platform.SWITCH,
     Platform.DEVICE_TRACKER,
 ]
+
+
+def _get_merged_config(entry: ConfigEntry) -> dict:
+    """Get merged configuration from entry.data and entry.options.
+    
+    Options take precedence over data.
+    """
+    return get_merged_config(entry)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -39,8 +48,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.info("Migrating config entry from version %s to %s", entry.version, CONFIG_VERSION)
             await async_migrate_entry(hass, entry)
 
+        # Merge entry.data with entry.options, giving priority to options
+        config = _get_merged_config(entry)
+
         # Create MQTT client
-        mqtt_client = OVMSMQTTClient(hass, entry.data)
+        mqtt_client = OVMSMQTTClient(hass, config)
 
         # Set up the MQTT client
         if not await mqtt_client.async_setup():

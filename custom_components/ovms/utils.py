@@ -5,6 +5,7 @@ import re
 import hashlib
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     UnitOfLength,
     UnitOfMass,
@@ -16,6 +17,23 @@ from homeassistant.const import (
 from .const import LOGGER_NAME
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
+
+def get_merged_config(entry: ConfigEntry) -> Dict[str, Any]:
+    """Get merged configuration from entry.data and entry.options.
+    
+    Options take precedence over data.
+    
+    Args:
+        entry: The config entry containing data and options
+        
+    Returns:
+        Merged configuration dictionary
+    """
+    config = {**entry.data}
+    if entry.options:
+        config.update(entry.options)
+    return config
 
 
 def convert_temperature(value: float, to_unit: str) -> float:
