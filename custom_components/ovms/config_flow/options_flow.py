@@ -14,7 +14,6 @@ from ..const import (
     CONF_PROTOCOL,
     CONF_TOPIC_BLACKLIST,
     CONF_ENTITY_STALENESS_HOURS,
-    CONF_ENABLE_STALENESS_CLEANUP,
     CONF_DELETE_STALE_HISTORY,
     DEFAULT_QOS,
     DEFAULT_TOPIC_PREFIX,
@@ -22,7 +21,6 @@ from ..const import (
     DEFAULT_VERIFY_SSL,
     DEFAULT_TOPIC_BLACKLIST,
     DEFAULT_ENTITY_STALENESS_HOURS,
-    DEFAULT_ENABLE_STALENESS_CLEANUP,
     DEFAULT_DELETE_STALE_HISTORY,
     TOPIC_STRUCTURES,
     LOGGER_NAME,
@@ -84,6 +82,10 @@ class OVMSOptionsFlow(OptionsFlow):
             if CONF_TOPIC_BLACKLIST in user_input and isinstance(user_input[CONF_TOPIC_BLACKLIST], str):
                 blacklist_str = user_input[CONF_TOPIC_BLACKLIST]
                 user_input[CONF_TOPIC_BLACKLIST] = [item.strip() for item in blacklist_str.split(',') if item.strip()]
+
+            # Remove dummy fields that are not part of actual config
+            if "entity_staleness_management" in user_input:
+                del user_input["entity_staleness_management"]
 
             _LOGGER.debug("Saving options: %s", user_input)
             return self.async_create_entry(title="", data=user_input)
@@ -158,15 +160,12 @@ class OVMSOptionsFlow(OptionsFlow):
             ): str,
         })
 
-        # Entity Staleness Management section - show enable toggle first as main switch
+        # Entity Staleness Management section
         options.update({
             vol.Optional(
-                CONF_ENABLE_STALENESS_CLEANUP,
-                default=entry_options.get(
-                    CONF_ENABLE_STALENESS_CLEANUP,
-                    entry_data.get(CONF_ENABLE_STALENESS_CLEANUP, DEFAULT_ENABLE_STALENESS_CLEANUP)
-                )
-            ): bool,
+                "entity_staleness_management",
+                default=""
+            ): str,
             vol.Optional(
                 CONF_ENTITY_STALENESS_HOURS,
                 default=entry_options.get(
