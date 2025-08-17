@@ -158,7 +158,7 @@ class OVMSOptionsFlow(OptionsFlow):
             ): str,
         })
 
-        # Entity Staleness Management section - always show all options for simplicity
+        # Entity Staleness Management section - show enable toggle first as main switch
         options.update({
             vol.Optional(
                 CONF_ENABLE_STALENESS_CLEANUP,
