@@ -25,7 +25,6 @@ CONF_ORIGINAL_VEHICLE_ID = "original_vehicle_id"
 CONF_CREATE_CELL_SENSORS = "create_cell_sensors"  # Option to create individual cell sensors
 CONF_TOPIC_BLACKLIST = "topic_blacklist"  # Option to blacklist topics
 CONF_ENTITY_STALENESS_HOURS = "entity_staleness_hours"  # Hours after which unavailable entities are hidden from UI to reduce clutter (history preserved)
-CONF_ENABLE_STALENESS_CLEANUP = "enable_staleness_cleanup"  # Enable/disable staleness cleanup
 CONF_DELETE_STALE_HISTORY = "delete_stale_history"  # Delete history when hiding stale entities
 
 # Defaults
@@ -41,7 +40,6 @@ DEFAULT_VERIFY_SSL = True
 DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by default
 DEFAULT_TOPIC_BLACKLIST = [".log", "battery.log", "power.log", "gps.log", "xrt.log"]  # Default topics to blacklist
 DEFAULT_ENTITY_STALENESS_HOURS = 24  # 24 hours default when enabled - hides unavailable sensors to keep UI clean while preserving history
-DEFAULT_ENABLE_STALENESS_CLEANUP = False  # Disabled by default since it's new functionality
 DEFAULT_DELETE_STALE_HISTORY = False  # Preserve history by default
 
 # Options

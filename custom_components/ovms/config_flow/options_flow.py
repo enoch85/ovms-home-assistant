@@ -83,10 +83,6 @@ class OVMSOptionsFlow(OptionsFlow):
                 blacklist_str = user_input[CONF_TOPIC_BLACKLIST]
                 user_input[CONF_TOPIC_BLACKLIST] = [item.strip() for item in blacklist_str.split(',') if item.strip()]
 
-            # Remove dummy header fields that are not part of actual config
-            if "entity_staleness_header" in user_input:
-                del user_input["entity_staleness_header"]
-
             _LOGGER.debug("Saving options: %s", user_input)
             return self.async_create_entry(title="", data=user_input)
 
@@ -160,14 +156,6 @@ class OVMSOptionsFlow(OptionsFlow):
             ): str,
         })
 
-        # Entity Staleness Management section header
-        options.update({
-            vol.Required(
-                "entity_staleness_header",
-                default="Entity Staleness Management"
-            ): vol.In({"Entity Staleness Management": "Entity Staleness Management"}),
-        })
-        
         # Entity Staleness Management options
         options.update({
             vol.Optional(
