@@ -79,6 +79,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         attributes: Dict[str, Any],
         friendly_name: Optional[str] = None,
         hass: Optional[HomeAssistant] = None,
+        staleness_manager=None,
     ):
         """Initialize the sensor."""
         self._attr_unique_id = unique_id
@@ -92,6 +93,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             "last_updated": dt_util.utcnow().isoformat(),
         }
         self.hass: Optional[HomeAssistant] = hass
+        self.staleness_manager = staleness_manager
 
         # Initialize device class and other attributes
         self._attr_device_class = attributes.get("device_class")
@@ -145,6 +147,17 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                 "sensor.{}", name.lower(),
                 hass=hass,
             )
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available (not stale)."""
+        if not self.staleness_manager:
+            return True  # Default to available if no staleness manager
+        # Use entity_id for staleness check, not unique_id
+        entity_id = getattr(self, 'entity_id', None)
+        if not entity_id:
+            return True  # If no entity_id yet, assume available
+        return not self.staleness_manager.is_entity_stale(entity_id)
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -246,6 +259,22 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                     update_state,
                 )
             )
+            
+            # Subscribe to staleness updates
+            if self.staleness_manager:
+                @callback
+                def update_staleness(is_stale: bool) -> None:
+                    """Handle staleness update."""
+                    _LOGGER.debug("Entity %s staleness changed: %s", self.unique_id, is_stale)
+                    self.async_write_ha_state()
+                    
+                self.async_on_remove(
+                    async_dispatcher_connect(
+                        self.hass,
+                        f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}_staleness",
+                        update_staleness,
+                    )
+                )
 
 
 class OVMSSensor(SensorEntity, RestoreEntity):
@@ -266,6 +295,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         attributes: Dict[str, Any],
         friendly_name: Optional[str] = None,
         hass: Optional[HomeAssistant] = None,
+        staleness_manager=None,
     ) -> None:
         """Initialize the sensor."""
         self._attr_unique_id = unique_id
@@ -273,6 +303,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_name = friendly_name or name.replace("_", " ").title()
         self._topic = topic
         self._attr_device_info = device_info or {}
+        self.staleness_manager = staleness_manager
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
@@ -326,6 +357,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
               "temp" in self._topic.lower()) and
              self._attr_extra_state_attributes.get("category") == "battery") or
             self._attr_extra_state_attributes.get("has_cell_data", False) or
+            # Check for VW eUP and other vehicle-specific cell patterns
+            ("xvu/b/c" in self._topic.lower() or "xvu.b.c" in self._topic.lower()) or
+            ("v/b/c" in self._topic.lower() or "v.b.c" in self._topic.lower()) or
             self._is_tire_sensor()  # All tire metrics have multiple values
         )
 
@@ -377,6 +411,17 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_extra_state_attributes, device_class_for_parsing, self._parsed_value
         )
         self._attr_extra_state_attributes.update(updated_attrs)
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available (not stale)."""
+        if not self.staleness_manager:
+            return True  # Default to available if no staleness manager
+        # Use entity_id for staleness check, not unique_id
+        entity_id = getattr(self, 'entity_id', None)
+        if not entity_id:
+            return True  # If no entity_id yet, assume available
+        return not self.staleness_manager.is_entity_stale(entity_id)
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -485,6 +530,22 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     self.hass, f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}", update_state,
                 )
             )
+            
+            # Subscribe to staleness updates
+            if self.staleness_manager:
+                @callback
+                def update_staleness(is_stale: bool) -> None:
+                    """Handle staleness update."""
+                    _LOGGER.debug("Entity %s staleness changed: %s", self.unique_id, is_stale)
+                    self.async_write_ha_state()
+                    
+                self.async_on_remove(
+                    async_dispatcher_connect(
+                        self.hass,
+                        f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}_staleness",
+                        update_staleness,
+                    )
+                )
 
     def _handle_cell_values(self, payload: str) -> None:
         """Handle cell values in payload."""

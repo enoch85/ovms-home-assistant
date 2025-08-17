@@ -1,8 +1,24 @@
 """Support for OVMS location tracking."""
 import logging
 import re
-import time
-from typing import Any, Dict, Optional, List
+import     def __init__(
+        self,
+        unique_id: str,
+        name: str,
+        topic: str,
+        initial_payload: Any,
+        device_info: DeviceInfo,
+        attributes: Dict[str, Any],
+        hass: Optional[HomeAssistant] = None,
+        friendly_name: Optional[str] = None,
+        naming_service: Optional[EntityNamingService] = None,
+        attribute_manager: Optional[AttributeManager] = None,
+        staleness_manager: Optional[Any] = None,
+    ) -> None:
+        """Initialize the device tracker."""
+        self._attr_unique_id = unique_id
+        self._internal_name = name
+        self._staleness_manager = staleness_manager import Any, Dict, Optional, List
 
 from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
@@ -55,7 +71,8 @@ async def async_setup_entry(
                 hass,
                 data.get("friendly_name"),
                 naming_service,
-                attribute_manager
+                attribute_manager,
+                staleness_manager=data.get("staleness_manager"),
             )
 
             async_add_entities([tracker])
@@ -266,6 +283,21 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
             )
         )
 
+        # Subscribe to staleness updates if staleness manager is available
+        if self._staleness_manager:
+            @callback
+            def handle_staleness_update():
+                """Handle staleness status change."""
+                self.async_write_ha_state()
+
+            self.async_on_remove(
+                async_dispatcher_connect(
+                    self.hass,
+                    f"ovms_staleness_update_{self.entity_id}",
+                    handle_staleness_update,
+                )
+            )
+
     def _process_payload(self, payload: Any) -> None:
         """Process the payload and update coordinates."""
         try:
@@ -380,3 +412,10 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     def icon(self) -> str:
         """Return the icon."""
         return "mdi:car-connected"
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        if self._staleness_manager and hasattr(self, 'entity_id'):
+            return not self._staleness_manager.is_entity_stale(self.entity_id)
+        return True

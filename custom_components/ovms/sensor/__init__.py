@@ -44,6 +44,7 @@ async def async_setup_entry(
                         cell_config.get("attributes", {}),
                         cell_config.get("friendly_name"),
                         hass,
+                        staleness_manager=data.get("staleness_manager"),
                     )
                     sensors.append(sensor)
 
@@ -62,6 +63,7 @@ async def async_setup_entry(
                 data.get("attributes", {}),
                 data.get("friendly_name"),
                 hass,
+                staleness_manager=data.get("staleness_manager"),
             )
 
             async_add_entities([sensor])

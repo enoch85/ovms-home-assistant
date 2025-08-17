@@ -117,12 +117,9 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
                     # Use generic naming for other sensors or additional values beyond 4 tires
                     result[f"cell_{i+1}"] = val
 
-        # The main 'value' of the sensor will be the mean if has_cell_data is true,
-        # otherwise, the calling context might decide not to create a main sensor
-        # or use the first value, etc.
-        # For now, parse_value in this file, when is_cell_sensor is true,
-        # will take the average. The attributes will hold the individual values.
-        result["value"] = round(sum(parts) / len(parts), 4)
+        # The main 'value' of the sensor will be the median for cell sensors
+        # This matches the behavior shown in the working cell voltage display
+        result["value"] = round(result["median"], 4)
         return result
     except (ValueError, TypeError):
         _LOGGER.warning(f"Could not parse comma-separated values for {entity_name}: '{value}'")

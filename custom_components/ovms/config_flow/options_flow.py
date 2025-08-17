@@ -13,11 +13,15 @@ from ..const import (
     CONF_PORT,
     CONF_PROTOCOL,
     CONF_TOPIC_BLACKLIST,
+    CONF_ENTITY_STALENESS_HOURS,
+    CONF_ENABLE_STALENESS_CLEANUP,
     DEFAULT_QOS,
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_TOPIC_STRUCTURE,
     DEFAULT_VERIFY_SSL,
     DEFAULT_TOPIC_BLACKLIST,
+    DEFAULT_ENTITY_STALENESS_HOURS,
+    DEFAULT_ENABLE_STALENESS_CLEANUP,
     TOPIC_STRUCTURES,
     LOGGER_NAME,
 )
@@ -150,6 +154,22 @@ class OVMSOptionsFlow(OptionsFlow):
                 )),
                 description="Comma-separated list of topics to filter out (e.g. battery.log,xrt.log)"
             ): str,
+            vol.Optional(
+                CONF_ENABLE_STALENESS_CLEANUP,
+                default=entry_options.get(
+                    CONF_ENABLE_STALENESS_CLEANUP,
+                    entry_data.get(CONF_ENABLE_STALENESS_CLEANUP, DEFAULT_ENABLE_STALENESS_CLEANUP)
+                ),
+                description="Automatically mark old entities as unavailable"
+            ): bool,
+            vol.Optional(
+                CONF_ENTITY_STALENESS_HOURS,
+                default=entry_options.get(
+                    CONF_ENTITY_STALENESS_HOURS,
+                    entry_data.get(CONF_ENTITY_STALENESS_HOURS, DEFAULT_ENTITY_STALENESS_HOURS)
+                ),
+                description="Hours after which entities become stale (minimum: 1 hour)"
+            ): vol.All(int, vol.Range(min=1, max=168))  # 1 hour to 1 week
         })
 
         return self.async_show_form(

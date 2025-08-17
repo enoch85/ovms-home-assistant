@@ -298,7 +298,7 @@ class StateParser:
         
         # Known cell data patterns - these should preserve individual values
         cell_patterns = [
-            # Battery cell data
+            # Battery cell data (both dot and slash notation)
             "v.b.c.voltage",
             "v.b.c.temp", 
             "v.b.c.temp.alert",
@@ -309,9 +309,14 @@ class StateParser:
             "v.b.c.voltage.dev.max",
             "v.b.c.voltage.max",
             "v.b.c.voltage.min",
-            # Vehicle-specific cell data
+            "v/b/c/voltage",
+            "v/b/c/temp",
+            # Vehicle-specific cell data (both dot and slash notation)
             "xvu.b.c.soh",
             "xvu.b.hist.soh.mod.",
+            "xvu/b/c/voltage",
+            "xvu/b/c/temp",
+            "xvu/b/c/soh",
             # Tire data
             "v.t.pressure",
             "v.t.temp",
@@ -319,6 +324,12 @@ class StateParser:
             "v.t.alert",
             "v.t.diff",
             "v.t.emgcy",
+            "v/t/pressure",
+            "v/t/temp",
+            "v/t/health",
+            "v/t/alert",
+            "v/t/diff",
+            "v/t/emgcy",
             # Any metric ending with these patterns
             "/cell/",
             "/cells/",

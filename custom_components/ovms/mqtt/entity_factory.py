@@ -24,7 +24,7 @@ class EntityFactory:
     """Factory for creating OVMS entities."""
 
     def __init__(self, hass: HomeAssistant, entity_registry, update_dispatcher, config: Dict[str, Any],
-                naming_service: EntityNamingService, attribute_manager: AttributeManager):
+                naming_service: EntityNamingService, attribute_manager: AttributeManager, staleness_manager=None):
         """Initialize the entity factory."""
         self.hass = hass
         self.entity_registry = entity_registry
@@ -32,6 +32,7 @@ class EntityFactory:
         self.config = config
         self.naming_service = naming_service
         self.attribute_manager = attribute_manager
+        self.staleness_manager = staleness_manager
         self.entity_queue = asyncio.Queue()
         self.platforms_loaded = False
         self.created_entities = set()
@@ -100,6 +101,7 @@ class EntityFactory:
                 "payload": payload,
                 "device_info": self._get_device_info(),
                 "attributes": attributes,
+                "staleness_manager": self.staleness_manager,
             }
 
             # Check if this is a coordinate entity to track for the device tracker
