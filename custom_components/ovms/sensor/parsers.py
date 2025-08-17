@@ -176,8 +176,9 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
         if value.lower() in ["no", "off", "false", "disabled"]:
             return 0
         if value.lower() in ["yes", "on", "true", "enabled"]:
-            return 1        # Check if this is a comma-separated list of numbers for a cell sensor
-        # The string cleaning (removing units) is now done in StateParser.parse_value
+            return 1
+            
+        # Check if this is a comma-separated list of numbers for a cell sensor
         if isinstance(value, str) and "," in value:
             # If it's a cell sensor, parse_comma_separated_values will handle creating attributes
             # and will return a dict. The 'value' key from that dict will be used as the sensor's state.
@@ -193,27 +194,15 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
                 else:
                     # Fallback or if parsing failed to produce a 'value'
                     return None
-
-
-        # If NOT a cell_sensor, but still comma-separated (e.g. old behavior or other sensors)
-        # The StateParser.parse_value is now the primary place for this averaging if not cell_sensor.
-        # This block in sensor.parsers.py's parse_value might become redundant or only for non-cell_sensor cases
-        # if StateParser handles the generic comma-separated averaging.
-        # For now, let's assume StateParser's output is what we get.
-        # If 'value' is still a string here (meaning StateParser didn't average it),
-        # we might average it here as a fallback if it's numeric and not a cell sensor.
-        # However, the previous change to StateParser makes it average comma-separated strings.
-        # So, if is_cell_sensor is False, 'value' should already be an averaged float if it was comma-separated.
-        # This specific block for non-cell_sensor comma-separated values might not be hit often
-        # if StateParser already converted it.
-        try:
-            # This is a simplified averaging if it's not a cell sensor and StateParser didn't average it.
-            # This should ideally be harmonized with StateParser.
-            parts = [float(part.strip()) for part in value.split(",") if part.strip()]
-            if parts:
-                return round(sum(parts) / len(parts), 4)
-        except (ValueError, TypeError):
-            pass # Fall through if not a simple list of numbers
+            else:
+                # For non-cell sensors with comma-separated values, try to average them
+                # This maintains backward compatibility for sensors that expect averaged values
+                try:
+                    parts = [float(part.strip()) for part in value.split(",") if part.strip()]
+                    if parts:
+                        return round(sum(parts) / len(parts), 4)
+                except (ValueError, TypeError):
+                    pass # Fall through if not a simple list of numbers
 
     # Try parsing as JSON first
     try:

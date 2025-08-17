@@ -47,6 +47,13 @@ class StateParser:
 
         # Check if this is a comma-separated list of numbers (including negative numbers)
         if isinstance(value, str) and "," in value:
+            # Check if this is cell data that should NOT be averaged
+            is_cell_data = StateParser._is_cell_data_topic(topic)
+            
+            if is_cell_data:
+                # For cell data, return the raw comma-separated string for processing by sensor entities
+                return value
+            
             try:
                 parts_str = [s.strip() for s in value.split(",") if s.strip()]
 
@@ -280,6 +287,49 @@ class StateParser:
         except Exception as ex:
             _LOGGER.exception("Error parsing GPS coordinates: %s", ex)
             return {}
+
+    @staticmethod
+    def _is_cell_data_topic(topic: str) -> bool:
+        """Check if this topic contains cell data that should not be averaged."""
+        if not topic:
+            return False
+            
+        topic_lower = topic.lower()
+        
+        # Known cell data patterns - these should preserve individual values
+        cell_patterns = [
+            # Battery cell data
+            "v.b.c.voltage",
+            "v.b.c.temp", 
+            "v.b.c.temp.alert",
+            "v.b.c.voltage.alert",
+            "v.b.c.temp.dev.max",
+            "v.b.c.temp.max",
+            "v.b.c.temp.min", 
+            "v.b.c.voltage.dev.max",
+            "v.b.c.voltage.max",
+            "v.b.c.voltage.min",
+            # Vehicle-specific cell data
+            "xvu.b.c.soh",
+            "xvu.b.hist.soh.mod.",
+            # Tire data
+            "v.t.pressure",
+            "v.t.temp",
+            "v.t.health",
+            "v.t.alert",
+            "v.t.diff",
+            "v.t.emgcy",
+            # Any metric ending with these patterns
+            "/cell/",
+            "/cells/",
+        ]
+        
+        # Check if topic matches any cell data pattern
+        for pattern in cell_patterns:
+            if pattern in topic_lower:
+                return True
+                
+        return False
 
     @staticmethod
     def _validate_power_value(value: float, topic: str = "") -> float:
