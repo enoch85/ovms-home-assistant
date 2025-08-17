@@ -83,6 +83,14 @@ class OVMSOptionsFlow(OptionsFlow):
                 blacklist_str = user_input[CONF_TOPIC_BLACKLIST]
                 user_input[CONF_TOPIC_BLACKLIST] = [item.strip() for item in blacklist_str.split(',') if item.strip()]
 
+            # Process entity staleness hours - convert string selection to proper value
+            if CONF_ENTITY_STALENESS_HOURS in user_input:
+                staleness_selection = user_input[CONF_ENTITY_STALENESS_HOURS]
+                if staleness_selection == "disabled":
+                    user_input[CONF_ENTITY_STALENESS_HOURS] = None  # Disabled
+                else:
+                    user_input[CONF_ENTITY_STALENESS_HOURS] = int(staleness_selection)  # Convert to int
+
             _LOGGER.debug("Saving options: %s", user_input)
             return self.async_create_entry(title="", data=user_input)
 
@@ -157,14 +165,33 @@ class OVMSOptionsFlow(OptionsFlow):
         })
 
         # Entity Staleness Management options
+        current_staleness_hours = entry_options.get(
+            CONF_ENTITY_STALENESS_HOURS,
+            entry_data.get(CONF_ENTITY_STALENESS_HOURS, None)
+        )
+        
+        # Convert stored value to display value
+        if current_staleness_hours is None:
+            staleness_selection = "disabled"
+        elif current_staleness_hours == 12:
+            staleness_selection = "12"
+        elif current_staleness_hours == 24:
+            staleness_selection = "24"
+        elif current_staleness_hours == 168:
+            staleness_selection = "168"
+        else:
+            staleness_selection = "disabled"  # Default for unknown values
+
         options.update({
             vol.Optional(
                 CONF_ENTITY_STALENESS_HOURS,
-                default=entry_options.get(
-                    CONF_ENTITY_STALENESS_HOURS,
-                    entry_data.get(CONF_ENTITY_STALENESS_HOURS, None)  # Default to None (disabled/unchecked)
-                )
-            ): vol.All(int, vol.Range(min=1, max=168)),  # 1-168 hours when enabled
+                default=staleness_selection,
+            ): vol.In({
+                "disabled": "Disabled",
+                "12": "12 hours", 
+                "24": "1 day (24 hours)",
+                "168": "1 week"
+            }),
             vol.Optional(
                 CONF_DELETE_STALE_HISTORY,
                 default=entry_options.get(

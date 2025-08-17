@@ -76,13 +76,13 @@
           "Port": "Connection Port",
           "verify_ssl_certificate": "Verify SSL/TLS Certificate",
           "topic_blacklist": "Topic Blacklist",
-          "entity_staleness_hours": "Staleness Hours",
+          "entity_staleness_hours": "Entity Staleness Management",
           "delete_stale_history": "Delete History"
         },
         "data_description": {
           "verify_ssl_certificate": "SSL/TLS certificate verification only applies to secure ports (8883, 8084)",
           "topic_blacklist": "A comma-separated list of topic patterns to filter out. This prevents unwanted entities from being created. Any topic containing these patterns will be ignored. Use this to filter high-frequency log topics that create too many entities.",
-          "entity_staleness_hours": "Hours before hiding inactive sensors from the UI",
+          "entity_staleness_hours": "Automatically hide inactive sensors to reduce UI clutter",
           "delete_stale_history": "Delete history when hiding stale sensors (unchecked = hide only, preserves history)"
         }
       }
