@@ -357,9 +357,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
               "temp" in self._topic.lower()) and
              self._attr_extra_state_attributes.get("category") == "battery") or
             self._attr_extra_state_attributes.get("has_cell_data", False) or
-            # Check for VW eUP and other vehicle-specific cell patterns
-            ("xvu/b/c" in self._topic.lower() or "xvu.b.c" in self._topic.lower()) or
-            ("v/b/c" in self._topic.lower() or "v.b.c" in self._topic.lower()) or
             self._is_tire_sensor()  # All tire metrics have multiple values
         )
 

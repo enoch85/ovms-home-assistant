@@ -13,6 +13,16 @@ def get_metric_by_path(metric_path):
     if metric_path in METRIC_DEFINITIONS:
         return METRIC_DEFINITIONS[metric_path]
 
+    # Try removing numeric suffixes for module-specific metrics
+    # For paths like "xvu.b.hist.soh.mod.01", try "xvu.b.hist.soh.mod"
+    if metric_path:
+        parts = metric_path.split('.')
+        if len(parts) > 1 and parts[-1].isdigit():
+            # Remove the numeric suffix and try again
+            base_path = '.'.join(parts[:-1])
+            if base_path in METRIC_DEFINITIONS:
+                return METRIC_DEFINITIONS[base_path]
+
     # For VW eUP metrics, also try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xvu.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
