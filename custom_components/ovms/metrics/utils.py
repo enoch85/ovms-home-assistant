@@ -13,6 +13,19 @@ def get_metric_by_path(metric_path):
     if metric_path in METRIC_DEFINITIONS:
         return METRIC_DEFINITIONS[metric_path]
 
+    # For VW eUP metrics, try removing 'metric.' prefix if it's present
+    if metric_path.startswith('metric.xvu.'):
+        alt_path = metric_path[7:]  # Remove 'metric.'
+        if alt_path in METRIC_DEFINITIONS:
+            return METRIC_DEFINITIONS[alt_path]
+        
+        # Also try removing numeric suffixes from the alt_path
+        parts = alt_path.split('.')
+        if len(parts) > 1 and parts[-1].isdigit():
+            base_path = '.'.join(parts[:-1])
+            if base_path in METRIC_DEFINITIONS:
+                return METRIC_DEFINITIONS[base_path]
+
     # Try removing numeric suffixes for module-specific metrics
     # For paths like "xvu.b.hist.soh.mod.01", try "xvu.b.hist.soh.mod"
     if metric_path:
@@ -23,12 +36,6 @@ def get_metric_by_path(metric_path):
             if base_path in METRIC_DEFINITIONS:
                 return METRIC_DEFINITIONS[base_path]
 
-    # For VW eUP metrics, also try removing 'metric.' prefix if it's present
-    if metric_path.startswith('metric.xvu.'):
-        alt_path = metric_path[7:]  # Remove 'metric.'
-        if alt_path in METRIC_DEFINITIONS:
-            return METRIC_DEFINITIONS[alt_path]
-
     # Try with just 'xvu.' if it exists in the path
     if 'xvu.' in metric_path and not metric_path.startswith('xvu.'):
         xvu_index = metric_path.find('xvu.')
@@ -36,50 +43,57 @@ def get_metric_by_path(metric_path):
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
-    # For MG ZS-EV metrics, also try removing 'metric.' prefix if it's present
+    # For MG ZS-EV metrics, try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xmg.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
+        
+        # Also try removing numeric suffixes from the alt_path
+        parts = alt_path.split('.')
+        if len(parts) > 1 and parts[-1].isdigit():
+            base_path = '.'.join(parts[:-1])
+            if base_path in METRIC_DEFINITIONS:
+                return METRIC_DEFINITIONS[base_path]
 
-    # Try with just 'xmg.' if it exists in the path
-    if 'xmg.' in metric_path and not metric_path.startswith('xmg.'):
-        xmg_index = metric_path.find('xmg.')
-        alt_path = metric_path[xmg_index:]
-        if alt_path in METRIC_DEFINITIONS:
-            return METRIC_DEFINITIONS[alt_path]
-
-    # For Smart ForTwo metrics, also try removing 'metric.' prefix if it's present
+    # For Smart ForTwo metrics, try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xsq.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
+        
+        # Also try removing numeric suffixes from the alt_path
+        parts = alt_path.split('.')
+        if len(parts) > 1 and parts[-1].isdigit():
+            base_path = '.'.join(parts[:-1])
+            if base_path in METRIC_DEFINITIONS:
+                return METRIC_DEFINITIONS[base_path]
 
-    # Try with just 'xsq.' if it exists in the path
-    if 'xsq.' in metric_path and not metric_path.startswith('xsq.'):
-        xsq_index = metric_path.find('xsq.')
-        alt_path = metric_path[xsq_index:]
-        if alt_path in METRIC_DEFINITIONS:
-            return METRIC_DEFINITIONS[alt_path]
-
-    # For Nissan Leaf metrics, also try removing 'metric.' prefix if it's present
+    # For Nissan Leaf metrics, try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xnl.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
+        
+        # Also try removing numeric suffixes from the alt_path
+        parts = alt_path.split('.')
+        if len(parts) > 1 and parts[-1].isdigit():
+            base_path = '.'.join(parts[:-1])
+            if base_path in METRIC_DEFINITIONS:
+                return METRIC_DEFINITIONS[base_path]
 
-    # Try with just 'xnl.' if it exists in the path
-    if 'xnl.' in metric_path and not metric_path.startswith('xnl.'):
-        xnl_index = metric_path.find('xnl.')
-        alt_path = metric_path[xnl_index:]
-        if alt_path in METRIC_DEFINITIONS:
-            return METRIC_DEFINITIONS[alt_path]
-
-    # For Renault Twizy metrics, also try removing 'metric.' prefix if it's present
+    # For Renault Twizy metrics, try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xrt.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
+        
+        # Also try removing numeric suffixes from the alt_path
+        parts = alt_path.split('.')
+        if len(parts) > 1 and parts[-1].isdigit():
+            base_path = '.'.join(parts[:-1])
+            if base_path in METRIC_DEFINITIONS:
+                return METRIC_DEFINITIONS[base_path]
 
     # Try with just 'xrt.' if it exists in the path
     if 'xrt.' in metric_path and not metric_path.startswith('xrt.'):
