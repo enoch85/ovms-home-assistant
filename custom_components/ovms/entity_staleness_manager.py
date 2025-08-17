@@ -2,12 +2,11 @@
 import asyncio
 import logging
 import time
-from typing import Dict, Set, Optional, Callable
+from typing import Dict, Set, Optional
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_registry import RegistryEntryHider
-from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import (
     CONF_ENTITY_STALENESS_HOURS,
@@ -17,7 +16,6 @@ from .const import (
     DEFAULT_ENABLE_STALENESS_CLEANUP,
     DEFAULT_DELETE_STALE_HISTORY,
     LOGGER_NAME,
-    SIGNAL_UPDATE_ENTITY,
 )
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -36,15 +34,22 @@ class EntityStalenessManager:
         self._shutting_down = False
 
         # Get configuration - use enable flag to determine if active
-        self._enabled = config.get(CONF_ENABLE_STALENESS_CLEANUP, DEFAULT_ENABLE_STALENESS_CLEANUP)
-        self._staleness_hours = config.get(CONF_ENTITY_STALENESS_HOURS, DEFAULT_ENTITY_STALENESS_HOURS)
-        self._delete_history = config.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
+        self._enabled = config.get(
+            CONF_ENABLE_STALENESS_CLEANUP, DEFAULT_ENABLE_STALENESS_CLEANUP
+        )
+        self._staleness_hours = config.get(
+            CONF_ENTITY_STALENESS_HOURS, DEFAULT_ENTITY_STALENESS_HOURS
+        )
+        self._delete_history = config.get(
+            CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY
+        )
 
         # Safety check: if enabled but no valid threshold, use default
         if self._enabled and self._staleness_hours <= 0:
             self._staleness_hours = DEFAULT_ENTITY_STALENESS_HOURS
             _LOGGER.warning(
-                "Staleness cleanup enabled but invalid threshold detected, using default %d hours",
+                "Staleness cleanup enabled but invalid threshold detected, "
+                "using default %d hours",
                 DEFAULT_ENTITY_STALENESS_HOURS
             )
 
@@ -68,11 +73,17 @@ class EntityStalenessManager:
         """Update configuration and restart cleanup task if needed."""
         old_enabled = self._enabled
         old_threshold = self._staleness_threshold
-        old_delete_history = getattr(self, '_delete_history', DEFAULT_DELETE_STALE_HISTORY)
+        old_delete_history = getattr(
+            self, '_delete_history', DEFAULT_DELETE_STALE_HISTORY
+        )
 
-        self._staleness_hours = config.get(CONF_ENTITY_STALENESS_HOURS, DEFAULT_ENTITY_STALENESS_HOURS)
+        self._staleness_hours = config.get(
+            CONF_ENTITY_STALENESS_HOURS, DEFAULT_ENTITY_STALENESS_HOURS
+        )
         self._enabled = self._staleness_hours > 0  # Enabled if hours > 0
-        self._delete_history = config.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
+        self._delete_history = config.get(
+            CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY
+        )
         self._staleness_threshold = self._staleness_hours * 3600
 
         _LOGGER.info(
@@ -137,7 +148,7 @@ class EntityStalenessManager:
         stale_count = 0
         fresh_count = 0
 
-        for entity_id, last_update in self._entity_last_updates.items():
+        for _, last_update in self._entity_last_updates.items():
             age = current_time - last_update
             if age > self._staleness_threshold:
                 stale_count += 1
@@ -183,14 +194,16 @@ class EntityStalenessManager:
                 if newly_stale_entities:
                     if self._delete_history:
                         _LOGGER.info(
-                            "Found %d stale entities (older than %d hours), removing them completely (including history)",
+                            "Found %d stale entities (older than %d hours), "
+                            "removing them completely (including history)",
                             len(newly_stale_entities), self._staleness_hours
                         )
                         # Delete entities completely including history
                         await self._async_remove_stale_entities(newly_stale_entities)
                     else:
                         _LOGGER.info(
-                            "Found %d stale entities (older than %d hours), hiding them to reduce UI clutter while preserving history",
+                            "Found %d stale entities (older than %d hours), "
+                            "hiding them to reduce UI clutter while preserving history",
                             len(newly_stale_entities), self._staleness_hours
                         )
                         # Hide stale entities from UI while preserving their history
@@ -224,13 +237,19 @@ class EntityStalenessManager:
                             hidden_by=RegistryEntryHider.USER
                         )
                         hidden_count += 1
-                        _LOGGER.info("Hidden stale entity from UI: %s (history preserved)", entity_id)
+                        _LOGGER.info(
+                            "Hidden stale entity from UI: %s (history preserved)",
+                            entity_id
+                        )
 
                         # Keep entity in our tracking since it's just hidden, not removed
                     elif entity_entry and entity_entry.hidden_by:
                         _LOGGER.debug("Entity %s already hidden", entity_id)
                     else:
-                        _LOGGER.info("Entity %s not found in registry, cleaning up tracking", entity_id)
+                        _LOGGER.info(
+                            "Entity %s not found in registry, cleaning up tracking",
+                            entity_id
+                        )
                         # Clean up our tracking if entity doesn't exist
                         self._entity_last_updates.pop(entity_id, None)
                         self._stale_entities.discard(entity_id)
@@ -262,13 +281,19 @@ class EntityStalenessManager:
                         # Remove the entity completely from Home Assistant
                         entity_registry.async_remove(entity_id)
                         removed_count += 1
-                        _LOGGER.info("Permanently removed stale entity: %s (including all history)", entity_id)
+                        _LOGGER.info(
+                            "Permanently removed stale entity: %s (including all history)",
+                            entity_id
+                        )
 
                         # Remove from our tracking as well
                         self._entity_last_updates.pop(entity_id, None)
                         self._stale_entities.discard(entity_id)
                     else:
-                        _LOGGER.info("Entity %s not found in registry, cleaning up tracking", entity_id)
+                        _LOGGER.info(
+                            "Entity %s not found in registry, cleaning up tracking",
+                            entity_id
+                        )
                         # Clean up our tracking even if entity doesn't exist
                         self._entity_last_updates.pop(entity_id, None)
                         self._stale_entities.discard(entity_id)

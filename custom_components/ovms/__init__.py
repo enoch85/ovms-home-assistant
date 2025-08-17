@@ -45,7 +45,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         # Check if we need to migrate the config entry
         if entry.version < CONFIG_VERSION:
-            _LOGGER.info("Migrating config entry from version %s to %s", entry.version, CONFIG_VERSION)
+            _LOGGER.info(
+                "Migrating config entry from version %s to %s",
+                entry.version, CONFIG_VERSION
+            )
             await async_migrate_entry(hass, entry)
 
         # Merge entry.data with entry.options, giving priority to options

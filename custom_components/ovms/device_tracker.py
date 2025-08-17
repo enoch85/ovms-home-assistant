@@ -38,7 +38,10 @@ async def async_setup_entry(
             if data["entity_type"] != "device_tracker":
                 return
 
-            _LOGGER.info("Adding device tracker: %s", data.get("friendly_name", data.get("name", "unknown")))
+            _LOGGER.info(
+                "Adding device tracker: %s",
+                data.get("friendly_name", data.get("name", "unknown"))
+            )
 
             # Create naming and attribute services - merge options with data
             config = get_merged_config(entry)
