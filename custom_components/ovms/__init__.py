@@ -30,7 +30,7 @@ PLATFORMS = [
 
 def _get_merged_config(entry: ConfigEntry) -> dict:
     """Get merged configuration from entry.data and entry.options.
-    
+
     Options take precedence over data.
     """
     return get_merged_config(entry)

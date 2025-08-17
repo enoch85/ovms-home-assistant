@@ -49,15 +49,15 @@ class StateParser:
         if isinstance(value, str) and "," in value:
             # Check if this is cell data that should NOT be averaged
             is_cell_data = StateParser._is_cell_data_topic(topic)
-            
+
             _LOGGER.debug(f"StateParser: Processing comma-separated value for topic '{topic}': {value}")
             _LOGGER.debug(f"StateParser: Is cell data: {is_cell_data}")
-            
+
             if is_cell_data:
                 # For cell data, return the raw comma-separated string for processing by sensor entities
                 _LOGGER.debug(f"StateParser: Returning raw cell data for topic '{topic}': {value}")
                 return value
-            
+
             try:
                 parts_str = [s.strip() for s in value.split(",") if s.strip()]
 
@@ -297,28 +297,28 @@ class StateParser:
         """Check if this topic contains cell data that should not be averaged."""
         if not topic:
             return False
-            
+
         from ..metrics.utils import get_cell_data_patterns
-            
+
         topic_lower = topic.lower()
-        
+
         # Get patterns from metric definitions (single source of truth)
         cell_patterns = get_cell_data_patterns()
-        
+
         # Additional patterns for topics that should preserve individual values
         additional_patterns = [
             # Any metric ending with these patterns
             "/cell/",
             "/cells/",
         ]
-        
+
         cell_patterns.extend(additional_patterns)
-        
+
         # Check if topic matches any cell data pattern
         for pattern in cell_patterns:
             if pattern.lower() in topic_lower:
                 return True
-                
+
         return False
 
     @staticmethod

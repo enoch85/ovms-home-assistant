@@ -80,7 +80,7 @@ class UpdateDispatcher:
             # Track entity update for staleness management
             if self.staleness_manager:
                 self.staleness_manager.track_entity_update(entity_id)
-            
+
             # Dispatch the update signal
             signal = f"{SIGNAL_UPDATE_ENTITY}_{entity_id}"
 

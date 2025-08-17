@@ -175,7 +175,7 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             return 0
         if value.lower() in ["yes", "on", "true", "enabled"]:
             return 1
-            
+
         # Check if this is a comma-separated list of numbers for a cell sensor
         if isinstance(value, str) and "," in value and is_cell_sensor:
             # For cell sensors, the StateParser should have already detected this as cell data

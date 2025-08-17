@@ -34,12 +34,12 @@ class EntityStalenessManager:
         self._stale_entities: Set[str] = set()
         self._cleanup_task: Optional[asyncio.Task] = None
         self._shutting_down = False
-        
+
         # Get configuration - use enable flag to determine if active
         self._enabled = config.get(CONF_ENABLE_STALENESS_CLEANUP, DEFAULT_ENABLE_STALENESS_CLEANUP)
         self._staleness_hours = config.get(CONF_ENTITY_STALENESS_HOURS, DEFAULT_ENTITY_STALENESS_HOURS)
         self._delete_history = config.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
-        
+
         # Safety check: if enabled but no valid threshold, use default
         if self._enabled and self._staleness_hours <= 0:
             self._staleness_hours = DEFAULT_ENTITY_STALENESS_HOURS
@@ -47,14 +47,14 @@ class EntityStalenessManager:
                 "Staleness cleanup enabled but invalid threshold detected, using default %d hours",
                 DEFAULT_ENTITY_STALENESS_HOURS
             )
-        
+
         self._staleness_threshold = self._staleness_hours * 3600  # Convert to seconds
-        
+
         _LOGGER.info(
             "Entity staleness manager initialized: enabled=%s, threshold=%d hours, delete_history=%s",
             self._enabled, self._staleness_hours, self._delete_history
         )
-        
+
         if self._enabled:
             self._start_cleanup_task()
 
@@ -69,23 +69,23 @@ class EntityStalenessManager:
         old_enabled = self._enabled
         old_threshold = self._staleness_threshold
         old_delete_history = getattr(self, '_delete_history', DEFAULT_DELETE_STALE_HISTORY)
-        
+
         self._staleness_hours = config.get(CONF_ENTITY_STALENESS_HOURS, DEFAULT_ENTITY_STALENESS_HOURS)
         self._enabled = self._staleness_hours > 0  # Enabled if hours > 0
         self._delete_history = config.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
         self._staleness_threshold = self._staleness_hours * 3600
-        
+
         _LOGGER.info(
             "Entity staleness configuration updated: enabled=%s, threshold=%d hours, delete_history=%s",
             self._enabled, self._staleness_hours, self._delete_history
         )
-        
+
         # Restart cleanup task if settings changed
-        if (old_enabled != self._enabled or old_threshold != self._staleness_threshold or 
+        if (old_enabled != self._enabled or old_threshold != self._staleness_threshold or
             old_delete_history != self._delete_history):
             if self._cleanup_task and not self._cleanup_task.done():
                 self._cleanup_task.cancel()
-            
+
             if self._enabled:
                 self._start_cleanup_task()
 
@@ -93,15 +93,15 @@ class EntityStalenessManager:
         """Track that an entity was updated."""
         if not self._enabled:
             return
-            
+
         current_time = time.time()
         self._entity_last_updates[entity_id] = current_time
-        
+
         # If entity was stale, mark it as fresh again and unhide it (if not deleted)
         if entity_id in self._stale_entities:
             self._stale_entities.remove(entity_id)
             _LOGGER.debug("Entity %s is fresh again after receiving new data", entity_id)
-            
+
             # Only try to unhide if we're in hide mode (not delete mode)
             if not self._delete_history:
                 _LOGGER.debug("Entity %s was hidden, will restore it to UI", entity_id)
@@ -112,10 +112,10 @@ class EntityStalenessManager:
         """Check if an entity is considered stale."""
         if not self._enabled:
             return False
-            
+
         if entity_id not in self._entity_last_updates:
             return False  # No update time recorded, assume fresh
-            
+
         age = time.time() - self._entity_last_updates[entity_id]
         return age > self._staleness_threshold
 
@@ -123,7 +123,7 @@ class EntityStalenessManager:
         """Get the age of an entity in hours."""
         if entity_id not in self._entity_last_updates:
             return None
-            
+
         age_seconds = time.time() - self._entity_last_updates[entity_id]
         return age_seconds / 3600
 
@@ -136,14 +136,14 @@ class EntityStalenessManager:
         current_time = time.time()
         stale_count = 0
         fresh_count = 0
-        
+
         for entity_id, last_update in self._entity_last_updates.items():
             age = current_time - last_update
             if age > self._staleness_threshold:
                 stale_count += 1
             else:
                 fresh_count += 1
-                
+
         return {
             "total_tracked": len(self._entity_last_updates),
             "fresh_entities": fresh_count,
@@ -155,31 +155,31 @@ class EntityStalenessManager:
     async def _async_cleanup_stale_entities(self) -> None:
         """Periodically clean up stale entities."""
         _LOGGER.debug("Entity staleness cleanup task started")
-        
+
         while not self._shutting_down:
             try:
                 # Run cleanup every hour
                 await asyncio.sleep(3600)
-                
+
                 if not self._enabled:
                     continue
-                    
+
                 current_time = time.time()
                 newly_stale_entities = []
-                
+
                 for entity_id, last_update_time in self._entity_last_updates.items():
                     age = current_time - last_update_time
-                    
+
                     if age > self._staleness_threshold and entity_id not in self._stale_entities:
                         # Entity just became stale
                         self._stale_entities.add(entity_id)
                         newly_stale_entities.append(entity_id)
-                        
+
                         _LOGGER.debug(
-                            "Entity %s became stale after %.1f hours of inactivity", 
+                            "Entity %s became stale after %.1f hours of inactivity",
                             entity_id, age / 3600
                         )
-                
+
                 if newly_stale_entities:
                     if self._delete_history:
                         _LOGGER.info(
@@ -195,7 +195,7 @@ class EntityStalenessManager:
                         )
                         # Hide stale entities from UI while preserving their history
                         await self._async_hide_stale_entities(newly_stale_entities)
-                
+
             except asyncio.CancelledError:
                 _LOGGER.debug("Entity staleness cleanup task cancelled")
                 break
@@ -203,7 +203,7 @@ class EntityStalenessManager:
                 _LOGGER.exception("Error in entity staleness cleanup: %s", ex)
                 # Wait a bit before retrying to avoid tight loop
                 await asyncio.sleep(300)  # 5 minutes
-                
+
         _LOGGER.debug("Entity staleness cleanup task stopped")
 
     async def _async_hide_stale_entities(self, stale_entity_ids: list) -> None:
@@ -211,7 +211,7 @@ class EntityStalenessManager:
         try:
             # Get Home Assistant's entity registry
             entity_registry = er.async_get(self.hass)
-            
+
             hidden_count = 0
             for entity_id in stale_entity_ids:
                 try:
@@ -220,12 +220,12 @@ class EntityStalenessManager:
                     if entity_entry and not entity_entry.hidden_by:
                         # Hide the entity from UI while preserving history
                         entity_registry.async_update_entity(
-                            entity_id, 
+                            entity_id,
                             hidden_by=RegistryEntryHider.USER
                         )
                         hidden_count += 1
                         _LOGGER.info("Hidden stale entity from UI: %s (history preserved)", entity_id)
-                        
+
                         # Keep entity in our tracking since it's just hidden, not removed
                     elif entity_entry and entity_entry.hidden_by:
                         _LOGGER.debug("Entity %s already hidden", entity_id)
@@ -234,16 +234,16 @@ class EntityStalenessManager:
                         # Clean up our tracking if entity doesn't exist
                         self._entity_last_updates.pop(entity_id, None)
                         self._stale_entities.discard(entity_id)
-                        
+
                 except Exception as ex:
                     _LOGGER.warning("Failed to hide stale entity %s: %s", entity_id, ex)
-            
+
             if hidden_count > 0:
                 _LOGGER.info(
-                    "Successfully hidden %d stale entities from UI (history preserved). Total tracking %d entities.", 
+                    "Successfully hidden %d stale entities from UI (history preserved). Total tracking %d entities.",
                     hidden_count, len(self._entity_last_updates)
                 )
-                
+
         except Exception as ex:
             _LOGGER.exception("Error hiding stale entities: %s", ex)
 
@@ -252,7 +252,7 @@ class EntityStalenessManager:
         try:
             # Get Home Assistant's entity registry
             entity_registry = er.async_get(self.hass)
-            
+
             removed_count = 0
             for entity_id in stale_entity_ids:
                 try:
@@ -263,7 +263,7 @@ class EntityStalenessManager:
                         entity_registry.async_remove(entity_id)
                         removed_count += 1
                         _LOGGER.info("Permanently removed stale entity: %s (including all history)", entity_id)
-                        
+
                         # Remove from our tracking as well
                         self._entity_last_updates.pop(entity_id, None)
                         self._stale_entities.discard(entity_id)
@@ -272,16 +272,16 @@ class EntityStalenessManager:
                         # Clean up our tracking even if entity doesn't exist
                         self._entity_last_updates.pop(entity_id, None)
                         self._stale_entities.discard(entity_id)
-                        
+
                 except Exception as ex:
                     _LOGGER.warning("Failed to remove stale entity %s: %s", entity_id, ex)
-            
+
             if removed_count > 0:
                 _LOGGER.info(
-                    "Successfully removed %d stale entities completely from Home Assistant (including history). Total tracking %d entities.", 
+                    "Successfully removed %d stale entities completely from Home Assistant (including history). Total tracking %d entities.",
                     removed_count, len(self._entity_last_updates)
                 )
-                
+
         except Exception as ex:
             _LOGGER.exception("Error removing stale entities: %s", ex)
 
@@ -290,7 +290,7 @@ class EntityStalenessManager:
         try:
             # Get Home Assistant's entity registry
             entity_registry = er.async_get(self.hass)
-            
+
             unhidden_count = 0
             for entity_id in fresh_entity_ids:
                 try:
@@ -299,21 +299,21 @@ class EntityStalenessManager:
                     if entity_entry and entity_entry.hidden_by == RegistryEntryHider.USER:
                         # Unhide the entity since it's fresh again
                         entity_registry.async_update_entity(
-                            entity_id, 
+                            entity_id,
                             hidden_by=None
                         )
                         unhidden_count += 1
                         _LOGGER.debug("Unhidden fresh entity: %s (restored to UI)", entity_id)
-                        
+
                 except Exception as ex:
                     _LOGGER.warning("Failed to unhide fresh entity %s: %s", entity_id, ex)
-            
+
             if unhidden_count > 0:
                 _LOGGER.debug(
-                    "Successfully restored %d fresh entities to UI. Total tracking %d entities.", 
+                    "Successfully restored %d fresh entities to UI. Total tracking %d entities.",
                     unhidden_count, len(self._entity_last_updates)
                 )
-                
+
         except Exception as ex:
             _LOGGER.exception("Error unhiding fresh entities: %s", ex)
 
@@ -321,14 +321,14 @@ class EntityStalenessManager:
         """Shutdown the staleness manager."""
         _LOGGER.debug("Shutting down entity staleness manager")
         self._shutting_down = True
-        
+
         if self._cleanup_task and not self._cleanup_task.done():
             self._cleanup_task.cancel()
             try:
                 await self._cleanup_task
             except asyncio.CancelledError:
                 pass
-            
+
         _LOGGER.debug("Entity staleness manager shut down complete")
 
     def remove_entity(self, entity_id: str) -> None:

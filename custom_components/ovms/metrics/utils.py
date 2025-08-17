@@ -18,7 +18,7 @@ def get_metric_by_path(metric_path):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
-        
+
         # Also try removing numeric suffixes from the alt_path
         parts = alt_path.split('.')
         if len(parts) > 1 and parts[-1].isdigit():
@@ -48,7 +48,7 @@ def get_metric_by_path(metric_path):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
-        
+
         # Also try removing numeric suffixes from the alt_path
         parts = alt_path.split('.')
         if len(parts) > 1 and parts[-1].isdigit():
@@ -61,7 +61,7 @@ def get_metric_by_path(metric_path):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
-        
+
         # Also try removing numeric suffixes from the alt_path
         parts = alt_path.split('.')
         if len(parts) > 1 and parts[-1].isdigit():
@@ -74,7 +74,7 @@ def get_metric_by_path(metric_path):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
-        
+
         # Also try removing numeric suffixes from the alt_path
         parts = alt_path.split('.')
         if len(parts) > 1 and parts[-1].isdigit():
@@ -87,7 +87,7 @@ def get_metric_by_path(metric_path):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
-        
+
         # Also try removing numeric suffixes from the alt_path
         parts = alt_path.split('.')
         if len(parts) > 1 and parts[-1].isdigit():
@@ -393,9 +393,9 @@ def create_friendly_name(topic_parts, metric_info=None):
 def get_cell_data_patterns():
     """Get list of metric patterns that have cell data (comma-separated values)."""
     from . import METRIC_DEFINITIONS
-    
+
     cell_data_patterns = []
-    
+
     # Go through all metric definitions and find those with has_cell_data: True
     for metric_path, metric_info in METRIC_DEFINITIONS.items():
         if metric_info.get("has_cell_data", False):
@@ -404,5 +404,5 @@ def get_cell_data_patterns():
             # Convert dots to slashes for MQTT topic format
             slash_pattern = metric_path.replace(".", "/")
             cell_data_patterns.append(slash_pattern)
-    
+
     return cell_data_patterns
