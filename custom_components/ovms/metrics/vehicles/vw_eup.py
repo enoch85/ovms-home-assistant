@@ -392,4 +392,14 @@ VW_EUP_METRICS = {
         "category": "vw_eup",
         "has_cell_data": True,  # Indicates this contains comma-separated values
     },
+    "xvu.b.c.soh": {
+        "name": "VW eUP! Battery Cell SOH",
+        "description": "State of Health data for individual battery cells",
+        "icon": "mdi:battery-heart-variant",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": "vw_eup",
+        "has_cell_data": True,  # Indicates this contains comma-separated values
+    },
 }
