@@ -55,7 +55,7 @@ class StateParser:
             
             if is_cell_data:
                 # For cell data, return the raw comma-separated string for processing by sensor entities
-                _LOGGER.debug(f"StateParser: Returning raw cell data: {value}")
+                _LOGGER.debug(f"StateParser: Returning raw cell data for topic '{topic}': {value}")
                 return value
             
             try:
