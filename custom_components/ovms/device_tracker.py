@@ -1,24 +1,8 @@
 """Support for OVMS location tracking."""
 import logging
 import re
-import     def __init__(
-        self,
-        unique_id: str,
-        name: str,
-        topic: str,
-        initial_payload: Any,
-        device_info: DeviceInfo,
-        attributes: Dict[str, Any],
-        hass: Optional[HomeAssistant] = None,
-        friendly_name: Optional[str] = None,
-        naming_service: Optional[EntityNamingService] = None,
-        attribute_manager: Optional[AttributeManager] = None,
-        staleness_manager: Optional[Any] = None,
-    ) -> None:
-        """Initialize the device tracker."""
-        self._attr_unique_id = unique_id
-        self._internal_name = name
-        self._staleness_manager = staleness_manager import Any, Dict, Optional, List
+import time
+from typing import Any, Dict, Optional, List
 
 from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
