@@ -120,6 +120,7 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
         # The main 'value' of the sensor will be the median for cell sensors
         # This matches the behavior shown in the working cell voltage display
         result["value"] = round(result["median"], 4)
+        _LOGGER.debug(f"parse_comma_separated_values: Processed '{value}' -> median: {result['median']}, final value: {result['value']}")
         return result
     except (ValueError, TypeError):
         _LOGGER.warning(f"Could not parse comma-separated values for {entity_name}: '{value}'")

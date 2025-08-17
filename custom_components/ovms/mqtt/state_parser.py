@@ -50,8 +50,12 @@ class StateParser:
             # Check if this is cell data that should NOT be averaged
             is_cell_data = StateParser._is_cell_data_topic(topic)
             
+            _LOGGER.debug(f"StateParser: Processing comma-separated value for topic '{topic}': {value}")
+            _LOGGER.debug(f"StateParser: Is cell data: {is_cell_data}")
+            
             if is_cell_data:
                 # For cell data, return the raw comma-separated string for processing by sensor entities
+                _LOGGER.debug(f"StateParser: Returning raw cell data: {value}")
                 return value
             
             try:

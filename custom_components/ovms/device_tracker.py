@@ -83,11 +83,13 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         hass: Optional[HomeAssistant] = None,
         friendly_name: Optional[str] = None,
         naming_service: Optional[EntityNamingService] = None,
-        attribute_manager: Optional[AttributeManager] = None
+        attribute_manager: Optional[AttributeManager] = None,
+        staleness_manager=None,
     ) -> None:
         """Initialize the device tracker."""
         self._attr_unique_id = unique_id
         self._internal_name = name
+        self._staleness_manager = staleness_manager
 
         # Use services if provided, otherwise create internal defaults
         self.naming_service = naming_service or EntityNamingService({})
