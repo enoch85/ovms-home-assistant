@@ -150,14 +150,9 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
 
     @property
     def available(self) -> bool:
-        """Return True if entity is available (not stale)."""
-        if not self.staleness_manager:
-            return True  # Default to available if no staleness manager
-        # Use entity_id for staleness check, not unique_id
-        entity_id = getattr(self, 'entity_id', None)
-        if not entity_id:
-            return True  # If no entity_id yet, assume available
-        return not self.staleness_manager.is_entity_stale(entity_id)
+        """Return True if entity is available."""
+        # Since stale entities are now physically removed, all existing entities are available
+        return True
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -259,22 +254,6 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                     update_state,
                 )
             )
-            
-            # Subscribe to staleness updates
-            if self.staleness_manager:
-                @callback
-                def update_staleness(is_stale: bool) -> None:
-                    """Handle staleness update."""
-                    _LOGGER.debug("Entity %s staleness changed: %s", self.unique_id, is_stale)
-                    self.async_write_ha_state()
-                    
-                self.async_on_remove(
-                    async_dispatcher_connect(
-                        self.hass,
-                        f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}_staleness",
-                        update_staleness,
-                    )
-                )
 
 
 class OVMSSensor(SensorEntity, RestoreEntity):
@@ -411,14 +390,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
     @property
     def available(self) -> bool:
-        """Return True if entity is available (not stale)."""
-        if not self.staleness_manager:
-            return True  # Default to available if no staleness manager
-        # Use entity_id for staleness check, not unique_id
-        entity_id = getattr(self, 'entity_id', None)
-        if not entity_id:
-            return True  # If no entity_id yet, assume available
-        return not self.staleness_manager.is_entity_stale(entity_id)
+        """Return True if entity is available."""
+        # Since stale entities are now physically removed, all existing entities are available
+        return True
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -527,22 +501,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     self.hass, f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}", update_state,
                 )
             )
-            
-            # Subscribe to staleness updates
-            if self.staleness_manager:
-                @callback
-                def update_staleness(is_stale: bool) -> None:
-                    """Handle staleness update."""
-                    _LOGGER.debug("Entity %s staleness changed: %s", self.unique_id, is_stale)
-                    self.async_write_ha_state()
-                    
-                self.async_on_remove(
-                    async_dispatcher_connect(
-                        self.hass,
-                        f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}_staleness",
-                        update_staleness,
-                    )
-                )
 
     def _handle_cell_values(self, payload: str) -> None:
         """Handle cell values in payload."""
