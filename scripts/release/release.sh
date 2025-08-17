@@ -107,10 +107,15 @@ function validate_version_tag {
 function check_branch {
     local current_branch=$(git rev-parse --abbrev-ref HEAD)
     if [[ "$current_branch" != "main" ]]; then
-        error_log "You are not on the main branch!"
-        echo "Current branch: $current_branch"
-        echo "Please switch to the main branch before creating a release."
-        exit 1
+        if [[ "$IS_BETA" == "true" ]]; then
+            info_log "Beta release detected - allowing release from branch: $current_branch"
+        else
+            error_log "You are not on the main branch!"
+            echo "Current branch: $current_branch"
+            echo "Please switch to the main branch before creating a release."
+            echo "Or use a beta version (e.g., v1.4.0-beta1) to release from this branch."
+            exit 1
+        fi
     fi
 }
 
