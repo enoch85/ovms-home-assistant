@@ -380,4 +380,16 @@ VW_EUP_METRICS = {
         "unit": UnitOfPressure.KPA,
         "category": "vw_eup",
     },
+    
+    # SOH Module History Metrics (comma-separated values for 14 modules)
+    "xvu.b.hist.soh.mod": {
+        "name": "VW eUP! Battery Module SOH History",
+        "description": "Historical State of Health data for battery modules",
+        "icon": "mdi:battery-heart-variant",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": "vw_eup",
+        "has_cell_data": True,  # Indicates this contains comma-separated values
+    },
 }

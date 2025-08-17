@@ -298,50 +298,25 @@ class StateParser:
         if not topic:
             return False
             
+        from ..metrics.utils import get_cell_data_patterns
+            
         topic_lower = topic.lower()
         
-        # Known cell data patterns - these should preserve individual values
-        cell_patterns = [
-            # Battery cell data (both dot and slash notation)
-            "v.b.c.voltage",
-            "v.b.c.temp", 
-            "v.b.c.temp.alert",
-            "v.b.c.voltage.alert",
-            "v.b.c.temp.dev.max",
-            "v.b.c.temp.max",
-            "v.b.c.temp.min", 
-            "v.b.c.voltage.dev.max",
-            "v.b.c.voltage.max",
-            "v.b.c.voltage.min",
-            "v/b/c/voltage",
-            "v/b/c/temp",
-            # Vehicle-specific cell data (both dot and slash notation)
-            "xvu.b.c.soh",
-            "xvu.b.hist.soh.mod.",
-            "xvu/b/c/voltage",
-            "xvu/b/c/temp",
-            "xvu/b/c/soh",
-            # Tire data
-            "v.t.pressure",
-            "v.t.temp",
-            "v.t.health",
-            "v.t.alert",
-            "v.t.diff",
-            "v.t.emgcy",
-            "v/t/pressure",
-            "v/t/temp",
-            "v/t/health",
-            "v/t/alert",
-            "v/t/diff",
-            "v/t/emgcy",
+        # Get patterns from metric definitions (single source of truth)
+        cell_patterns = get_cell_data_patterns()
+        
+        # Additional patterns for topics that should preserve individual values
+        additional_patterns = [
             # Any metric ending with these patterns
             "/cell/",
             "/cells/",
         ]
         
+        cell_patterns.extend(additional_patterns)
+        
         # Check if topic matches any cell data pattern
         for pattern in cell_patterns:
-            if pattern in topic_lower:
+            if pattern.lower() in topic_lower:
                 return True
                 
         return False

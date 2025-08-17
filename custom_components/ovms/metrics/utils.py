@@ -364,3 +364,21 @@ def create_friendly_name(topic_parts, metric_info=None):
 
     # Return just the last part without category
     return last_part
+
+
+def get_cell_data_patterns():
+    """Get list of metric patterns that have cell data (comma-separated values)."""
+    from . import METRIC_DEFINITIONS
+    
+    cell_data_patterns = []
+    
+    # Go through all metric definitions and find those with has_cell_data: True
+    for metric_path, metric_info in METRIC_DEFINITIONS.items():
+        if metric_info.get("has_cell_data", False):
+            # Add both dot and slash versions
+            cell_data_patterns.append(metric_path)
+            # Convert dots to slashes for MQTT topic format
+            slash_pattern = metric_path.replace(".", "/")
+            cell_data_patterns.append(slash_pattern)
+    
+    return cell_data_patterns
