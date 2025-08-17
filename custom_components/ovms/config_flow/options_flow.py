@@ -13,14 +13,14 @@ from ..const import (
     CONF_PORT,
     CONF_PROTOCOL,
     CONF_TOPIC_BLACKLIST,
-    CONF_ENTITY_STALENESS_HOURS,
+    CONF_ENTITY_STALENESS_MANAGEMENT,
     CONF_DELETE_STALE_HISTORY,
     DEFAULT_QOS,
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_TOPIC_STRUCTURE,
     DEFAULT_VERIFY_SSL,
     DEFAULT_TOPIC_BLACKLIST,
-    DEFAULT_ENTITY_STALENESS_HOURS,
+    DEFAULT_ENTITY_STALENESS_MANAGEMENT,
     DEFAULT_DELETE_STALE_HISTORY,
     TOPIC_STRUCTURES,
     LOGGER_NAME,
@@ -83,13 +83,13 @@ class OVMSOptionsFlow(OptionsFlow):
                 blacklist_str = user_input[CONF_TOPIC_BLACKLIST]
                 user_input[CONF_TOPIC_BLACKLIST] = [item.strip() for item in blacklist_str.split(',') if item.strip()]
 
-            # Process entity staleness hours - convert string selection to proper value
-            if CONF_ENTITY_STALENESS_HOURS in user_input:
-                staleness_selection = user_input[CONF_ENTITY_STALENESS_HOURS]
+            # Process entity staleness management - convert string selection to proper value
+            if CONF_ENTITY_STALENESS_MANAGEMENT in user_input:
+                staleness_selection = user_input[CONF_ENTITY_STALENESS_MANAGEMENT]
                 if staleness_selection == "disabled":
-                    user_input[CONF_ENTITY_STALENESS_HOURS] = None  # Disabled
+                    user_input[CONF_ENTITY_STALENESS_MANAGEMENT] = None  # Disabled
                 else:
-                    user_input[CONF_ENTITY_STALENESS_HOURS] = int(staleness_selection)  # Convert to int
+                    user_input[CONF_ENTITY_STALENESS_MANAGEMENT] = int(staleness_selection)  # Convert to int
 
             _LOGGER.debug("Saving options: %s", user_input)
             return self.async_create_entry(title="", data=user_input)
@@ -166,8 +166,8 @@ class OVMSOptionsFlow(OptionsFlow):
 
         # Entity Staleness Management options
         current_staleness_hours = entry_options.get(
-            CONF_ENTITY_STALENESS_HOURS,
-            entry_data.get(CONF_ENTITY_STALENESS_HOURS, None)
+            CONF_ENTITY_STALENESS_MANAGEMENT,
+            entry_data.get(CONF_ENTITY_STALENESS_MANAGEMENT, None)
         )
         
         # Convert stored value to display value
@@ -184,12 +184,12 @@ class OVMSOptionsFlow(OptionsFlow):
 
         options.update({
             vol.Optional(
-                CONF_ENTITY_STALENESS_HOURS,
+                CONF_ENTITY_STALENESS_MANAGEMENT,
                 default=staleness_selection,
             ): vol.In({
                 "disabled": "Disabled",
                 "12": "12 hours", 
-                "24": "1 day (24 hours)",
+                "24": "1 day",
                 "168": "1 week"
             }),
             vol.Optional(

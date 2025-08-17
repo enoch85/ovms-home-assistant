@@ -10,9 +10,9 @@ from homeassistant.helpers.entity_registry import RegistryEntryHider
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import (
-    CONF_ENTITY_STALENESS_HOURS,
+    CONF_ENTITY_STALENESS_MANAGEMENT,
     CONF_DELETE_STALE_HISTORY,
-    DEFAULT_ENTITY_STALENESS_HOURS,
+    DEFAULT_ENTITY_STALENESS_MANAGEMENT,
     DEFAULT_DELETE_STALE_HISTORY,
     LOGGER_NAME,
     SIGNAL_UPDATE_ENTITY,
@@ -34,10 +34,10 @@ class EntityStalenessManager:
         self._shutting_down = False
 
         # Get configuration - None means disabled, any number means enabled
-        self._staleness_hours = config.get(CONF_ENTITY_STALENESS_HOURS, None)
+        self._staleness_hours = config.get(CONF_ENTITY_STALENESS_MANAGEMENT, DEFAULT_ENTITY_STALENESS_MANAGEMENT)
         if self._staleness_hours is None:
             self._enabled = False
-            self._staleness_hours = DEFAULT_ENTITY_STALENESS_HOURS  # Use 24 for calculations when needed
+            self._staleness_hours = 24  # Use 24 for calculations when needed (even though disabled)
         else:
             self._enabled = True
         self._delete_history = config.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
@@ -64,10 +64,10 @@ class EntityStalenessManager:
         old_threshold = self._staleness_threshold
         old_delete_history = getattr(self, '_delete_history', DEFAULT_DELETE_STALE_HISTORY)
 
-        self._staleness_hours = config.get(CONF_ENTITY_STALENESS_HOURS, None)
+        self._staleness_hours = config.get(CONF_ENTITY_STALENESS_MANAGEMENT, DEFAULT_ENTITY_STALENESS_MANAGEMENT)
         if self._staleness_hours is None:
             self._enabled = False
-            self._staleness_hours = DEFAULT_ENTITY_STALENESS_HOURS  # Use 24 for calculations when needed
+            self._staleness_hours = 24  # Use 24 for calculations when needed (even though disabled)
         else:
             self._enabled = True
         self._delete_history = config.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
