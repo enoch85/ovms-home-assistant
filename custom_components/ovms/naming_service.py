@@ -25,8 +25,14 @@ class EntityNamingService:
         # For vehicle-specific metrics (like xvu/VW eUP!), prioritize the metric name exactly as defined
         # This preserves names like "VW eUP! Absolute Battery Capacity" without modification
         if metric_info and "name" in metric_info:
-            # Vehicle-specific metrics already have the vehicle name in the metric definition
-            return metric_info["name"]
+            base_name = metric_info["name"]
+            
+            # If topic ends with a number (like /03), append it to the name
+            if topic and topic.split('/')[-1].isdigit():
+                module_number = topic.split('/')[-1]
+                return f"{base_name} {module_number}"
+            
+            return base_name
 
         # Check if this is a VW eUP! metric by looking for 'xvu' prefix
         has_xvu = any(p == "xvu" for p in parts) if parts else ('xvu' in topic)
