@@ -75,11 +75,17 @@
           "topic_structure": "Topic Structure",
           "Port": "Connection Port",
           "verify_ssl_certificate": "Verify SSL/TLS Certificate",
-          "topic_blacklist": "Topic Blacklist"
+          "topic_blacklist": "Topic Blacklist",
+          "enable_staleness_cleanup": "Entity Staleness Management",
+          "entity_staleness_hours": "Staleness Threshold (Hours)",
+          "delete_stale_history": "Delete History Permanently"
         },
         "data_description": {
           "verify_ssl_certificate": "SSL/TLS certificate verification only applies to secure ports (8883, 8084)",
-          "topic_blacklist": "A comma-separated list of topic patterns to filter out. This prevents unwanted entities from being created. Any topic containing these patterns will be ignored. Use this to filter high-frequency log topics that create too many entities."
+          "topic_blacklist": "A comma-separated list of topic patterns to filter out. This prevents unwanted entities from being created. Any topic containing these patterns will be ignored. Use this to filter high-frequency log topics that create too many entities.",
+          "enable_staleness_cleanup": "Automatically manage sensors that become unavailable to reduce UI clutter",
+          "entity_staleness_hours": "Hours before hiding inactive sensors from the UI",
+          "delete_stale_history": "Remove all historical data when cleaning up stale sensors (unchecked = hide only, preserves history)"
         }
       }
     }

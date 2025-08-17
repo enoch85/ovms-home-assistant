@@ -35,10 +35,19 @@ class EntityStalenessManager:
         self._cleanup_task: Optional[asyncio.Task] = None
         self._shutting_down = False
         
-        # Get configuration - use the simple approach where 0 hours = disabled
+        # Get configuration - use enable flag to determine if active
+        self._enabled = config.get(CONF_ENABLE_STALENESS_CLEANUP, DEFAULT_ENABLE_STALENESS_CLEANUP)
         self._staleness_hours = config.get(CONF_ENTITY_STALENESS_HOURS, DEFAULT_ENTITY_STALENESS_HOURS)
-        self._enabled = self._staleness_hours > 0  # Enabled if hours > 0
         self._delete_history = config.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
+        
+        # Safety check: if enabled but no valid threshold, use default
+        if self._enabled and self._staleness_hours <= 0:
+            self._staleness_hours = DEFAULT_ENTITY_STALENESS_HOURS
+            _LOGGER.warning(
+                "Staleness cleanup enabled but invalid threshold detected, using default %d hours",
+                DEFAULT_ENTITY_STALENESS_HOURS
+            )
+        
         self._staleness_threshold = self._staleness_hours * 3600  # Convert to seconds
         
         _LOGGER.info(

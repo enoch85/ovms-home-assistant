@@ -156,23 +156,44 @@ class OVMSOptionsFlow(OptionsFlow):
                 )),
                 description="Comma-separated list of topics to filter out (e.g. battery.log,xrt.log)"
             ): str,
-            vol.Optional(
-                CONF_ENTITY_STALENESS_HOURS,
-                default=entry_options.get(
-                    CONF_ENTITY_STALENESS_HOURS,
-                    entry_data.get(CONF_ENTITY_STALENESS_HOURS, DEFAULT_ENTITY_STALENESS_HOURS)
-                ),
-                description="Hide sensors that have been unavailable for this many hours to reduce UI clutter (0 = disabled)"
-            ): vol.All(int, vol.Range(min=0, max=168)),  # 0 (disabled) to 1 week
-            vol.Optional(
-                CONF_DELETE_STALE_HISTORY,
-                default=entry_options.get(
-                    CONF_DELETE_STALE_HISTORY,
-                    entry_data.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
-                ),
-                description="Delete history when removing stale sensors (unchecked = hide only, preserves history)"
-            ): bool,
         })
+
+        # Entity Staleness Management section
+        current_enable_staleness = entry_options.get(
+            CONF_ENABLE_STALENESS_CLEANUP,
+            entry_data.get(CONF_ENABLE_STALENESS_CLEANUP, DEFAULT_ENABLE_STALENESS_CLEANUP)
+        )
+        
+        if current_enable_staleness:
+            options.update({
+                vol.Required(
+                    CONF_ENABLE_STALENESS_CLEANUP,
+                    default=current_enable_staleness
+                ): bool,
+                vol.Required(
+                    CONF_ENTITY_STALENESS_HOURS,
+                    default=entry_options.get(
+                        CONF_ENTITY_STALENESS_HOURS,
+                        entry_data.get(CONF_ENTITY_STALENESS_HOURS, DEFAULT_ENTITY_STALENESS_HOURS)
+                    ),
+                    description="Hours before hiding inactive sensors"
+                ): vol.All(int, vol.Range(min=1, max=168)),  # 1 hour to 1 week
+                vol.Optional(
+                    CONF_DELETE_STALE_HISTORY,
+                    default=entry_options.get(
+                        CONF_DELETE_STALE_HISTORY,
+                        entry_data.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
+                    ),
+                    description="Delete history permanently instead of just hiding"
+                ): bool,
+            })
+        else:
+            options.update({
+                vol.Required(
+                    CONF_ENABLE_STALENESS_CLEANUP,
+                    default=current_enable_staleness
+                ): bool,
+            })
 
         return self.async_show_form(
             step_id="init",

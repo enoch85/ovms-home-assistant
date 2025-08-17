@@ -40,7 +40,7 @@ DEFAULT_TOPIC_STRUCTURE = "{prefix}/{mqtt_username}/{vehicle_id}"
 DEFAULT_VERIFY_SSL = True
 DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by default
 DEFAULT_TOPIC_BLACKLIST = [".log", "battery.log", "power.log", "gps.log", "xrt.log"]  # Default topics to blacklist
-DEFAULT_ENTITY_STALENESS_HOURS = 0  # Disabled by default - when enabled, hides unavailable sensors to keep UI clean while preserving history
+DEFAULT_ENTITY_STALENESS_HOURS = 24  # 24 hours default when enabled - hides unavailable sensors to keep UI clean while preserving history
 DEFAULT_ENABLE_STALENESS_CLEANUP = False  # Disabled by default since it's new functionality
 DEFAULT_DELETE_STALE_HISTORY = False  # Preserve history by default
 
