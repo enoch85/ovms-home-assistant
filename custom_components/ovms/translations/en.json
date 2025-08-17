@@ -76,9 +76,9 @@
           "Port": "Connection Port",
           "verify_ssl_certificate": "Verify SSL/TLS Certificate",
           "topic_blacklist": "Topic Blacklist",
-          "enable_staleness_cleanup": "Enable Entity Staleness Management",
-          "entity_staleness_hours": "Staleness Hours",
-          "delete_stale_history": "Delete History Permanently"
+          "enable_staleness_cleanup": "Entity Management: Enable Cleanup",
+          "entity_staleness_hours": "Entity Management: Staleness Hours",
+          "delete_stale_history": "Entity Management: Delete History"
         },
         "data_description": {
           "verify_ssl_certificate": "SSL/TLS certificate verification only applies to secure ports (8883, 8084)",
