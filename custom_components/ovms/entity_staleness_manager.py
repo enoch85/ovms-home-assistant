@@ -33,23 +33,14 @@ class EntityStalenessManager:
         self._cleanup_task: Optional[asyncio.Task] = None
         self._shutting_down = False
 
-        # Get configuration - staleness hours > 0 means enabled
-        self._staleness_hours = config.get(CONF_ENTITY_STALENESS_HOURS, DEFAULT_ENTITY_STALENESS_HOURS)
-        # Handle the case where the checkbox is unchecked (None or 0)
-        if self._staleness_hours is None or self._staleness_hours <= 0:
+        # Get configuration - None means disabled, any number means enabled
+        self._staleness_hours = config.get(CONF_ENTITY_STALENESS_HOURS, None)
+        if self._staleness_hours is None:
             self._enabled = False
-            self._staleness_hours = DEFAULT_ENTITY_STALENESS_HOURS  # Keep a valid value for calculations
+            self._staleness_hours = DEFAULT_ENTITY_STALENESS_HOURS  # Use 24 for calculations when needed
         else:
             self._enabled = True
         self._delete_history = config.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
-
-        # Safety check: ensure valid threshold
-        if self._staleness_hours <= 0:
-            self._staleness_hours = DEFAULT_ENTITY_STALENESS_HOURS
-            _LOGGER.warning(
-                "Invalid staleness threshold detected, using default %d hours",
-                DEFAULT_ENTITY_STALENESS_HOURS
-            )
 
         self._staleness_threshold = self._staleness_hours * 3600  # Convert to seconds
 
@@ -73,11 +64,10 @@ class EntityStalenessManager:
         old_threshold = self._staleness_threshold
         old_delete_history = getattr(self, '_delete_history', DEFAULT_DELETE_STALE_HISTORY)
 
-        self._staleness_hours = config.get(CONF_ENTITY_STALENESS_HOURS, DEFAULT_ENTITY_STALENESS_HOURS)
-        # Handle the case where the checkbox is unchecked (None or 0)
-        if self._staleness_hours is None or self._staleness_hours <= 0:
+        self._staleness_hours = config.get(CONF_ENTITY_STALENESS_HOURS, None)
+        if self._staleness_hours is None:
             self._enabled = False
-            self._staleness_hours = DEFAULT_ENTITY_STALENESS_HOURS  # Keep a valid value for calculations
+            self._staleness_hours = DEFAULT_ENTITY_STALENESS_HOURS  # Use 24 for calculations when needed
         else:
             self._enabled = True
         self._delete_history = config.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)

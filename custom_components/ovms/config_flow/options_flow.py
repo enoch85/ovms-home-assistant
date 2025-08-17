@@ -83,9 +83,9 @@ class OVMSOptionsFlow(OptionsFlow):
                 blacklist_str = user_input[CONF_TOPIC_BLACKLIST]
                 user_input[CONF_TOPIC_BLACKLIST] = [item.strip() for item in blacklist_str.split(',') if item.strip()]
 
-            # Remove dummy fields that are not part of actual config
-            if "entity_staleness_management" in user_input:
-                del user_input["entity_staleness_management"]
+            # Remove dummy header fields that are not part of actual config
+            if "entity_staleness_header" in user_input:
+                del user_input["entity_staleness_header"]
 
             _LOGGER.debug("Saving options: %s", user_input)
             return self.async_create_entry(title="", data=user_input)
@@ -160,19 +160,23 @@ class OVMSOptionsFlow(OptionsFlow):
             ): str,
         })
 
-        # Entity Staleness Management section
+        # Entity Staleness Management section header
         options.update({
-            vol.Optional(
-                "entity_staleness_management",
-                default=""
-            ): str,
+            vol.Required(
+                "entity_staleness_header",
+                default="Entity Staleness Management"
+            ): vol.In({"Entity Staleness Management": "Entity Staleness Management"}),
+        })
+        
+        # Entity Staleness Management options
+        options.update({
             vol.Optional(
                 CONF_ENTITY_STALENESS_HOURS,
                 default=entry_options.get(
                     CONF_ENTITY_STALENESS_HOURS,
-                    entry_data.get(CONF_ENTITY_STALENESS_HOURS, DEFAULT_ENTITY_STALENESS_HOURS)
+                    entry_data.get(CONF_ENTITY_STALENESS_HOURS, None)  # Default to None (disabled/unchecked)
                 )
-            ): vol.All(int, vol.Range(min=1, max=168)),  # 1 hour to 1 week
+            ): vol.All(int, vol.Range(min=1, max=168)),  # 1-168 hours when enabled
             vol.Optional(
                 CONF_DELETE_STALE_HISTORY,
                 default=entry_options.get(
