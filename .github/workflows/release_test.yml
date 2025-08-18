@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     name: HACS Validation
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: HACS Validation
         uses: hacs/action@main
         with:
@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Hassfest Validation
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Hassfest Validation
         uses: home-assistant/actions/hassfest@master
 
@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Python Validation
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -56,7 +56,7 @@ jobs:
     name: Version Check
     if: startsWith(github.head_ref, 'release/v')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Extract version from branch name
         id: extract_version
