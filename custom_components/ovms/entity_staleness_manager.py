@@ -42,17 +42,12 @@ class EntityStalenessManager:
             self._enabled = True
         self._delete_history = config.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
 
-        # TESTING: Use 15 minutes (900 seconds) threshold for testing
-        # TODO: Remove this testing override and use the configured hours
-        if self._enabled:
-            self._staleness_threshold = 900  # 15 minutes for testing
-            _LOGGER.warning("TESTING MODE: Using 15 minute staleness threshold - cleanup every 30 minutes - delete_history=%s", self._delete_history)
-        else:
-            self._staleness_threshold = self._staleness_hours * 3600  # Convert to seconds
+        # Convert staleness hours to seconds for internal use
+        self._staleness_threshold = self._staleness_hours * 3600  # Convert hours to seconds
 
         _LOGGER.info(
-            "Entity staleness manager initialized: enabled=%s, threshold=%d seconds (TESTING MODE), delete_history=%s",
-            self._enabled, self._staleness_threshold, self._delete_history
+            "Entity staleness manager initialized: enabled=%s, threshold=%d hours, delete_history=%s",
+            self._enabled, self._staleness_hours, self._delete_history
         )
 
         if self._enabled:
@@ -104,15 +99,13 @@ class EntityStalenessManager:
         # If entity was stale, mark it as fresh again and unhide it (if not deleted)
         if entity_id in self._stale_entities:
             self._stale_entities.remove(entity_id)
-            _LOGGER.warning("TESTING: Entity %s is fresh again after receiving new data", entity_id)
+            _LOGGER.info("Entity %s is fresh again after receiving new data", entity_id)
 
             # Only try to unhide if we're in hide mode (not delete mode)
             if not self._delete_history:
                 _LOGGER.debug("Entity %s was hidden, will restore it to UI", entity_id)
                 # Schedule unhiding of the entity (async operation)
                 asyncio.create_task(self._async_unhide_fresh_entities([entity_id]))
-        else:
-            _LOGGER.debug("TESTING: Updated entity: %s", entity_id)
 
     def track_entity_creation(self, entity_id: str) -> None:
         """Track that an entity was created (but hasn't necessarily received data yet)."""
@@ -124,7 +117,7 @@ class EntityStalenessManager:
             # Mark with creation time - entities that never receive updates will become stale
             current_time = time.time()
             self._entity_last_updates[entity_id] = current_time
-            _LOGGER.warning("TESTING: Started tracking newly created entity: %s (total tracked: %d)", entity_id, len(self._entity_last_updates))
+            _LOGGER.debug("Started tracking newly created entity: %s (total tracked: %d)", entity_id, len(self._entity_last_updates))
 
     def is_entity_stale(self, entity_id: str) -> bool:
         """Check if an entity is considered stale."""
@@ -176,9 +169,8 @@ class EntityStalenessManager:
 
         while not self._shutting_down:
             try:
-                # TESTING: Run cleanup every 30 minutes for more realistic testing
-                # TODO: Change back to 3600 (1 hour) for production
-                await asyncio.sleep(1800)  # 30 minutes
+                # Run cleanup every hour
+                await asyncio.sleep(3600)  # 1 hour
 
                 if not self._enabled:
                     continue
@@ -186,7 +178,7 @@ class EntityStalenessManager:
                 current_time = time.time()
                 newly_stale_entities = []
 
-                _LOGGER.debug("TESTING: Staleness cleanup running, checking %d tracked entities", len(self._entity_last_updates))
+                _LOGGER.debug("Staleness cleanup running, checking %d tracked entities", len(self._entity_last_updates))
 
                 for entity_id, last_update_time in self._entity_last_updates.items():
                     age = current_time - last_update_time
@@ -196,23 +188,23 @@ class EntityStalenessManager:
                         self._stale_entities.add(entity_id)
                         newly_stale_entities.append(entity_id)
 
-                        _LOGGER.warning(
-                            "TESTING: Entity %s became stale after %.1f seconds of inactivity (threshold: %d seconds)",
-                            entity_id, age, self._staleness_threshold
+                        _LOGGER.debug(
+                            "Entity %s became stale after %.1f hours of inactivity (threshold: %.1f hours)",
+                            entity_id, age / 3600, self._staleness_threshold / 3600
                         )
 
                 if newly_stale_entities:
                     if self._delete_history:
                         _LOGGER.info(
-                            "Found %d stale entities (older than %d hours), removing them completely (including history)",
-                            len(newly_stale_entities), self._staleness_hours
+                            "Found %d stale entities (older than %.1f hours), removing them completely (including history)",
+                            len(newly_stale_entities), self._staleness_threshold / 3600
                         )
                         # Delete entities completely including history
                         await self._async_remove_stale_entities(newly_stale_entities)
                     else:
                         _LOGGER.info(
-                            "Found %d stale entities (older than %d hours), hiding them to reduce UI clutter while preserving history",
-                            len(newly_stale_entities), self._staleness_hours
+                            "Found %d stale entities (older than %.1f hours), hiding them to reduce UI clutter while preserving history",
+                            len(newly_stale_entities), self._staleness_threshold / 3600
                         )
                         # Hide stale entities from UI while preserving their history
                         await self._async_hide_stale_entities(newly_stale_entities)
