@@ -30,6 +30,8 @@ class EntityStalenessManager:
         self.config = config
         self._entity_last_updates: Dict[str, float] = {}
         self._stale_entities: Set[str] = set()
+        # Track base entities (without hash suffix) to handle ID changes
+        self._base_entity_mapping: Dict[str, str] = {}  # base_id -> current_full_id
         self._cleanup_task: Optional[asyncio.Task] = None
         self._shutting_down = False
 
@@ -52,6 +54,36 @@ class EntityStalenessManager:
 
         if self._enabled:
             self._start_cleanup_task()
+
+    def _get_base_entity_id(self, entity_id: str) -> str:
+        """Extract base entity identity without hash suffix.
+        
+        Examples:
+        ovms_ggk97e_metric_m_freeram_11e3ec -> ovms_ggk97e_metric_m_freeram
+        sensor.ovms_ggk97e_metric_m_freeram -> sensor.ovms_ggk97e_metric_m_freeram
+        """
+        # Remove domain prefix if present (e.g., "sensor.")
+        if "." in entity_id:
+            domain, entity_part = entity_id.split(".", 1)
+            base_entity = self._extract_base_from_unique_id(entity_part)
+            return f"{domain}.{base_entity}"
+        else:
+            return self._extract_base_from_unique_id(entity_id)
+    
+    def _extract_base_from_unique_id(self, unique_id: str) -> str:
+        """Extract base unique ID by removing hash suffix."""
+        # Pattern: ovms_{vehicle}_{metric_path}_{6_char_hash}
+        # We want: ovms_{vehicle}_{metric_path}
+        parts = unique_id.split("_")
+        if len(parts) >= 3 and len(parts[-1]) == 6:
+            # Check if last part looks like a hash (6 alphanumeric chars)
+            last_part = parts[-1]
+            if all(c.isalnum() for c in last_part) and any(c.isdigit() for c in last_part) and any(c.isalpha() for c in last_part):
+                # Remove the hash suffix
+                return "_".join(parts[:-1])
+        
+        # If no hash pattern found, return as-is
+        return unique_id
 
     def _start_cleanup_task(self) -> None:
         """Start the cleanup task."""
@@ -94,7 +126,26 @@ class EntityStalenessManager:
             return
 
         current_time = time.time()
-        self._entity_last_updates[entity_id] = current_time
+        base_id = self._get_base_entity_id(entity_id)
+
+        # Check if we need to transfer tracking from an old entity ID
+        if base_id in self._base_entity_mapping:
+            old_entity_id = self._base_entity_mapping[base_id]
+            if old_entity_id != entity_id and old_entity_id in self._entity_last_updates:
+                # Transfer tracking data from old ID to new ID
+                self._entity_last_updates[entity_id] = current_time
+                del self._entity_last_updates[old_entity_id]
+                self._stale_entities.discard(old_entity_id)
+                
+                _LOGGER.info("Entity ID changed during update for %s: %s -> %s", 
+                           base_id, old_entity_id, entity_id)
+                
+                # Update mapping
+                self._base_entity_mapping[base_id] = entity_id
+        else:
+            # Update existing or create new tracking
+            self._entity_last_updates[entity_id] = current_time
+            self._base_entity_mapping[base_id] = entity_id
 
         # If entity was stale, mark it as fresh again and unhide it (if not deleted)
         if entity_id in self._stale_entities:
@@ -112,12 +163,35 @@ class EntityStalenessManager:
         if not self._enabled:
             return
 
-        # Only track if not already tracked
-        if entity_id not in self._entity_last_updates:
-            # Mark with creation time - entities that never receive updates will become stale
-            current_time = time.time()
+        base_id = self._get_base_entity_id(entity_id)
+        current_time = time.time()
+
+        # Check if we're already tracking a different ID for the same base entity
+        if base_id in self._base_entity_mapping:
+            old_entity_id = self._base_entity_mapping[base_id]
+            if old_entity_id != entity_id and old_entity_id in self._entity_last_updates:
+                # Transfer tracking data from old ID to new ID
+                old_timestamp = self._entity_last_updates[old_entity_id]
+                self._entity_last_updates[entity_id] = old_timestamp
+                
+                # Clean up old tracking
+                del self._entity_last_updates[old_entity_id]
+                self._stale_entities.discard(old_entity_id)
+                
+                _LOGGER.info("Entity ID changed for %s: %s -> %s (transferred tracking data)", 
+                           base_id, old_entity_id, entity_id)
+            else:
+                # Same entity ID, just update timestamp if not already tracked
+                if entity_id not in self._entity_last_updates:
+                    self._entity_last_updates[entity_id] = current_time
+        else:
+            # New base entity, start tracking
             self._entity_last_updates[entity_id] = current_time
-            _LOGGER.debug("Started tracking newly created entity: %s (total tracked: %d)", entity_id, len(self._entity_last_updates))
+            _LOGGER.debug("Started tracking newly created entity: %s (base: %s, total tracked: %d)", 
+                         entity_id, base_id, len(self._entity_last_updates))
+
+        # Update the mapping
+        self._base_entity_mapping[base_id] = entity_id
 
     def is_entity_stale(self, entity_id: str) -> bool:
         """Check if an entity is considered stale."""
@@ -348,4 +422,10 @@ class EntityStalenessManager:
         """Remove an entity from tracking (e.g., when entity is deleted)."""
         self._entity_last_updates.pop(entity_id, None)
         self._stale_entities.discard(entity_id)
+        
+        # Also clean up base mapping if this was the current entity for its base
+        base_id = self._get_base_entity_id(entity_id)
+        if self._base_entity_mapping.get(base_id) == entity_id:
+            del self._base_entity_mapping[base_id]
+            
         _LOGGER.debug("Removed entity %s from staleness tracking", entity_id)
