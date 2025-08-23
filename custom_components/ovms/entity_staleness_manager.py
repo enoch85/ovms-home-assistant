@@ -145,9 +145,11 @@ class EntityStalenessManager:
                 # Check if entity is unavailable in Home Assistant's state machine
                 state = self.hass.states.get(entity_id)
                 if state and state.state in [STATE_UNAVAILABLE, STATE_UNKNOWN]:
-                    # Check how long it's been unavailable
+                    # HA thinks it's stale, now check if it's been stale for the user-configured time
                     if hasattr(state, 'last_updated') and state.last_updated:
-                        hours_unavailable = (self.hass.loop.time() - state.last_updated.timestamp()) / 3600
+                        from datetime import datetime, timezone
+                        current_time = datetime.now(timezone.utc)
+                        hours_unavailable = (current_time - state.last_updated).total_seconds() / 3600
                         
                         if hours_unavailable > self._staleness_hours:
                             unavailable_entities.append((entity_id, hours_unavailable))
