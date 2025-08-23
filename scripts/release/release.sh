@@ -100,7 +100,6 @@ function validate_version_tag {
 # Check if we're on the main branch
 function check_branch {
     local current_branch=$(git rev-parse --abbrev-ref HEAD)
-    debug_log "Current branch: ${current_branch}, IS_BETA: ${IS_BETA}"
     
     if [[ "$current_branch" != "main" ]]; then
         if [[ "$IS_BETA" == "true" ]]; then
@@ -487,15 +486,10 @@ function run_release_process {
     local version_tag="$1"
     local pr_only="$2"
     
-    debug_log "Checking if version tag contains beta: ${version_tag}"
-    
     # Check if this is a beta release first (before any other checks)
     if [[ "${version_tag}" =~ -beta ]]; then
         IS_BETA=true
         info_log "Beta version detected: ${version_tag} - Will be marked as a pre-release"
-        debug_log "IS_BETA set to: ${IS_BETA}"
-    else
-        debug_log "Not a beta release, IS_BETA remains: ${IS_BETA}"
     fi
     
     # Initial validation checks
