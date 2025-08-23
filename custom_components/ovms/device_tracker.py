@@ -402,10 +402,3 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     def icon(self) -> str:
         """Return the icon."""
         return "mdi:car-connected"
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        # Let Home Assistant handle natural availability based on updates
-        # The staleness manager will hide/remove entities that don't receive updates
-        return True

@@ -153,13 +153,6 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                 # Use a fallback entity_id
                 self.entity_id = f"binary_sensor.{name.lower()}"
 
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        # Let Home Assistant handle natural availability based on updates
-        # The staleness manager will hide/remove entities that don't receive updates
-        return True
-
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
         try:

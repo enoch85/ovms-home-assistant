@@ -148,12 +148,6 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                 hass=hass,
             )
 
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        # Since stale entities are now physically removed, all existing entities are available
-        return True
-
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
         await super().async_added_to_hass()
@@ -391,12 +385,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_extra_state_attributes, device_class_for_parsing, self._parsed_value
         )
         self._attr_extra_state_attributes.update(updated_attrs)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        # Since stale entities are now physically removed, all existing entities are available
-        return True
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
