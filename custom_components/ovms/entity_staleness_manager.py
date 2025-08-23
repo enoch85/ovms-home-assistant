@@ -42,11 +42,11 @@ class EntityStalenessManager:
             self._enabled = True
         self._delete_history = config.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
 
-        # TESTING: Use 1 minute (60 seconds) threshold for immediate testing
+        # TESTING: Use 15 minutes (900 seconds) threshold for testing
         # TODO: Remove this testing override and use the configured hours
         if self._enabled:
-            self._staleness_threshold = 60  # 1 minute for testing
-            _LOGGER.warning("TESTING MODE: Using 1 minute staleness threshold - cleanup every 15 minutes - delete_history=%s", self._delete_history)
+            self._staleness_threshold = 900  # 15 minutes for testing
+            _LOGGER.warning("TESTING MODE: Using 15 minute staleness threshold - cleanup every 30 minutes - delete_history=%s", self._delete_history)
         else:
             self._staleness_threshold = self._staleness_hours * 3600  # Convert to seconds
 
@@ -176,9 +176,9 @@ class EntityStalenessManager:
 
         while not self._shutting_down:
             try:
-                # TESTING: Run cleanup every 15 minutes for more realistic testing
+                # TESTING: Run cleanup every 30 minutes for more realistic testing
                 # TODO: Change back to 3600 (1 hour) for production
-                await asyncio.sleep(900)  # 15 minutes
+                await asyncio.sleep(1800)  # 30 minutes
 
                 if not self._enabled:
                     continue
