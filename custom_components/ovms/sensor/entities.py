@@ -158,6 +158,10 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         """Subscribe to updates."""
         await super().async_added_to_hass()
 
+        # Track entity creation for staleness management
+        if self.staleness_manager and hasattr(self, 'entity_id'):
+            self.staleness_manager.track_entity_creation(self.entity_id)
+
         # Restore previous state if available
         if (state := await self.async_get_last_state()) is not None:
             if state.state not in ["unavailable", "unknown", None]:
@@ -397,6 +401,10 @@ class OVMSSensor(SensorEntity, RestoreEntity):
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
         await super().async_added_to_hass()
+
+        # Track entity creation for staleness management
+        if self.staleness_manager and hasattr(self, 'entity_id'):
+            self.staleness_manager.track_entity_creation(self.entity_id)
 
         # Restore previous state if available
         if (state := await self.async_get_last_state()) is not None:

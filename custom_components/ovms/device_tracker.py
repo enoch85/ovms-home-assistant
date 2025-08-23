@@ -152,6 +152,10 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         """Subscribe to updates and sync with related sensors."""
         await super().async_added_to_hass()
 
+        # Track entity creation for staleness management
+        if self._staleness_manager and hasattr(self, 'entity_id'):
+            self._staleness_manager.track_entity_creation(self.entity_id)
+
         # Restore previous state if available
         if (state := await self.async_get_last_state()) is not None:
             # Restore attributes if available
@@ -402,6 +406,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        if self._staleness_manager and hasattr(self, 'entity_id'):
-            return not self._staleness_manager.is_entity_stale(self.entity_id)
+        # Let Home Assistant handle natural availability based on updates
+        # The staleness manager will hide/remove entities that don't receive updates
         return True
