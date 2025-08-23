@@ -169,7 +169,7 @@ class OVMSOptionsFlow(OptionsFlow):
             CONF_ENTITY_STALENESS_MANAGEMENT,
             entry_data.get(CONF_ENTITY_STALENESS_MANAGEMENT, None)
         )
-        
+
         # Convert stored value to display value
         if current_staleness_hours is None:
             staleness_selection = "disabled"
@@ -188,7 +188,7 @@ class OVMSOptionsFlow(OptionsFlow):
                 default=staleness_selection,
             ): vol.In({
                 "disabled": "Disabled",
-                "12": "12 hours", 
+                "12": "12 hours",
                 "24": "1 day",
                 "168": "1 week"
             }),

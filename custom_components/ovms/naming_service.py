@@ -26,12 +26,12 @@ class EntityNamingService:
         # This preserves names like "VW eUP! Absolute Battery Capacity" without modification
         if metric_info and "name" in metric_info:
             base_name = metric_info["name"]
-            
+
             # If topic ends with a number (like /03), append it to the name
             if topic and topic.split('/')[-1].isdigit():
                 module_number = topic.split('/')[-1]
                 return f"{base_name} {module_number}"
-            
+
             return base_name
 
         # Check if this is a VW eUP! metric by looking for 'xvu' prefix

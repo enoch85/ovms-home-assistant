@@ -83,11 +83,11 @@ class EntityStalenessManager:
     def get_entity_stats(self) -> Dict[str, int]:
         """Get statistics about OVMS entities."""
         entity_registry = er.async_get(self.hass)
-        
+
         total_ovms = 0
         available_ovms = 0
         unavailable_ovms = 0
-        
+
         # Count OVMS entities and their states
         for entity_id in entity_registry.entities:
             if entity_id.startswith(("sensor.ovms_", "binary_sensor.ovms_", "switch.ovms_", "device_tracker.ovms_")):
@@ -150,13 +150,13 @@ class EntityStalenessManager:
                         from datetime import datetime, timezone
                         current_time = datetime.now(timezone.utc)
                         hours_unavailable = (current_time - state.last_updated).total_seconds() / 3600
-                        
+
                         if hours_unavailable > self._staleness_hours:
                             unavailable_entities.append((entity_id, hours_unavailable))
 
             if unavailable_entities:
                 entity_ids = [entity_id for entity_id, _ in unavailable_entities]
-                
+
                 if self._delete_history:
                     _LOGGER.info(
                         "Found %d unavailable OVMS entities (unavailable for >%d hours), removing them completely",
@@ -178,7 +178,7 @@ class EntityStalenessManager:
         try:
             entity_registry = er.async_get(self.hass)
             hidden_count = 0
-            
+
             for entity_id in entity_ids:
                 try:
                     entity_entry = entity_registry.async_get(entity_id)
@@ -208,7 +208,7 @@ class EntityStalenessManager:
         try:
             entity_registry = er.async_get(self.hass)
             removed_count = 0
-            
+
             for entity_id in entity_ids:
                 try:
                     entity_entry = entity_registry.async_get(entity_id)
