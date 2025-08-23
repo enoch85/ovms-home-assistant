@@ -82,7 +82,6 @@ async def async_setup_entry(
                 data["attributes"],
                 hass,
                 data.get("friendly_name"),
-                staleness_manager=data.get("staleness_manager"),
             )
 
             async_add_entities([sensor])
@@ -110,13 +109,11 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
         attributes: Dict[str, Any],
         hass: Optional[HomeAssistant] = None,
         friendly_name: Optional[str] = None,
-        staleness_manager: Optional[Any] = None,
     ) -> None:
         """Initialize the binary sensor."""
         self._attr_unique_id = unique_id
         # Use the entity_id compatible name for internal use
         self._internal_name = name
-        self._staleness_manager = staleness_manager
 
         # Set the entity name that will display in UI - ALWAYS use friendly_name when provided
         if friendly_name:
@@ -157,10 +154,6 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
         """Subscribe to updates."""
         try:
             await super().async_added_to_hass()
-
-            # Track entity creation for staleness management
-            if self._staleness_manager and hasattr(self, 'entity_id'):
-                self._staleness_manager.track_entity_creation(self.entity_id)
 
             # Restore previous state if available
             if (state := await self.async_get_last_state()) is not None:
@@ -203,20 +196,6 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                 )
             )
 
-            # Subscribe to staleness updates if staleness manager is available
-            if self._staleness_manager:
-                @callback
-                def handle_staleness_update():
-                    """Handle staleness status change."""
-                    self.async_write_ha_state()
-
-                self.async_on_remove(
-                    async_dispatcher_connect(
-                        self.hass,
-                        f"ovms_staleness_update_{self.entity_id}",
-                        handle_staleness_update,
-                    )
-                )
         except Exception as ex:
             _LOGGER.exception("Error in async_added_to_hass: %s", ex)
 

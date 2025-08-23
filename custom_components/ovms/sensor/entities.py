@@ -79,7 +79,6 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         attributes: Dict[str, Any],
         friendly_name: Optional[str] = None,
         hass: Optional[HomeAssistant] = None,
-        staleness_manager=None,
     ):
         """Initialize the sensor."""
         self._attr_unique_id = unique_id
@@ -93,7 +92,6 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             "last_updated": dt_util.utcnow().isoformat(),
         }
         self.hass: Optional[HomeAssistant] = hass
-        self.staleness_manager = staleness_manager
 
         # Initialize device class and other attributes
         self._attr_device_class = attributes.get("device_class")
@@ -151,10 +149,6 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
         await super().async_added_to_hass()
-
-        # Track entity creation for staleness management
-        if self.staleness_manager and hasattr(self, 'entity_id'):
-            self.staleness_manager.track_entity_creation(self.entity_id)
 
         # Restore previous state if available
         if (state := await self.async_get_last_state()) is not None:
@@ -272,7 +266,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         attributes: Dict[str, Any],
         friendly_name: Optional[str] = None,
         hass: Optional[HomeAssistant] = None,
-        staleness_manager=None,
     ) -> None:
         """Initialize the sensor."""
         self._attr_unique_id = unique_id
@@ -280,7 +273,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_name = friendly_name or name.replace("_", " ").title()
         self._topic = topic
         self._attr_device_info = device_info or {}
-        self.staleness_manager = staleness_manager
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
@@ -389,10 +381,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
         await super().async_added_to_hass()
-
-        # Track entity creation for staleness management
-        if self.staleness_manager and hasattr(self, 'entity_id'):
-            self.staleness_manager.track_entity_creation(self.entity_id)
 
         # Restore previous state if available
         if (state := await self.async_get_last_state()) is not None:

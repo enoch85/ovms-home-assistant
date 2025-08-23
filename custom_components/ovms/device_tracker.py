@@ -56,7 +56,6 @@ async def async_setup_entry(
                 data.get("friendly_name"),
                 naming_service,
                 attribute_manager,
-                staleness_manager=data.get("staleness_manager"),
             )
 
             async_add_entities([tracker])
@@ -84,12 +83,10 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         friendly_name: Optional[str] = None,
         naming_service: Optional[EntityNamingService] = None,
         attribute_manager: Optional[AttributeManager] = None,
-        staleness_manager=None,
     ) -> None:
         """Initialize the device tracker."""
         self._attr_unique_id = unique_id
         self._internal_name = name
-        self._staleness_manager = staleness_manager
 
         # Use services if provided, otherwise create internal defaults
         self.naming_service = naming_service or EntityNamingService({})
@@ -151,10 +148,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates and sync with related sensors."""
         await super().async_added_to_hass()
-
-        # Track entity creation for staleness management
-        if self._staleness_manager and hasattr(self, 'entity_id'):
-            self._staleness_manager.track_entity_creation(self.entity_id)
 
         # Restore previous state if available
         if (state := await self.async_get_last_state()) is not None:
@@ -272,21 +265,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 update_state,
             )
         )
-
-        # Subscribe to staleness updates if staleness manager is available
-        if self._staleness_manager:
-            @callback
-            def handle_staleness_update():
-                """Handle staleness status change."""
-                self.async_write_ha_state()
-
-            self.async_on_remove(
-                async_dispatcher_connect(
-                    self.hass,
-                    f"ovms_staleness_update_{self.entity_id}",
-                    handle_staleness_update,
-                )
-            )
 
     def _process_payload(self, payload: Any) -> None:
         """Process the payload and update coordinates."""

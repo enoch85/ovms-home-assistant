@@ -44,15 +44,14 @@ class OVMSMQTTClient:
         # Initialize components
         self.entity_registry = EntityRegistry()
         self.topic_parser = TopicParser(self.config, self.entity_registry)
-        self.update_dispatcher = UpdateDispatcher(hass, self.entity_registry, self.attribute_manager, self.staleness_manager)
+        self.update_dispatcher = UpdateDispatcher(hass, self.entity_registry, self.attribute_manager)
         self.entity_factory = EntityFactory(
             hass,
             self.entity_registry,
             self.update_dispatcher,
             self.config,
             self.naming_service,
-            self.attribute_manager,
-            self.staleness_manager
+            self.attribute_manager
         )
         self.command_handler = CommandHandler(hass, config)
 

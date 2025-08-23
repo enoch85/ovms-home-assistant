@@ -19,12 +19,11 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 class UpdateDispatcher:
     """Dispatcher for coordinating updates between related entities."""
 
-    def __init__(self, hass: HomeAssistant, entity_registry, attribute_manager: AttributeManager, staleness_manager=None):
+    def __init__(self, hass: HomeAssistant, entity_registry, attribute_manager: AttributeManager):
         """Initialize the update dispatcher."""
         self.hass = hass
         self.entity_registry = entity_registry
         self.attribute_manager = attribute_manager
-        self.staleness_manager = staleness_manager
         self.last_location_update = {}  # Track when location was last updated
         self.location_values = {}  # Store current location values
 
@@ -77,10 +76,6 @@ class UpdateDispatcher:
     def _update_entity(self, entity_id: str, payload: Any) -> None:
         """Update a single entity with new data."""
         try:
-            # Track entity update for staleness management
-            if self.staleness_manager:
-                self.staleness_manager.track_entity_update(entity_id)
-
             # Dispatch the update signal
             signal = f"{SIGNAL_UPDATE_ENTITY}_{entity_id}"
 
