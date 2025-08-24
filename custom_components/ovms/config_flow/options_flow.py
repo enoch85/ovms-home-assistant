@@ -19,7 +19,8 @@ from ..const import (
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_TOPIC_STRUCTURE,
     DEFAULT_VERIFY_SSL,
-    DEFAULT_TOPIC_BLACKLIST,
+    DEFAULT_USER_TOPIC_BLACKLIST,
+    SYSTEM_TOPIC_BLACKLIST,
     DEFAULT_ENTITY_STALENESS_MANAGEMENT,
     DEFAULT_DELETE_STALE_HISTORY,
     TOPIC_STRUCTURES,
@@ -94,9 +95,9 @@ class OVMSOptionsFlow(OptionsFlow):
             _LOGGER.debug("Saving options: %s", user_input)
             return self.async_create_entry(title="", data=user_input)
 
-        # Get data and options from config entry
-        entry_data = self._config_entry.data
-        entry_options = self._config_entry.options
+        # Get current settings
+        entry_data = self.config_entry.data
+        entry_options = self.config_entry.options
 
         # Determine current port selection
         current_port = entry_data.get(CONF_PORT, 8883)
@@ -156,11 +157,8 @@ class OVMSOptionsFlow(OptionsFlow):
             ): vol.In(TOPIC_STRUCTURES),
             vol.Optional(
                 CONF_TOPIC_BLACKLIST,
-                default=','.join(entry_options.get(
-                    CONF_TOPIC_BLACKLIST,
-                    entry_data.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST)
-                )),
-                description="Comma-separated list of topics to filter out (e.g. battery.log,xrt.log)"
+                default=','.join(entry_options.get(CONF_TOPIC_BLACKLIST, entry_data.get(CONF_TOPIC_BLACKLIST, DEFAULT_USER_TOPIC_BLACKLIST))),
+                description=f"Additional topics to filter out (System already filters: {', '.join(SYSTEM_TOPIC_BLACKLIST)})"
             ): str,
         })
 
