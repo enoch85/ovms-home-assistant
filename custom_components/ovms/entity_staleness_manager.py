@@ -15,6 +15,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_ENTITY_STALENESS_MANAGEMENT,
     CONF_DELETE_STALE_HISTORY,
+    CONF_VEHICLE_ID,
     DEFAULT_ENTITY_STALENESS_MANAGEMENT,
     DEFAULT_DELETE_STALE_HISTORY,
     LOGGER_NAME,
@@ -28,7 +29,7 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 class OVMSStalenessStatusSensor(SensorEntity):
     """Simple diagnostic sensor showing stale entity count."""
 
-    def __init__(self, staleness_manager: "EntityStalenessManager") -> None:
+    def __init__(self, staleness_manager: "EntityStalenessManager", device_info: dict) -> None:
         """Initialize the sensor."""
         self._manager = staleness_manager
         self._attr_name = "OVMS Staleness Status"
@@ -38,6 +39,7 @@ class OVMSStalenessStatusSensor(SensorEntity):
         self._attr_unit_of_measurement = "entities"
         self._attr_native_value = 0
         self._attr_extra_state_attributes = {}
+        self._attr_device_info = device_info
 
     @property
     def native_value(self) -> int:
@@ -86,7 +88,16 @@ class EntityStalenessManager:
         # Small delay to ensure platforms are loaded
         await asyncio.sleep(1.0)
         
-        sensor = OVMSStalenessStatusSensor(self)
+        # Create device info for the diagnostic sensor
+        vehicle_id = self.config.get(CONF_VEHICLE_ID, "unknown")
+        device_info = {
+            "identifiers": {(DOMAIN, vehicle_id)},
+            "name": f"OVMS - {vehicle_id}",
+            "manufacturer": "Open Vehicles",
+            "model": "OVMS v3",
+        }
+        
+        sensor = OVMSStalenessStatusSensor(self, device_info)
         
         sensor_data = {
             "entity_type": "sensor",
