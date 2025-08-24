@@ -151,7 +151,7 @@ class EntityStalenessManager:
             pending_removal_count = 0
             already_stale_count = 0
             stale_entities = []
-            current_time = datetime.now(timezone.utc)
+            current_time = dt_util.utcnow()
             
             # Find OVMS entities that are unavailable (scheduled for removal)
             for entity_id in entity_registry.entities:
@@ -280,6 +280,7 @@ class EntityStalenessManager:
         try:
             entity_registry = er.async_get(self.hass)
             unavailable_entities = []
+            current_time = dt_util.utcnow()
 
             # Find OVMS entities that are unavailable
             for entity_id in entity_registry.entities:
@@ -290,29 +291,35 @@ class EntityStalenessManager:
                 # Check if entity is unavailable in Home Assistant's state machine
                 state = self.hass.states.get(entity_id)
                 if state and state.state in ["unavailable", "unknown"]:
-                    # HA thinks it's stale, now check if it's been stale for the user-configured time
+                    # Use Home Assistant's built-in state.last_updated to determine staleness
                     if hasattr(state, 'last_updated') and state.last_updated:
-                        from datetime import datetime, timezone
-                        current_time = datetime.now(timezone.utc)
                         hours_unavailable = (current_time - state.last_updated).total_seconds() / 3600
 
                         if hours_unavailable > self._staleness_hours:
-                            unavailable_entities.append((entity_id, hours_unavailable))
+                            unavailable_entities.append((entity_id, hours_unavailable, state.last_updated))
 
             if unavailable_entities:
-                entity_ids = [entity_id for entity_id, _ in unavailable_entities]
+                entity_ids = [entity_id for entity_id, _, _ in unavailable_entities]
 
                 if self._delete_history:
                     _LOGGER.info(
                         "Found %d unavailable OVMS entities (unavailable for >%d hours), removing them completely",
                         len(unavailable_entities), self._staleness_hours
                     )
+                    # Log details for debugging
+                    for entity_id, hours, last_updated in unavailable_entities:
+                        _LOGGER.debug("Removing %s: last updated %s (%.1f hours ago)", 
+                                    entity_id, last_updated.isoformat(), hours)
                     await self._async_remove_entities(entity_ids)
                 else:
                     _LOGGER.info(
                         "Found %d unavailable OVMS entities (unavailable for >%d hours), hiding them from UI",
                         len(unavailable_entities), self._staleness_hours
                     )
+                    # Log details for debugging
+                    for entity_id, hours, last_updated in unavailable_entities:
+                        _LOGGER.debug("Hiding %s: last updated %s (%.1f hours ago)", 
+                                    entity_id, last_updated.isoformat(), hours)
                     await self._async_hide_entities(entity_ids)
 
         except Exception as ex:
@@ -334,6 +341,7 @@ class EntityStalenessManager:
                         )
                         hidden_count += 1
                         _LOGGER.debug("Hidden unavailable entity from UI: %s", entity_id)
+                        
                     elif entity_entry and entity_entry.hidden_by:
                         _LOGGER.debug("Entity %s already hidden", entity_id)
                     else:
