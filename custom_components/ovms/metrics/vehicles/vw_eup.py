@@ -77,6 +77,7 @@ VW_EUP_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "vw_eup",
     },
     "xvu.b.energy.range": {
@@ -158,6 +159,7 @@ VW_EUP_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 1,
         "category": "vw_eup",
     },
     "xvu.c.ac.u2": {
@@ -167,6 +169,7 @@ VW_EUP_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 1,
         "category": "vw_eup",
     },
     "xvu.c.ccs.i": {
@@ -194,6 +197,7 @@ VW_EUP_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "vw_eup",
     },
     "xvu.c.dc.i1": {
@@ -230,6 +234,7 @@ VW_EUP_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "vw_eup",
     },
     "xvu.c.dc.u2": {
@@ -239,6 +244,7 @@ VW_EUP_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "vw_eup",
     },
     "xvu.c.eff.calc": {
@@ -379,5 +385,27 @@ VW_EUP_METRICS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPressure.KPA,
         "category": "vw_eup",
+    },
+
+    # SOH Module History Metrics (comma-separated values for 14 modules)
+    "xvu.b.hist.soh.mod": {
+        "name": "VW eUP! Module SOH",
+        "description": "Historical State of Health data for battery modules",
+        "icon": "mdi:battery-heart-variant",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": "vw_eup",
+        "has_cell_data": True,  # Indicates this contains comma-separated values
+    },
+    "xvu.b.c.soh": {
+        "name": "VW eUP! Battery Cell SOH",
+        "description": "State of Health data for individual battery cells",
+        "icon": "mdi:battery-heart-variant",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "category": "vw_eup",
+        "has_cell_data": True,  # Indicates this contains comma-separated values
     },
 }

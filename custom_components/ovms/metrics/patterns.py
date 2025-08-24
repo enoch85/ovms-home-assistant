@@ -12,17 +12,17 @@ from homeassistant.const import (
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
+    UnitOfFrequency,
     UnitOfLength,
     UnitOfPower,
     UnitOfPressure,
     UnitOfSpeed,
     UnitOfTemperature,
-    UnitOfFrequency,
     UnitOfTime,
+    EntityCategory,
 )
-from homeassistant.const import EntityCategory
 
-# Simplified mapping for lookup by keyword/pattern
+# Topic patterns for automatic sensor detection
 TOPIC_PATTERNS = {
     "soc": {
         "name": "Battery State of Charge",
@@ -63,6 +63,7 @@ TOPIC_PATTERNS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "battery",
     },
     "current": {

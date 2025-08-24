@@ -11,7 +11,8 @@ from .const import (
     DOMAIN,
     LOGGER_NAME,
     CONFIG_VERSION,
-    SIGNAL_PLATFORMS_LOADED
+    SIGNAL_PLATFORMS_LOADED,
+    CONF_TOPIC_BLACKLIST
 )
 
 from .mqtt import OVMSMQTTClient
@@ -30,7 +31,7 @@ PLATFORMS = [
 
 def _get_merged_config(entry: ConfigEntry) -> dict:
     """Get merged configuration from entry.data and entry.options.
-    
+
     Options take precedence over data.
     """
     return get_merged_config(entry)
@@ -105,12 +106,22 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
         # Perform migrations based on version
         if version == 1:
-            # Example migration code for future updates
-            # new_data = {**config_entry.data}
-            # new_data["new_field"] = "default_value"
-            # hass.config_entries.async_update_entry(config_entry, data=new_data)
-            # version = 2
-            pass
+            # Migrate blacklist: separate user patterns from system patterns
+            current_data = dict(config_entry.data)
+            current_options = dict(config_entry.options)
+
+            # Get existing blacklist (mix of system + user patterns)
+            existing_blacklist = current_options.get(CONF_TOPIC_BLACKLIST, current_data.get(CONF_TOPIC_BLACKLIST, []))
+
+            # Extract only user-added patterns (remove system patterns)
+            from .const import SYSTEM_TOPIC_BLACKLIST
+            user_only_patterns = [pattern for pattern in existing_blacklist if pattern not in SYSTEM_TOPIC_BLACKLIST]
+
+            # Update to store only user patterns (system patterns will be applied automatically)
+            if user_only_patterns != existing_blacklist:
+                current_options[CONF_TOPIC_BLACKLIST] = user_only_patterns
+                hass.config_entries.async_update_entry(config_entry, options=current_options)
+                _LOGGER.info("Migrated blacklist: separated %d user patterns from system patterns", len(user_only_patterns))
 
         # Update the config entry version
         hass.config_entries.async_update_entry(config_entry, version=CONFIG_VERSION)

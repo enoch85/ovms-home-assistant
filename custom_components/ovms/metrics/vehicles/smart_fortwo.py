@@ -56,6 +56,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "smart_fortwo",
     },
     "xsq.bms.batt.link.voltage": {
@@ -65,6 +66,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "smart_fortwo",
     },
     "xsq.bms.batt.power": {
@@ -83,6 +85,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "smart_fortwo",
     },
     "xsq.bms.cv.range.max": {
@@ -92,6 +95,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "smart_fortwo",
     },
     "xsq.bms.cv.range.mean": {
@@ -101,6 +105,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "smart_fortwo",
     },
     "xsq.bms.cv.range.min": {
@@ -110,6 +115,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "smart_fortwo",
     },
     "xsq.bms.ev.mode": {
@@ -125,6 +131,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "smart_fortwo",
     },
     "xsq.bms.hv.contact.state": {
@@ -140,6 +147,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "smart_fortwo",
     },
     "xsq.bms.power": {
@@ -262,6 +270,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "smart_fortwo",
     },
     "xsq.evc.plug.present": {
@@ -311,6 +320,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "smart_fortwo",
     },
     "xsq.ocs.duration": {

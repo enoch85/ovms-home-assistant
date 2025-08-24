@@ -55,7 +55,7 @@ async def async_setup_entry(
                 hass,
                 data.get("friendly_name"),
                 naming_service,
-                attribute_manager
+                attribute_manager,
             )
 
             async_add_entities([tracker])
@@ -82,7 +82,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         hass: Optional[HomeAssistant] = None,
         friendly_name: Optional[str] = None,
         naming_service: Optional[EntityNamingService] = None,
-        attribute_manager: Optional[AttributeManager] = None
+        attribute_manager: Optional[AttributeManager] = None,
     ) -> None:
         """Initialize the device tracker."""
         self._attr_unique_id = unique_id

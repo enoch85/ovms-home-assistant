@@ -21,12 +21,12 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 
 def get_merged_config(entry: ConfigEntry) -> Dict[str, Any]:
     """Get merged configuration from entry.data and entry.options.
-    
+
     Options take precedence over data.
-    
+
     Args:
         entry: The config entry containing data and options
-        
+
     Returns:
         Merged configuration dictionary
     """

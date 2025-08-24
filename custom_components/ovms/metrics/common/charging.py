@@ -16,9 +16,10 @@ from homeassistant.const import (
     UnitOfPower,
     UnitOfTemperature,
     UnitOfTime,
+    EntityCategory,
 )
 
-# Charging metrics
+# Charging related metrics
 CHARGING_METRICS = {
     "v.c.charging": {
         "name": "Charging Status",
@@ -213,6 +214,7 @@ CHARGING_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "charging",
     },
     "v.e.charging12v": {

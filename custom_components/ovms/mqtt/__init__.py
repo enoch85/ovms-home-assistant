@@ -20,6 +20,7 @@ from .update_dispatcher import UpdateDispatcher
 from .command_handler import CommandHandler
 from ..naming_service import EntityNamingService
 from ..attribute_manager import AttributeManager
+from ..entity_staleness_manager import EntityStalenessManager
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -38,6 +39,7 @@ class OVMSMQTTClient:
         # Initialize services
         self.naming_service = EntityNamingService(config)
         self.attribute_manager = AttributeManager(config)
+        self.staleness_manager = EntityStalenessManager(hass, config)
 
         # Initialize components
         self.entity_registry = EntityRegistry()
@@ -179,6 +181,10 @@ class OVMSMQTTClient:
         # Clean up listeners
         for listener_remove in getattr(self, "_cleanup_listeners", []):
             listener_remove()
+
+        # Shutdown staleness manager
+        if hasattr(self, 'staleness_manager'):
+            await self.staleness_manager.async_shutdown()
 
         await self.connection_manager.async_shutdown()
 

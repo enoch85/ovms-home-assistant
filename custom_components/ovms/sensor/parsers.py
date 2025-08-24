@@ -117,12 +117,10 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
                     # Use generic naming for other sensors or additional values beyond 4 tires
                     result[f"cell_{i+1}"] = val
 
-        # The main 'value' of the sensor will be the mean if has_cell_data is true,
-        # otherwise, the calling context might decide not to create a main sensor
-        # or use the first value, etc.
-        # For now, parse_value in this file, when is_cell_sensor is true,
-        # will take the average. The attributes will hold the individual values.
-        result["value"] = round(sum(parts) / len(parts), 4)
+        # The main 'value' of the sensor will be the median for cell sensors
+        # This matches the behavior shown in the working cell voltage display
+        result["value"] = round(result["median"], 4)
+        _LOGGER.debug(f"parse_comma_separated_values: Processed '{value}' -> median: {result['median']}, final value: {result['value']}")
         return result
     except (ValueError, TypeError):
         _LOGGER.warning(f"Could not parse comma-separated values for {entity_name}: '{value}'")
@@ -176,44 +174,21 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
         if value.lower() in ["no", "off", "false", "disabled"]:
             return 0
         if value.lower() in ["yes", "on", "true", "enabled"]:
-            return 1        # Check if this is a comma-separated list of numbers for a cell sensor
-        # The string cleaning (removing units) is now done in StateParser.parse_value
-        if isinstance(value, str) and "," in value:
-            # If it's a cell sensor, parse_comma_separated_values will handle creating attributes
-            # and will return a dict. The 'value' key from that dict will be used as the sensor's state.
-            if is_cell_sensor:
-                # Call the dedicated parser which returns a dict of values & attributes
-                # The main state of the sensor will be the 'value' from this dict (e.g., average)
-                # and the individual values will be in its attributes.
-                stat_type = "tire" if is_tire_sensor(device_class) else "cell"
-                parsed_data = parse_comma_separated_values(value, "", is_cell_sensor, stat_type)
-                if parsed_data and "value" in parsed_data:
-                    # The main sensor state will be the average. Attributes are handled by process_json_payload later.
-                    return parsed_data["value"]
-                else:
-                    # Fallback or if parsing failed to produce a 'value'
-                    return None
+            return 1
 
-
-        # If NOT a cell_sensor, but still comma-separated (e.g. old behavior or other sensors)
-        # The StateParser.parse_value is now the primary place for this averaging if not cell_sensor.
-        # This block in sensor.parsers.py's parse_value might become redundant or only for non-cell_sensor cases
-        # if StateParser handles the generic comma-separated averaging.
-        # For now, let's assume StateParser's output is what we get.
-        # If 'value' is still a string here (meaning StateParser didn't average it),
-        # we might average it here as a fallback if it's numeric and not a cell sensor.
-        # However, the previous change to StateParser makes it average comma-separated strings.
-        # So, if is_cell_sensor is False, 'value' should already be an averaged float if it was comma-separated.
-        # This specific block for non-cell_sensor comma-separated values might not be hit often
-        # if StateParser already converted it.
-        try:
-            # This is a simplified averaging if it's not a cell sensor and StateParser didn't average it.
-            # This should ideally be harmonized with StateParser.
-            parts = [float(part.strip()) for part in value.split(",") if part.strip()]
-            if parts:
-                return round(sum(parts) / len(parts), 4)
-        except (ValueError, TypeError):
-            pass # Fall through if not a simple list of numbers
+        # Check if this is a comma-separated list of numbers for a cell sensor
+        if isinstance(value, str) and "," in value and is_cell_sensor:
+            # For cell sensors, the StateParser should have already detected this as cell data
+            # and returned the raw comma-separated string. Now we process it to get median/attributes.
+            # This should ideally be harmonized with StateParser to avoid any duplication.
+            stat_type = "tire" if is_tire_sensor(device_class) else "cell"
+            parsed_data = parse_comma_separated_values(value, "", is_cell_sensor, stat_type)
+            if parsed_data and "value" in parsed_data:
+                # The main sensor state will be the median value from parse_comma_separated_values
+                return parsed_data["value"]
+            else:
+                # Fallback if parsing failed
+                return None
 
     # Try parsing as JSON first
     try:

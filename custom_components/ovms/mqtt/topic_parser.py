@@ -4,7 +4,7 @@ import re
 from typing import Dict, Any, Optional, Tuple, List
 
 from .. import metrics
-from ..const import LOGGER_NAME, CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST
+from ..const import LOGGER_NAME, CONF_TOPIC_BLACKLIST, SYSTEM_TOPIC_BLACKLIST, DEFAULT_USER_TOPIC_BLACKLIST
 from ..metrics import (
     BINARY_METRICS,
     get_metric_by_path,
@@ -23,9 +23,10 @@ class TopicParser:
         self.structure_prefix = self._format_structure_prefix()
         self.coordinate_entities_created = {}  # Track which coordinate entities we've created
 
-        # Get and normalize the topic blacklist
-        blacklist = config.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST)
-        self.topic_blacklist = self._normalize_blacklist(blacklist)
+        # Get and normalize the topic blacklist - combine system and user patterns
+        user_blacklist = config.get(CONF_TOPIC_BLACKLIST, DEFAULT_USER_TOPIC_BLACKLIST)
+        combined_blacklist = SYSTEM_TOPIC_BLACKLIST + user_blacklist
+        self.topic_blacklist = self._normalize_blacklist(combined_blacklist)
 
     def _format_structure_prefix(self) -> str:
         """Format the topic structure prefix based on configuration."""
@@ -348,5 +349,5 @@ class TopicParser:
         if isinstance(blacklist, str):
             return [x.strip() for x in blacklist.split(",") if x.strip()]
 
-        # Fallback to default
-        return DEFAULT_TOPIC_BLACKLIST
+        # Fallback to system defaults
+        return SYSTEM_TOPIC_BLACKLIST

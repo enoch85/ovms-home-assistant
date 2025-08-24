@@ -13,11 +13,28 @@ def get_metric_by_path(metric_path):
     if metric_path in METRIC_DEFINITIONS:
         return METRIC_DEFINITIONS[metric_path]
 
-    # For VW eUP metrics, also try removing 'metric.' prefix if it's present
+    # For VW eUP metrics, try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xvu.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
+
+        # Also try removing numeric suffixes from the alt_path
+        parts = alt_path.split('.')
+        if len(parts) > 1 and parts[-1].isdigit():
+            base_path = '.'.join(parts[:-1])
+            if base_path in METRIC_DEFINITIONS:
+                return METRIC_DEFINITIONS[base_path]
+
+    # Try removing numeric suffixes for module-specific metrics
+    # For paths like "xvu.b.hist.soh.mod.01", try "xvu.b.hist.soh.mod"
+    if metric_path:
+        parts = metric_path.split('.')
+        if len(parts) > 1 and parts[-1].isdigit():
+            # Remove the numeric suffix and try again
+            base_path = '.'.join(parts[:-1])
+            if base_path in METRIC_DEFINITIONS:
+                return METRIC_DEFINITIONS[base_path]
 
     # Try with just 'xvu.' if it exists in the path
     if 'xvu.' in metric_path and not metric_path.startswith('xvu.'):
@@ -26,50 +43,57 @@ def get_metric_by_path(metric_path):
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
-    # For MG ZS-EV metrics, also try removing 'metric.' prefix if it's present
+    # For MG ZS-EV metrics, try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xmg.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
-    # Try with just 'xmg.' if it exists in the path
-    if 'xmg.' in metric_path and not metric_path.startswith('xmg.'):
-        xmg_index = metric_path.find('xmg.')
-        alt_path = metric_path[xmg_index:]
-        if alt_path in METRIC_DEFINITIONS:
-            return METRIC_DEFINITIONS[alt_path]
+        # Also try removing numeric suffixes from the alt_path
+        parts = alt_path.split('.')
+        if len(parts) > 1 and parts[-1].isdigit():
+            base_path = '.'.join(parts[:-1])
+            if base_path in METRIC_DEFINITIONS:
+                return METRIC_DEFINITIONS[base_path]
 
-    # For Smart ForTwo metrics, also try removing 'metric.' prefix if it's present
+    # For Smart ForTwo metrics, try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xsq.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
-    # Try with just 'xsq.' if it exists in the path
-    if 'xsq.' in metric_path and not metric_path.startswith('xsq.'):
-        xsq_index = metric_path.find('xsq.')
-        alt_path = metric_path[xsq_index:]
-        if alt_path in METRIC_DEFINITIONS:
-            return METRIC_DEFINITIONS[alt_path]
+        # Also try removing numeric suffixes from the alt_path
+        parts = alt_path.split('.')
+        if len(parts) > 1 and parts[-1].isdigit():
+            base_path = '.'.join(parts[:-1])
+            if base_path in METRIC_DEFINITIONS:
+                return METRIC_DEFINITIONS[base_path]
 
-    # For Nissan Leaf metrics, also try removing 'metric.' prefix if it's present
+    # For Nissan Leaf metrics, try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xnl.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
-    # Try with just 'xnl.' if it exists in the path
-    if 'xnl.' in metric_path and not metric_path.startswith('xnl.'):
-        xnl_index = metric_path.find('xnl.')
-        alt_path = metric_path[xnl_index:]
-        if alt_path in METRIC_DEFINITIONS:
-            return METRIC_DEFINITIONS[alt_path]
+        # Also try removing numeric suffixes from the alt_path
+        parts = alt_path.split('.')
+        if len(parts) > 1 and parts[-1].isdigit():
+            base_path = '.'.join(parts[:-1])
+            if base_path in METRIC_DEFINITIONS:
+                return METRIC_DEFINITIONS[base_path]
 
-    # For Renault Twizy metrics, also try removing 'metric.' prefix if it's present
+    # For Renault Twizy metrics, try removing 'metric.' prefix if it's present
     if metric_path.startswith('metric.xrt.'):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
+
+        # Also try removing numeric suffixes from the alt_path
+        parts = alt_path.split('.')
+        if len(parts) > 1 and parts[-1].isdigit():
+            base_path = '.'.join(parts[:-1])
+            if base_path in METRIC_DEFINITIONS:
+                return METRIC_DEFINITIONS[base_path]
 
     # Try with just 'xrt.' if it exists in the path
     if 'xrt.' in metric_path and not metric_path.startswith('xrt.'):
@@ -364,3 +388,21 @@ def create_friendly_name(topic_parts, metric_info=None):
 
     # Return just the last part without category
     return last_part
+
+
+def get_cell_data_patterns():
+    """Get list of metric patterns that have cell data (comma-separated values)."""
+    from . import METRIC_DEFINITIONS
+
+    cell_data_patterns = []
+
+    # Go through all metric definitions and find those with has_cell_data: True
+    for metric_path, metric_info in METRIC_DEFINITIONS.items():
+        if metric_info.get("has_cell_data", False):
+            # Add both dot and slash versions
+            cell_data_patterns.append(metric_path)
+            # Convert dots to slashes for MQTT topic format
+            slash_pattern = metric_path.replace(".", "/")
+            cell_data_patterns.append(slash_pattern)
+
+    return cell_data_patterns

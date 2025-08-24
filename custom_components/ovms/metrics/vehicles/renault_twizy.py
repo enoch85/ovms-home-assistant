@@ -14,9 +14,9 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfLength,
     UnitOfPower,
+    UnitOfSpeed,
     UnitOfTemperature,
     UnitOfTime,
-    UnitOfSpeed,
     EntityCategory,
 )
 
@@ -87,6 +87,7 @@ RENAULT_TWIZY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "renault_twizy",
     },
     "xrt.b.u.volt.min": {
@@ -96,6 +97,7 @@ RENAULT_TWIZY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "renault_twizy",
     },
 
@@ -275,6 +277,7 @@ RENAULT_TWIZY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "renault_twizy",
     },
     "xrt.i.vlt.bat": {
@@ -283,6 +286,8 @@ RENAULT_TWIZY_METRICS = {
         "icon": "mdi:flash",
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "renault_twizy",
     },
     "xrt.i.vlt.cap": {

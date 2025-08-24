@@ -195,6 +195,7 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                     update_state,
                 )
             )
+
         except Exception as ex:
             _LOGGER.exception("Error in async_added_to_hass: %s", ex)
 
