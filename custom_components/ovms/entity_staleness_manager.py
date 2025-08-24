@@ -78,11 +78,14 @@ class EntityStalenessManager:
         if self._enabled:
             self._start_cleanup_task()
             
-        # Create a simple diagnostic sensor
-        self._create_diagnostic_sensor()
+        # Schedule diagnostic sensor creation for after platform setup
+        self.hass.async_create_task(self._async_create_diagnostic_sensor())
 
-    def _create_diagnostic_sensor(self) -> None:
-        """Create a simple diagnostic sensor."""
+    async def _async_create_diagnostic_sensor(self) -> None:
+        """Create a simple diagnostic sensor asynchronously."""
+        # Small delay to ensure platforms are loaded
+        await asyncio.sleep(1.0)
+        
         sensor = OVMSStalenessStatusSensor(self)
         
         sensor_data = {
@@ -92,6 +95,7 @@ class EntityStalenessManager:
         
         # Send to sensor platform
         async_dispatcher_send(self.hass, SIGNAL_ADD_ENTITIES, sensor_data)
+        _LOGGER.debug("Diagnostic sensor creation signal sent")
 
     def _start_cleanup_task(self) -> None:
         """Start the cleanup task."""
