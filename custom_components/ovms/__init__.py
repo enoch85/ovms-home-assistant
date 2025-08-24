@@ -126,7 +126,6 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         # Update the config entry version
         hass.config_entries.async_update_entry(config_entry, version=CONFIG_VERSION)
         return True
-        return True
     except Exception as ex:
         _LOGGER.exception("Error migrating config entry: %s", ex)
         return False

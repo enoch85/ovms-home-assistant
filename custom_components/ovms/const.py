@@ -9,7 +9,7 @@ from homeassistant.const import (  # noqa: W0611
 )
 
 DOMAIN = "ovms"
-CONFIG_VERSION = 1
+CONFIG_VERSION = 2
 
 # Configuration
 CONF_VEHICLE_ID = "vehicle_id"
