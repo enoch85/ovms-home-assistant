@@ -173,10 +173,12 @@ class OVMSOptionsFlow(OptionsFlow):
         # Convert stored value to display value
         if current_staleness_hours is None:
             staleness_selection = "disabled"
+        elif current_staleness_hours == 2:
+            staleness_selection = "2"
         elif current_staleness_hours == 12:
             staleness_selection = "12"
-        elif current_staleness_hours == 24:
-            staleness_selection = "24"
+        elif current_staleness_hours == 72:
+            staleness_selection = "72"
         elif current_staleness_hours == 168:
             staleness_selection = "168"
         else:
@@ -188,8 +190,9 @@ class OVMSOptionsFlow(OptionsFlow):
                 default=staleness_selection,
             ): vol.In({
                 "disabled": "Disabled",
+                "2": "2 hours",
                 "12": "12 hours",
-                "24": "1 day",
+                "72": "3 days",
                 "168": "1 week"
             }),
             vol.Optional(

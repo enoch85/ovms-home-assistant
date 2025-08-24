@@ -38,7 +38,18 @@ DEFAULT_UNIT_SYSTEM = "metric"
 DEFAULT_TOPIC_STRUCTURE = "{prefix}/{mqtt_username}/{vehicle_id}"
 DEFAULT_VERIFY_SSL = True
 DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by default
-DEFAULT_TOPIC_BLACKLIST = [".log", "battery.log", "power.log", "gps.log", "xrt.log"]  # Default topics to blacklist
+DEFAULT_TOPIC_BLACKLIST = [
+    ".log", 
+    "battery.log", 
+    "power.log", 
+    "gps.log", 
+    "xrt.log",
+    "event.system.modem.muxstart",
+    "event.system.modem.netwait", 
+    "event.system.modem.netstart",
+    "event.system.modem.netmode",
+    "event.system.modem.gotip"
+]  # Default topics to blacklist
 DEFAULT_ENTITY_STALENESS_MANAGEMENT = None  # Disabled by default - None means disabled, any number means enabled with that many hours
 DEFAULT_DELETE_STALE_HISTORY = False  # Preserve history by default
 
