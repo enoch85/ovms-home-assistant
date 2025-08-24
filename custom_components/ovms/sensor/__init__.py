@@ -29,6 +29,15 @@ async def async_setup_entry(
 
         _LOGGER.info("Adding sensor: %s", data.get("name", "unknown"))
 
+        # Handle diagnostic sensor specially
+        if "diagnostic_sensor" in data:
+            _LOGGER.debug("Adding diagnostic sensor: %s", data.get("name", "unknown"))
+            try:
+                async_add_entities([data["diagnostic_sensor"]])
+            except Exception as ex:
+                _LOGGER.error("Error adding diagnostic sensor: %s", ex)
+            return
+
         # Handle cell sensors differently
         if "cell_sensors" in data:
             _LOGGER.debug("Adding cell sensors from parent entity: %s", data.get("parent_entity"))
