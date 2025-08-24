@@ -176,16 +176,13 @@ class EntityStalenessManager:
                         entity_entry = entity_registry.async_get(entity_id)
                         friendly_name = entity_entry.name if entity_entry and entity_entry.name else entity_id
                         
-                        # Calculate when it will be removed
+                        # Calculate FIXED removal time based on when entity became unavailable + threshold
+                        # This time should NOT change once calculated
+                        removal_time = state.last_updated + timedelta(hours=self._staleness_hours)
+                        
                         if already_exceeded:
-                            # Already eligible - will be removed at next cleanup (within 1 hour)
-                            next_cleanup = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-                            scheduled_for_removal_at = next_cleanup
                             status = "eligible_for_removal"
                         else:
-                            # Calculate when it will become eligible
-                            time_until_eligible = self._staleness_hours - hours_stale
-                            scheduled_for_removal_at = current_time + timedelta(hours=time_until_eligible)
                             status = "pending_removal"
                         
                         stale_entities.append({
@@ -193,7 +190,7 @@ class EntityStalenessManager:
                             "friendly_name": friendly_name,
                             "hours_stale": round(hours_stale, 1),
                             "hours_until_removal": round(max(0, self._staleness_hours - hours_stale), 1),
-                            "scheduled_for_removal_at": scheduled_for_removal_at.isoformat(),
+                            "scheduled_for_removal_at": removal_time.isoformat(),  # Fixed time, won't change
                             "status": status,
                             "action": "delete" if self._delete_history else "hide"
                         })
@@ -248,9 +245,17 @@ class EntityStalenessManager:
         """Periodically clean up entities that Home Assistant marks as unavailable."""
         _LOGGER.debug("Entity staleness cleanup task started")
 
+        # Do an initial cleanup immediately after startup
+        try:
+            if self._enabled:
+                _LOGGER.debug("Running initial staleness cleanup")
+                await self._cleanup_unavailable_entities()
+        except Exception as ex:  # pylint: disable=broad-except
+            _LOGGER.exception("Error in initial staleness cleanup: %s", ex)
+
         while not self._shutting_down:
             try:
-                # Run cleanup every hour
+                # Wait 1 hour between cleanups
                 await asyncio.sleep(3600)  # 1 hour
 
                 if not self._enabled:
