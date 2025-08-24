@@ -27,7 +27,7 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 
 
 class OVMSStalenessStatusSensor(SensorEntity):
-    """Simple diagnostic sensor showing stale entity count."""
+    """Diagnostic sensor showing count of entities scheduled for removal."""
 
     def __init__(self, staleness_manager: "EntityStalenessManager", device_info: dict) -> None:
         """Initialize the sensor."""
@@ -43,9 +43,9 @@ class OVMSStalenessStatusSensor(SensorEntity):
 
     @property
     def native_value(self) -> int:
-        """Return the number of stale entities."""
+        """Return the number of entities scheduled for removal."""
         info = self._manager.get_staleness_info()
-        return info.get("stale_count", 0)
+        return info.get("count", 0)  # This is now pending_removal_count
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -148,11 +148,12 @@ class EntityStalenessManager:
         """Get current staleness information for diagnostic purposes."""
         try:
             entity_registry = er.async_get(self.hass)
-            stale_count = 0
+            pending_removal_count = 0
+            already_stale_count = 0
             stale_entities = []
             current_time = datetime.now(timezone.utc)
             
-            # Find OVMS entities that are currently stale
+            # Find OVMS entities that are unavailable (scheduled for removal)
             for entity_id in entity_registry.entities:
                 # Only process OVMS entities
                 if not entity_id.startswith(("sensor.ovms_", "binary_sensor.ovms_", "switch.ovms_", "device_tracker.ovms_")):
@@ -163,26 +164,45 @@ class EntityStalenessManager:
                     if hasattr(state, 'last_updated') and state.last_updated:
                         hours_stale = (current_time - state.last_updated).total_seconds() / 3600
                         
-                        if hours_stale > self._staleness_hours:
-                            stale_count += 1
-                            # Get friendly name
-                            entity_entry = entity_registry.async_get(entity_id)
-                            friendly_name = entity_entry.name if entity_entry and entity_entry.name else entity_id
-                            
-                            # Calculate when it will be removed
-                            next_hour = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-                            
-                            stale_entities.append({
-                                "entity_id": entity_id,
-                                "friendly_name": friendly_name,
-                                "hours_stale": round(hours_stale, 1),
-                                "scheduled_for_removal_at": next_hour.isoformat(),
-                                "action": "delete" if self._delete_history else "hide"
-                            })
+                        # Count ALL unavailable entities as pending removal
+                        pending_removal_count += 1
+                        
+                        # Also track which ones have already exceeded the threshold
+                        already_exceeded = hours_stale > self._staleness_hours
+                        if already_exceeded:
+                            already_stale_count += 1
+                        
+                        # Get friendly name
+                        entity_entry = entity_registry.async_get(entity_id)
+                        friendly_name = entity_entry.name if entity_entry and entity_entry.name else entity_id
+                        
+                        # Calculate when it will be removed
+                        if already_exceeded:
+                            # Already eligible - will be removed at next cleanup (within 1 hour)
+                            next_cleanup = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+                            scheduled_for_removal_at = next_cleanup
+                            status = "eligible_for_removal"
+                        else:
+                            # Calculate when it will become eligible
+                            time_until_eligible = self._staleness_hours - hours_stale
+                            scheduled_for_removal_at = current_time + timedelta(hours=time_until_eligible)
+                            status = "pending_removal"
+                        
+                        stale_entities.append({
+                            "entity_id": entity_id,
+                            "friendly_name": friendly_name,
+                            "hours_stale": round(hours_stale, 1),
+                            "hours_until_removal": round(max(0, self._staleness_hours - hours_stale), 1),
+                            "scheduled_for_removal_at": scheduled_for_removal_at.isoformat(),
+                            "status": status,
+                            "action": "delete" if self._delete_history else "hide"
+                        })
 
             return {
-                "count": stale_count,
-                "stale_entities": stale_entities[:10],  # Limit to first 10 to avoid huge attributes
+                "count": pending_removal_count,  # Total entities scheduled for removal
+                "pending_removal_count": pending_removal_count,  # All unavailable entities
+                "already_stale_count": already_stale_count,  # Entities that have exceeded threshold
+                "stale_entities": stale_entities,  # Show all entities scheduled for removal
                 "staleness_threshold_hours": self._staleness_hours,
                 "staleness_enabled": self._enabled,
                 "delete_history": self._delete_history,
