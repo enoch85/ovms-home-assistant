@@ -99,46 +99,6 @@ class EntityStalenessManager:
             self._cleanup_task = asyncio.create_task(self._async_cleanup_stale_entities())
             _LOGGER.debug("Started entity staleness cleanup task")
 
-    def _create_diagnostic_sensor(self) -> None:
-        """Create the diagnostic sensor."""
-        self._diagnostic_sensor = OVMSStalenessStatusSensor(self.hass, self)
-        
-        # Send sensor data for creation via dispatcher
-        sensor_data = {
-            "entity_type": "sensor",
-            "unique_id": "ovms_staleness_status",
-            "name": "ovms_staleness_status",
-            "friendly_name": "OVMS Staleness Status",
-            "topic": "internal/staleness/status",
-            "payload": "0",
-            "device_info": {
-                "identifiers": {(DOMAIN, "staleness_manager")},
-                "name": "OVMS Staleness Manager",
-                "manufacturer": "OVMS Integration",
-                "model": "Diagnostic Tools",
-                "sw_version": "1.0.0",
-            },
-            "attributes": {
-                "device_class": None,
-                "icon": "mdi:clock-alert-outline",
-                "unit_of_measurement": "entities",
-                "entity_category": EntityCategory.DIAGNOSTIC,
-            },
-            "diagnostic_sensor": self._diagnostic_sensor  # Pass the actual sensor object
-        }
-        
-        # Schedule sensor creation for next event loop iteration
-        self.hass.async_create_task(self._async_add_sensor(sensor_data))
-
-    async def _async_add_sensor(self, sensor_data: Dict) -> None:
-        """Add the diagnostic sensor asynchronously."""
-        try:
-            await asyncio.sleep(0.1)  # Small delay to ensure platform is ready
-            async_dispatcher_send(self.hass, SIGNAL_ADD_ENTITIES, sensor_data)
-            _LOGGER.debug("Diagnostic sensor creation dispatched")
-        except Exception as ex:
-            _LOGGER.error("Failed to create diagnostic sensor: %s", ex)
-
     def update_config(self, config: Dict) -> None:
         """Update configuration and restart cleanup task if needed."""
         old_enabled = self._enabled
