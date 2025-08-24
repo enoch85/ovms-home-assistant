@@ -31,6 +31,7 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         "native_unit_of_measurement": None,
         "entity_category": None,
         "icon": None,
+        "suggested_display_precision": None,
     }
 
     # Check if attributes specify a category
@@ -104,6 +105,8 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
             result["entity_category"] = metric_info["entity_category"]
         if "icon" in metric_info:
             result["icon"] = metric_info["icon"]
+        if "suggested_display_precision" in metric_info:
+            result["suggested_display_precision"] = metric_info["suggested_display_precision"]
         return result
 
     # If no metric info found, try matching by pattern from TOPIC_PATTERNS
@@ -119,6 +122,8 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
                 result["entity_category"] = pattern_info["entity_category"]
             if "icon" in pattern_info:
                 result["icon"] = pattern_info["icon"]
+            if "suggested_display_precision" in pattern_info:
+                result["suggested_display_precision"] = pattern_info["suggested_display_precision"]
             break
 
     return result

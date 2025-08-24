@@ -77,6 +77,7 @@ VW_EUP_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "vw_eup",
     },
     "xvu.b.energy.range": {
@@ -158,6 +159,7 @@ VW_EUP_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 1,
         "category": "vw_eup",
     },
     "xvu.c.ac.u2": {
@@ -167,6 +169,7 @@ VW_EUP_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 1,
         "category": "vw_eup",
     },
     "xvu.c.ccs.i": {
@@ -194,6 +197,7 @@ VW_EUP_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "vw_eup",
     },
     "xvu.c.dc.i1": {
@@ -230,6 +234,7 @@ VW_EUP_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "vw_eup",
     },
     "xvu.c.dc.u2": {
@@ -239,6 +244,7 @@ VW_EUP_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "vw_eup",
     },
     "xvu.c.eff.calc": {

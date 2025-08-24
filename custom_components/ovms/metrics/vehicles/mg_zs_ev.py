@@ -144,6 +144,7 @@ MG_ZS_EV_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "mg_zs_ev",
     },
     "xmg.v.bat.voltage.vcu": {
@@ -153,6 +154,7 @@ MG_ZS_EV_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "mg_zs_ev",
     },
 
@@ -164,6 +166,7 @@ MG_ZS_EV_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "mg_zs_ev",
     },
     "xmg.v.bms.cell.voltage.min": {
@@ -173,6 +176,7 @@ MG_ZS_EV_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "mg_zs_ev",
     },
     "xmg.v.bms.mainrelay.b": {
@@ -288,6 +292,7 @@ MG_ZS_EV_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "mg_zs_ev",
     },
     "xmg.v.vcu.dcdc.mode": {
@@ -312,6 +317,7 @@ MG_ZS_EV_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "mg_zs_ev",
     },
     "xmg.v.vcu.dcdc.temp": {

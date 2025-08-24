@@ -21,7 +21,7 @@ from homeassistant.const import (
 # Custom unit constants
 UNIT_AMPERE_HOUR = "Ah"
 
-# Battery metrics
+# Battery related metrics
 BATTERY_METRICS = {
     # 12V Battery metrics
     "v.b.12v.current": {
@@ -40,6 +40,7 @@ BATTERY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "battery",
     },
     "v.b.12v.voltage.alert": {
@@ -56,6 +57,7 @@ BATTERY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "battery",
     },
 
@@ -108,6 +110,7 @@ BATTERY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "battery",
         "has_cell_data": True,
     },
@@ -119,6 +122,7 @@ BATTERY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "battery",
         "has_cell_data": True,
     },
@@ -129,6 +133,7 @@ BATTERY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "battery",
         "has_cell_data": True,
     },
@@ -139,6 +144,7 @@ BATTERY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "battery",
         "has_cell_data": True,
     },
@@ -347,6 +353,7 @@ BATTERY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "battery",
     },
     "v.b.p.voltage.grad": {
@@ -356,6 +363,7 @@ BATTERY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "battery",
     },
     "v.b.p.voltage.max": {
@@ -365,6 +373,7 @@ BATTERY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "battery",
     },
     "v.b.p.voltage.min": {
@@ -374,6 +383,7 @@ BATTERY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "battery",
     },
     "v.b.p.voltage.stddev": {
@@ -383,6 +393,7 @@ BATTERY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "battery",
     },
     "v.b.p.voltage.stddev.max": {
@@ -392,6 +403,7 @@ BATTERY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 3,
         "category": "battery",
     },
     "v.b.power": {
@@ -473,6 +485,7 @@ BATTERY_METRICS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricPotential.VOLT,
+        "suggested_display_precision": 2,
         "category": "battery",
     },
     "v.e.regenbrake": {

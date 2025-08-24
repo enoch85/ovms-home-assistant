@@ -98,6 +98,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = attributes.get("unit_of_measurement") or attributes.get("unit")
         self._attr_icon = attributes.get("icon")
+        self._attr_suggested_display_precision = attributes.get("suggested_display_precision")
 
         # For timestamp sensors, set explicit metadata values
         if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
@@ -293,6 +294,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_native_unit_of_measurement = sensor_type["native_unit_of_measurement"]
         self._attr_entity_category = sensor_type["entity_category"]
         self._attr_icon = sensor_type["icon"]
+        self._attr_suggested_display_precision = sensor_type["suggested_display_precision"]
 
         # For timestamp sensors, set explicit metadata values
         if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
