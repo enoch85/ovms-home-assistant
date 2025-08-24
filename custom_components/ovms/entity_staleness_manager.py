@@ -79,7 +79,7 @@ class EntityStalenessManager:
 
         if self._enabled:
             self._start_cleanup_task()
-            
+
         # Schedule diagnostic sensor creation for after platform setup
         self.hass.async_create_task(self._async_create_diagnostic_sensor())
 
@@ -87,7 +87,7 @@ class EntityStalenessManager:
         """Create a simple diagnostic sensor asynchronously."""
         # Small delay to ensure platforms are loaded
         await asyncio.sleep(1.0)
-        
+
         # Create device info for the diagnostic sensor
         vehicle_id = self.config.get(CONF_VEHICLE_ID, "unknown")
         device_info = {
@@ -96,14 +96,14 @@ class EntityStalenessManager:
             "manufacturer": "Open Vehicles",
             "model": "OVMS v3",
         }
-        
+
         sensor = OVMSStalenessStatusSensor(self, device_info)
-        
+
         sensor_data = {
             "entity_type": "sensor",
             "diagnostic_sensor": sensor
         }
-        
+
         # Send to sensor platform
         async_dispatcher_send(self.hass, SIGNAL_ADD_ENTITIES, sensor_data)
         _LOGGER.debug("Diagnostic sensor creation signal sent")
@@ -152,7 +152,7 @@ class EntityStalenessManager:
             already_stale_count = 0
             stale_entities = []
             current_time = dt_util.utcnow()
-            
+
             # Find OVMS entities that are unavailable (scheduled for removal)
             for entity_id in entity_registry.entities:
                 # Only process OVMS entities
@@ -163,28 +163,28 @@ class EntityStalenessManager:
                 if state and state.state in ["unavailable", "unknown"]:
                     if hasattr(state, 'last_updated') and state.last_updated:
                         hours_stale = (current_time - state.last_updated).total_seconds() / 3600
-                        
+
                         # Count ALL unavailable entities as pending removal
                         pending_removal_count += 1
-                        
+
                         # Also track which ones have already exceeded the threshold
                         already_exceeded = hours_stale > self._staleness_hours
                         if already_exceeded:
                             already_stale_count += 1
-                        
+
                         # Get friendly name
                         entity_entry = entity_registry.async_get(entity_id)
                         friendly_name = entity_entry.name if entity_entry and entity_entry.name else entity_id
-                        
+
                         # Calculate FIXED removal time based on when entity became unavailable + threshold
                         # This time should NOT change once calculated
                         removal_time = state.last_updated + timedelta(hours=self._staleness_hours)
-                        
+
                         if already_exceeded:
                             status = "eligible_for_removal"
                         else:
                             status = "pending_removal"
-                        
+
                         stale_entities.append({
                             "entity_id": entity_id,
                             "friendly_name": friendly_name,
@@ -205,7 +205,7 @@ class EntityStalenessManager:
                 "delete_history": self._delete_history,
                 "last_check": current_time.isoformat(),
             }
-            
+
         except Exception as ex:
             _LOGGER.exception("Error getting staleness info: %s", ex)
             return {
@@ -262,7 +262,7 @@ class EntityStalenessManager:
                     continue
 
                 await self._cleanup_unavailable_entities()
-                
+
                 # No need to notify diagnostic sensor - it updates on demand
 
             except asyncio.CancelledError:
@@ -308,7 +308,7 @@ class EntityStalenessManager:
                     )
                     # Log details for debugging
                     for entity_id, hours, last_updated in unavailable_entities:
-                        _LOGGER.debug("Removing %s: last updated %s (%.1f hours ago)", 
+                        _LOGGER.debug("Removing %s: last updated %s (%.1f hours ago)",
                                     entity_id, last_updated.isoformat(), hours)
                     await self._async_remove_entities(entity_ids)
                 else:
@@ -318,7 +318,7 @@ class EntityStalenessManager:
                     )
                     # Log details for debugging
                     for entity_id, hours, last_updated in unavailable_entities:
-                        _LOGGER.debug("Hiding %s: last updated %s (%.1f hours ago)", 
+                        _LOGGER.debug("Hiding %s: last updated %s (%.1f hours ago)",
                                     entity_id, last_updated.isoformat(), hours)
                     await self._async_hide_entities(entity_ids)
 
@@ -341,7 +341,7 @@ class EntityStalenessManager:
                         )
                         hidden_count += 1
                         _LOGGER.debug("Hidden unavailable entity from UI: %s", entity_id)
-                        
+
                     elif entity_entry and entity_entry.hidden_by:
                         _LOGGER.debug("Entity %s already hidden", entity_id)
                     else:

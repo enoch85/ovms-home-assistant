@@ -41,13 +41,13 @@ DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by d
 
 # System/Integration blacklist - patterns that are always filtered (developer controlled)
 SYSTEM_TOPIC_BLACKLIST = [
-    ".log", 
-    "battery.log", 
-    "power.log", 
-    "gps.log", 
+    ".log",
+    "battery.log",
+    "power.log",
+    "gps.log",
     "xrt.log",
     "event.system.modem.muxstart",
-    "event.system.modem.netwait", 
+    "event.system.modem.netwait",
     "event.system.modem.netstart",
     "event.system.modem.netmode",
     "event.system.modem.gotip"
