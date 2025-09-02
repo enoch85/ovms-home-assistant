@@ -1,15 +1,17 @@
 """Entity staleness manager for OVMS integration."""
 import asyncio
 import logging
-from typing import Dict, Optional, List
-from datetime import datetime, timezone, timedelta
+from typing import Dict, Optional, List, Any
+from datetime import datetime
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_registry import RegistryEntryHider
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_call_later
 from homeassistant.const import EntityCategory
 from homeassistant.components.sensor import SensorEntity
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -21,73 +23,147 @@ from .const import (
     LOGGER_NAME,
     SIGNAL_ADD_ENTITIES,
     DOMAIN,
+    STALENESS_INITIAL_CACHE_DELAY,
+    STALENESS_DIAGNOSTIC_SENSOR_DELAY,
+    STALENESS_CLEANUP_START_DELAY,
+    STALENESS_CLEANUP_INTERVAL,
+    STALENESS_FIRST_RUN_EXTRA_WAIT,
 )
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 
-class OVMSStalenessStatusSensor(SensorEntity):
+def _is_ovms_entity(entity_id: str) -> bool:
+    """Return True if the entity belongs to the OVMS integration."""
+    return entity_id.startswith(
+        ("sensor.ovms_", "binary_sensor.ovms_", "switch.ovms_", "device_tracker.ovms_")
+    )
+
+
+class OVMSStalenessStatusSensor(SensorEntity, RestoreEntity):
     """Diagnostic sensor showing count of entities scheduled for removal."""
 
-    def __init__(self, staleness_manager: "EntityStalenessManager", device_info: dict) -> None:
+    _attr_name = "OVMS Staleness Status"
+    _attr_unique_id = "ovms_staleness_status"
+    _attr_icon = "mdi:clock-alert-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_unit_of_measurement = "entities"
+    _attr_entity_registry_enabled_default = False  # Hidden by default in UI
+
+    def __init__(self, staleness_manager: "EntityStalenessManager", device_info: Dict[str, Any]) -> None:
         """Initialize the sensor."""
         self._manager = staleness_manager
-        self._attr_name = "OVMS Staleness Status"
-        self._attr_unique_id = "ovms_staleness_status"
-        self._attr_icon = "mdi:clock-alert-outline"
-        self._attr_entity_category = EntityCategory.DIAGNOSTIC
-        self._attr_unit_of_measurement = "entities"
-        self._attr_native_value = 0
-        self._attr_extra_state_attributes = {}
         self._attr_device_info = device_info
+        self._restored_data: Dict[str, Any] = {}
 
     @property
     def native_value(self) -> int:
         """Return the number of entities scheduled for removal."""
-        info = self._manager.get_staleness_info()
-        return info.get("count", 0)  # This is now pending_removal_count
+        # Use manager's cache first, fall back to restored data if cache not ready
+        cache_count = self._manager._cache.get("count")
+        if cache_count is not None:
+            return cache_count
+        return self._restored_data.get("count", 0)
 
     @property
-    def extra_state_attributes(self) -> dict:
-        """Return additional state attributes."""
-        return self._manager.get_staleness_info()
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return cached staleness information (non-blocking)."""
+        # Use manager's cache first, fall back to restored data if cache not ready
+        cache = self._manager._cache
+        if cache.get("count") is not None:
+            return cache.copy()
+        return self._restored_data.copy()
+
+    async def async_added_to_hass(self) -> None:
+        """Restore previous state when added to Home Assistant."""
+        await super().async_added_to_hass()
+        
+        # Restore the last known state
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            # Restore numeric state
+            try:
+                restored_count = int(last_state.state) if last_state.state.isdigit() else 0
+                self._restored_data["count"] = restored_count
+            except (ValueError, AttributeError):
+                self._restored_data["count"] = 0
+            
+            # Restore attributes if available
+            if last_state.attributes:
+                self._restored_data.update(last_state.attributes)
+                
+        _LOGGER.debug("Restored staleness sensor state: count=%d", self._restored_data.get("count", 0))
 
 
 class EntityStalenessManager:
     """Manager for cleaning up stale entities based on Home Assistant's built-in availability."""
 
-    def __init__(self, hass: HomeAssistant, config: Dict):
+    def __init__(self, hass: HomeAssistant, config: Dict[str, Any]) -> None:
         """Initialize the staleness manager."""
         self.hass = hass
         self.config = config
         self._cleanup_task: Optional[asyncio.Task] = None
         self._shutting_down = False
+        
+        # Simple cache - gets populated immediately when enabled
+        self._cache = {
+            "count": 0,
+            "pending_entities": "Waiting...",
+            "staleness_enabled": False,
+            "staleness_threshold_hours": 0,
+            "action": "hide",
+            "last_check": "Not yet checked",
+            "errors": 0,  # Error counter for debugging
+            "last_error": None,  # Last error message
+        }
 
-        # Get configuration - None means disabled, any number means enabled
+        # Get configuration
         self._staleness_hours = config.get(CONF_ENTITY_STALENESS_MANAGEMENT, DEFAULT_ENTITY_STALENESS_MANAGEMENT)
-        if self._staleness_hours is None:
-            self._enabled = False
-            self._staleness_hours = 24  # Use 24 for calculations when needed (even though disabled)
-        else:
-            self._enabled = True
+        self._enabled = self._staleness_hours is not None
         self._delete_history = config.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
 
-        _LOGGER.info(
-            "Entity staleness manager initialized: enabled=%s, threshold=%d hours, delete_history=%s",
-            self._enabled, self._staleness_hours, self._delete_history
-        )
+        # Update cache with actual config
+        self._cache.update({
+            "staleness_enabled": self._enabled,
+            "staleness_threshold_hours": self._staleness_hours or "disabled",
+            "action": "delete" if self._delete_history else "hide",
+        })
 
+        _LOGGER.info("Staleness manager: enabled=%s", self._enabled)
         if self._enabled:
-            self._start_cleanup_task()
+            _LOGGER.info("Staleness threshold: %dh", self._staleness_hours)
 
-        # Schedule diagnostic sensor creation for after platform setup
-        self.hass.async_create_task(self._async_create_diagnostic_sensor())
+        # Schedule background tasks (non-blocking) - only if enabled
+        if self._enabled:
+            async_call_later(self.hass, STALENESS_CLEANUP_START_DELAY, lambda _: self._schedule_cleanup_task())
+            async_call_later(self.hass, STALENESS_DIAGNOSTIC_SENSOR_DELAY, lambda _: self._schedule_diagnostic_sensor())
+            # Do an immediate cache update (non-blocking) to show current status right away
+            async_call_later(self.hass, STALENESS_INITIAL_CACHE_DELAY, lambda _: self._update_cache_immediately())
+
+    def _schedule_cleanup_task(self) -> None:
+        """Schedule the cleanup task to start (called by async_call_later)."""
+        if not self._shutting_down and self._enabled:
+            # Use call_soon_threadsafe to get back to the event loop
+            self.hass.loop.call_soon_threadsafe(self._start_cleanup_task)
+
+    def _schedule_diagnostic_sensor(self) -> None:
+        """Schedule diagnostic sensor creation (called by async_call_later)."""
+        if not self._shutting_down:
+            # Use call_soon_threadsafe to get back to the event loop
+            self.hass.loop.call_soon_threadsafe(
+                lambda: self.hass.async_create_task(self._async_create_diagnostic_sensor())
+            )
+
+    def _update_cache_immediately(self) -> None:
+        """Update cache immediately on startup to show current status (called by async_call_later)."""
+        if not self._shutting_down and self._enabled:
+            # Safe to call from thread since it's synchronous
+            self.get_staleness_info()
 
     async def _async_create_diagnostic_sensor(self) -> None:
         """Create a simple diagnostic sensor asynchronously."""
-        # Small delay to ensure platforms are loaded
-        await asyncio.sleep(1.0)
-
+        # No additional delay needed here since call_later already handled the timing
+        
         # Create device info for the diagnostic sensor
         vehicle_id = self.config.get(CONF_VEHICLE_ID, "unknown")
         device_info = {
@@ -114,145 +190,123 @@ class EntityStalenessManager:
             self._cleanup_task = self.hass.async_create_task(self._async_cleanup_stale_entities())
             _LOGGER.debug("Started entity staleness cleanup task")
 
-    def update_config(self, config: Dict) -> None:
+    def update_config(self, config: Dict[str, Any]) -> None:
         """Update configuration and restart cleanup task if needed."""
         old_enabled = self._enabled
-        old_staleness_hours = self._staleness_hours
-        old_delete_history = self._delete_history
-
+        
         self._staleness_hours = config.get(CONF_ENTITY_STALENESS_MANAGEMENT, DEFAULT_ENTITY_STALENESS_MANAGEMENT)
-        if self._staleness_hours is None:
-            self._enabled = False
-            self._staleness_hours = 24  # Use 24 for calculations when needed (even though disabled)
-        else:
-            self._enabled = True
+        self._enabled = self._staleness_hours is not None
         self._delete_history = config.get(CONF_DELETE_STALE_HISTORY, DEFAULT_DELETE_STALE_HISTORY)
 
-        _LOGGER.info(
-            "Entity staleness configuration updated: enabled=%s, threshold=%d hours, delete_history=%s",
-            self._enabled, self._staleness_hours, self._delete_history
-        )
+        # Update cache with new config
+        self._cache.update({
+            "staleness_enabled": self._enabled,
+            "action": "delete" if self._delete_history else "hide",
+            "pending_entities": "Config updated - waiting...",
+        })
+        
+        if self._enabled:
+            self._cache["staleness_threshold_hours"] = self._staleness_hours
+            _LOGGER.info("Staleness config updated: enabled=True, threshold=%dh", self._staleness_hours)
+        else:
+            self._cache["staleness_threshold_hours"] = "disabled"
+            _LOGGER.info("Staleness config updated: enabled=False")
 
-        # Restart cleanup task if settings changed
-        if (old_enabled != self._enabled or old_staleness_hours != self._staleness_hours or
-            old_delete_history != self._delete_history):
-            # Clean up existing tasks
+        # Restart cleanup task if needed
+        if old_enabled != self._enabled:
             if self._cleanup_task and not self._cleanup_task.done():
                 self._cleanup_task.cancel()
-
             if self._enabled:
                 self._start_cleanup_task()
-            # No need for periodic updates when disabled
 
-    def get_staleness_info(self) -> Dict:
-        """Get current staleness information for diagnostic purposes."""
+    def get_staleness_info(self) -> Dict[str, Any]:
+        """Update cache with current staleness information (called from background task)."""
+        # Don't process if staleness management is disabled
+        if not self._enabled:
+            self._cache.update({
+                "count": 0,
+                "pending_entities": "Staleness management is disabled",
+                "last_check": dt_util.utcnow().isoformat(),
+            })
+            return self._cache
+            
         try:
             entity_registry = er.async_get(self.hass)
-            pending_removal_count = 0
-            already_stale_count = 0
             current_time = dt_util.utcnow()
-
-            # Find OVMS entities that are unavailable (scheduled for removal)
-            pending_entities = {}  # Simplified format: friendly_name -> time_info
+            stale_entities = []
             
-            for entity_id in entity_registry.entities:
-                # Only process OVMS entities
-                if not entity_id.startswith(("sensor.ovms_", "binary_sensor.ovms_", "switch.ovms_", "device_tracker.ovms_")):
+            # Iterate through entity registry entries directly for better performance
+            for entity_id, entity_entry in entity_registry.entities.items():
+                if not _is_ovms_entity(entity_id):
                     continue
 
                 state = self.hass.states.get(entity_id)
-                if state and state.state in ["unavailable", "unknown"]:
-                    if hasattr(state, 'last_updated') and state.last_updated:
-                        hours_stale = (current_time - state.last_updated).total_seconds() / 3600
-
-                        # Count ALL unavailable entities as pending removal
-                        pending_removal_count += 1
-
-                        # Also track which ones have already exceeded the threshold
-                        already_exceeded = hours_stale > self._staleness_hours
-                        if already_exceeded:
-                            already_stale_count += 1
-
-                        # Get friendly name
-                        entity_entry = entity_registry.async_get(entity_id)
-                        friendly_name = entity_entry.name if entity_entry and entity_entry.name else entity_id
-
-                        # Add to simplified pending entities dict
-                        if already_exceeded:
-                            pending_entities[friendly_name] = "eligible for removal"
+                if state and state.state in ["unavailable", "unknown"] and hasattr(state, 'last_updated') and state.last_updated:
+                    hours_stale = (current_time - state.last_updated).total_seconds() / 3600
+                    
+                    # Use friendly name from entity registry entry (already have it from the loop)
+                    friendly_name = entity_entry.name if entity_entry.name else entity_id
+                    
+                    # Cap at 40 entities for clean display
+                    if len(stale_entities) < 40:
+                        if hours_stale > self._staleness_hours:
+                            stale_entities.append(f"{friendly_name} (eligible for removal)")
                         else:
-                            hours_until_removal = round(self._staleness_hours - hours_stale, 1)
-                            pending_entities[friendly_name] = f"{hours_until_removal}h"
+                            remaining = round(self._staleness_hours - hours_stale, 1)
+                            stale_entities.append(f"{friendly_name} ({remaining}h)")
 
-            return {
-                "count": pending_removal_count,  # Total entities scheduled for removal
-                "pending_removal_count": pending_removal_count,  # All unavailable entities
-                "already_stale_count": already_stale_count,  # Entities that have exceeded threshold
-                "pending_entities": pending_entities,  # Simplified: friendly_name -> time_info
-                "staleness_threshold_hours": self._staleness_hours,
-                "staleness_enabled": self._enabled,
-                "action": "delete" if self._delete_history else "hide",
+            # Update cache
+            self._cache.update({
+                "count": len(stale_entities),
+                "pending_entities": "\n".join(stale_entities) if stale_entities else "No stale entities",
                 "last_check": current_time.isoformat(),
-            }
+            })
+            
+            if len(stale_entities) >= 40:
+                self._cache["entities_note"] = f"Showing first 40 entities"
+
+            return self._cache
 
         except Exception as ex:
             _LOGGER.exception("Error getting staleness info: %s", ex)
-            return {
+            self._cache.update({
                 "count": 0,
-                "error": str(ex),
-                "staleness_enabled": self._enabled,
-                "staleness_threshold_hours": self._staleness_hours
-            }
-
-    def get_entity_stats(self) -> Dict[str, int]:
-        """Get statistics about OVMS entities."""
-        entity_registry = er.async_get(self.hass)
-
-        total_ovms = 0
-        available_ovms = 0
-        unavailable_ovms = 0
-
-        # Count OVMS entities and their states
-        for entity_id in entity_registry.entities:
-            if entity_id.startswith(("sensor.ovms_", "binary_sensor.ovms_", "switch.ovms_", "device_tracker.ovms_")):
-                total_ovms += 1
-                state = self.hass.states.get(entity_id)
-                if state and state.state in ["unavailable", "unknown"]:
-                    unavailable_ovms += 1
-                else:
-                    available_ovms += 1
-
-        return {
-            "total_ovms_entities": total_ovms,
-            "available_entities": available_ovms,
-            "unavailable_entities": unavailable_ovms,
-            "staleness_threshold_hours": self._staleness_hours,
-            "enabled": self._enabled,
-        }
+                "pending_entities": f"Error: {str(ex)}",
+                "last_check": dt_util.utcnow().isoformat(),
+                "errors": self._cache.get("errors", 0) + 1,
+                "last_error": str(ex),
+            })
+            return self._cache
 
     async def _async_cleanup_stale_entities(self) -> None:
         """Periodically clean up entities that Home Assistant marks as unavailable."""
         _LOGGER.debug("Entity staleness cleanup task started")
 
-        # Do an initial cleanup immediately after startup
+        # Since call_later already handled the initial delay, we can start with a cleanup
+        # Give a bit more time for HA to be fully ready, but don't block initialization
         try:
             if self._enabled:
-                _LOGGER.debug("Running initial staleness cleanup")
-                await self._cleanup_unavailable_entities()
+                _LOGGER.debug("Waiting additional %d seconds for HA to fully stabilize before first cleanup", STALENESS_FIRST_RUN_EXTRA_WAIT)
+                await asyncio.sleep(STALENESS_FIRST_RUN_EXTRA_WAIT)
+                if not self._shutting_down:
+                    _LOGGER.debug("Running initial staleness cleanup")
+                    await self._cleanup_unavailable_entities()
+                    # Update cache after initial cleanup
+                    self.get_staleness_info()
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.exception("Error in initial staleness cleanup: %s", ex)
 
         while not self._shutting_down:
             try:
-                # Wait 1 hour between cleanups
-                await asyncio.sleep(3600)  # 1 hour
+                # Wait between cleanups
+                await asyncio.sleep(STALENESS_CLEANUP_INTERVAL)
 
                 if not self._enabled:
                     continue
 
                 await self._cleanup_unavailable_entities()
-
-                # No need to notify diagnostic sensor - it updates on demand
+                # Update cache after cleanup
+                self.get_staleness_info()
 
             except asyncio.CancelledError:
                 _LOGGER.debug("Entity staleness cleanup task cancelled")
@@ -272,9 +326,9 @@ class EntityStalenessManager:
             current_time = dt_util.utcnow()
 
             # Find OVMS entities that are unavailable
-            for entity_id in entity_registry.entities:
+            for entity_id, entity_entry in entity_registry.entities.items():
                 # Only process OVMS entities
-                if not entity_id.startswith(("sensor.ovms_", "binary_sensor.ovms_", "switch.ovms_", "device_tracker.ovms_")):
+                if not _is_ovms_entity(entity_id):
                     continue
 
                 # Check if entity is unavailable in Home Assistant's state machine
@@ -314,7 +368,7 @@ class EntityStalenessManager:
         except Exception as ex:
             _LOGGER.exception("Error cleaning up unavailable entities: %s", ex)
 
-    async def _async_hide_entities(self, entity_ids: list) -> None:
+    async def _async_hide_entities(self, entity_ids: List[str]) -> None:
         """Hide entities from UI while preserving their history."""
         try:
             entity_registry = er.async_get(self.hass)
@@ -345,7 +399,7 @@ class EntityStalenessManager:
         except Exception as ex:
             _LOGGER.exception("Error hiding entities: %s", ex)
 
-    async def _async_remove_entities(self, entity_ids: list) -> None:
+    async def _async_remove_entities(self, entity_ids: List[str]) -> None:
         """Completely remove entities from Home Assistant including history."""
         try:
             entity_registry = er.async_get(self.hass)

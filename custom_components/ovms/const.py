@@ -61,6 +61,13 @@ DEFAULT_TOPIC_BLACKLIST = SYSTEM_TOPIC_BLACKLIST + DEFAULT_USER_TOPIC_BLACKLIST
 DEFAULT_ENTITY_STALENESS_MANAGEMENT = None  # Disabled by default - None means disabled, any number means enabled with that many hours
 DEFAULT_DELETE_STALE_HISTORY = False  # Preserve history by default
 
+# Entity staleness manager timing constants (seconds)
+STALENESS_INITIAL_CACHE_DELAY = 5
+STALENESS_DIAGNOSTIC_SENSOR_DELAY = 30
+STALENESS_CLEANUP_START_DELAY = 120
+STALENESS_CLEANUP_INTERVAL = 1800  # 30 minutes
+STALENESS_FIRST_RUN_EXTRA_WAIT = 180  # 3 minutes
+
 # Options
 PROTOCOLS = ["mqtt", "mqtts"]
 UNIT_SYSTEMS = ["metric", "imperial"]
