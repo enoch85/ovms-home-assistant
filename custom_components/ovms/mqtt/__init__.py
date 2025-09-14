@@ -120,6 +120,11 @@ class OVMSMQTTClient:
         # Add to discovered topics
         self.discovered_topics.add(topic)
 
+        # Check if this is a command response and route it to the command handler
+        if "client/rr/response" in topic:
+            self.command_handler.process_response(topic, payload)
+            return
+
         # Track GPS quality topics for location accuracy
         if any(kw in topic.lower() for kw in ["gpssq", "gps_sq", "gps/sq", "gpshdop", "gps_hdop"]):
             self._track_gps_quality_topic(topic, payload)
