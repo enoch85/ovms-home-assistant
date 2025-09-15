@@ -227,8 +227,14 @@ class CommandHandler:
             }
 
         except asyncio.TimeoutError:
-            _LOGGER.debug(
-                "Command timed out: %s (ID: %s)", command, command_id
+            _LOGGER.warning(
+                "Command '%s %s' (ID: %s) timed out after %d seconds. " 
+                "No response received from OVMS device. This could indicate: "
+                "1) OVMS firmware doesn't support MQTT commands, "
+                "2) OVMS device is not subscribed to command topics, "
+                "3) OVMS device configuration issue. "
+                "Try updating OVMS firmware or check OVMS MQTT configuration.",
+                command, parameters, command_id, timeout
             )
             # Clean up
             if command_id in self.pending_commands:
@@ -261,15 +267,22 @@ class CommandHandler:
         try:
             # Extract command ID from response topic
             command_id = topic.split("/")[-1]
+            
+            _LOGGER.debug("Processing command response for ID %s: %s", command_id, payload[:100])
 
             # Look up pending command
             if command_id in self.pending_commands:
                 future = self.pending_commands[command_id]["future"]
                 if not future.done():
                     future.set_result(payload)
+                    _LOGGER.debug("Successfully completed command %s", command_id)
+                else:
+                    _LOGGER.warning("Received response for already completed command %s", command_id)
 
                 # Clean up
                 del self.pending_commands[command_id]
+            else:
+                _LOGGER.warning("Received response for unknown command ID: %s", command_id)
 
         except Exception as ex:
             _LOGGER.exception("Error processing command response: %s", ex)

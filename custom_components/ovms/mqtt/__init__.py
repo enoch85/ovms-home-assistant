@@ -121,7 +121,11 @@ class OVMSMQTTClient:
         self.discovered_topics.add(topic)
 
         # Check if this is a command response and route it to the command handler
+        # This ensures command responses (client/rr/response/*) are properly 
+        # routed to complete pending command futures instead of being treated
+        # as regular entity data
         if "client/rr/response" in topic:
+            _LOGGER.debug("Routing command response topic: %s", topic)
             self.command_handler.process_response(topic, payload)
             return
 
