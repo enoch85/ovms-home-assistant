@@ -4,7 +4,7 @@ import re
 from typing import Dict, Any, Optional, Tuple, List
 
 from .. import metrics
-from ..const import LOGGER_NAME, CONF_TOPIC_BLACKLIST, SYSTEM_TOPIC_BLACKLIST, DEFAULT_USER_TOPIC_BLACKLIST
+from ..const import LOGGER_NAME, CONF_TOPIC_BLACKLIST, SYSTEM_TOPIC_BLACKLIST, SYSTEM_SWITCH_BLACKLIST, DEFAULT_USER_TOPIC_BLACKLIST
 from ..metrics import (
     BINARY_METRICS,
     get_metric_by_path,
@@ -205,16 +205,18 @@ class TopicParser:
         if self._should_be_binary_sensor(parts, metric_path):
             return "binary_sensor"
 
-        # Check for commands/switches
-        if "command" in parts or any(
+        # Check for commands/switches (v.e.cabinsetpoint is not a switch)
+        if metric_path not in SYSTEM_SWITCH_BLACKLIST and (
+            "command" in parts or any(            
             switch_pattern in "_".join(parts).lower()
-            for switch_pattern in [
-                "switch",
-                "toggle",
-                "set",
-                "enable",
-                "disable",
-            ]
+                for switch_pattern in [
+                    "switch",
+                    "toggle",
+                    "set",
+                    "enable",
+                    "disable",
+                ]
+            )
         ):
             return "switch"
 

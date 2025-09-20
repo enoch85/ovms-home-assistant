@@ -52,6 +52,7 @@ SYSTEM_TOPIC_BLACKLIST = [
     "event.system.modem.netmode",
     "event.system.modem.gotip"
 ]
+SYSTEM_SWITCH_BLACKLIST = ["v.e.cabinsetpoint"] #Metrics that could be parsed as switches but should not
 
 # User customizable blacklist - additional patterns users can configure
 DEFAULT_USER_TOPIC_BLACKLIST = []
