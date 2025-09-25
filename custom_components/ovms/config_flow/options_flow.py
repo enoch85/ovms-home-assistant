@@ -157,8 +157,8 @@ class OVMSOptionsFlow(OptionsFlow):
             ): vol.In(TOPIC_STRUCTURES),
             vol.Optional(
                 CONF_TOPIC_BLACKLIST,
-                default=','.join(SYSTEM_TOPIC_BLACKLIST + entry_options.get(CONF_TOPIC_BLACKLIST, entry_data.get(CONF_TOPIC_BLACKLIST, DEFAULT_USER_TOPIC_BLACKLIST))),
-                description="Comma-separated list of topics to filter out (e.g. battery.log,xrt.log)"
+                default=','.join(entry_options.get(CONF_TOPIC_BLACKLIST, entry_data.get(CONF_TOPIC_BLACKLIST, DEFAULT_USER_TOPIC_BLACKLIST))),
+                description="Additional topic patterns to filter out (system patterns are always applied). Comma-separated list (e.g. log,gear,notify)"
             ): str,
         })
 
