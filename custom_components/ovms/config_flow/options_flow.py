@@ -39,7 +39,7 @@ class OVMSOptionsFlow(OptionsFlow):
 
     def _get_clean_blacklist_display(self, entry_options, entry_data):
         """Get a clean blacklist for display, replacing legacy patterns with current ones."""
-        from .const import SYSTEM_TOPIC_BLACKLIST, COMBINED_TOPIC_BLACKLIST, LEGACY_TOPIC_BLACKLIST
+        from ..const import SYSTEM_TOPIC_BLACKLIST, COMBINED_TOPIC_BLACKLIST, LEGACY_TOPIC_BLACKLIST
         
         # Get current stored blacklist
         current_blacklist = entry_options.get(CONF_TOPIC_BLACKLIST, entry_data.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST))
