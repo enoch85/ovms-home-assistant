@@ -81,7 +81,9 @@ class OVMSOptionsFlow(OptionsFlow):
             # Process the blacklist string input
             if CONF_TOPIC_BLACKLIST in user_input and isinstance(user_input[CONF_TOPIC_BLACKLIST], str):
                 blacklist_str = user_input[CONF_TOPIC_BLACKLIST]
-                user_input[CONF_TOPIC_BLACKLIST] = [item.strip() for item in blacklist_str.split(',') if item.strip()]
+                # Split, strip, filter empty, and remove duplicates while preserving order
+                blacklist_items = [item.strip() for item in blacklist_str.split(',') if item.strip()]
+                user_input[CONF_TOPIC_BLACKLIST] = list(dict.fromkeys(blacklist_items))
 
             # Process entity staleness management - convert string selection to proper value
             if CONF_ENTITY_STALENESS_MANAGEMENT in user_input:
@@ -156,7 +158,7 @@ class OVMSOptionsFlow(OptionsFlow):
             ): vol.In(TOPIC_STRUCTURES),
             vol.Optional(
                 CONF_TOPIC_BLACKLIST,
-                default=','.join(entry_options.get(CONF_TOPIC_BLACKLIST, entry_data.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST))),
+                default=','.join(list(dict.fromkeys(entry_options.get(CONF_TOPIC_BLACKLIST, entry_data.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST))))),  # Remove duplicates
                 description="Topic patterns to filter out. You can add, remove, or modify any patterns including system defaults. Comma-separated list (e.g. log,gear,custom_pattern)"
             ): str,
         })

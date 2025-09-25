@@ -127,10 +127,18 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
                 
                 if new_system_patterns:
                     # Add new system patterns to user's blacklist (they can remove them if needed)
-                    updated_blacklist = existing_blacklist + new_system_patterns
+                    # But first, remove duplicates to prevent accumulation
+                    updated_blacklist = list(dict.fromkeys(existing_blacklist + new_system_patterns))  # Remove duplicates while preserving order
                     current_options[CONF_TOPIC_BLACKLIST] = updated_blacklist
                     hass.config_entries.async_update_entry(config_entry, options=current_options)
                     _LOGGER.info("Updated blacklist: added %d new system patterns: %s", len(new_system_patterns), new_system_patterns)
+                else:
+                    # Even if no new patterns, clean up any duplicates that might exist
+                    deduplicated_blacklist = list(dict.fromkeys(existing_blacklist))
+                    if len(deduplicated_blacklist) < len(existing_blacklist):
+                        current_options[CONF_TOPIC_BLACKLIST] = deduplicated_blacklist
+                        hass.config_entries.async_update_entry(config_entry, options=current_options)
+                        _LOGGER.info("Cleaned up %d duplicate patterns from blacklist", len(existing_blacklist) - len(deduplicated_blacklist))
 
         # Update the config entry version
         hass.config_entries.async_update_entry(config_entry, version=CONFIG_VERSION)
