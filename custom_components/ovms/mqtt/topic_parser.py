@@ -4,7 +4,14 @@ import re
 from typing import Dict, Any, Optional, Tuple, List
 
 from .. import metrics
-from ..const import LOGGER_NAME, CONF_TOPIC_BLACKLIST, SYSTEM_TOPIC_BLACKLIST, DEFAULT_USER_TOPIC_BLACKLIST
+from ..const import (
+    LOGGER_NAME,
+    CONF_TOPIC_BLACKLIST,
+    CURRENT_SYSTEM_TOPIC_BLACKLIST,
+    HISTORICAL_SYSTEM_TOPIC_BLACKLIST,
+    ALL_SYSTEM_TOPIC_BLACKLIST,
+    DEFAULT_USER_TOPIC_BLACKLIST
+)
 from ..metrics import (
     BINARY_METRICS,
     get_metric_by_path,
@@ -23,9 +30,22 @@ class TopicParser:
         self.structure_prefix = self._format_structure_prefix()
         self.coordinate_entities_created = {}  # Track which coordinate entities we've created
 
-        # Get and normalize the topic blacklist - combine system and user patterns
-        user_blacklist = config.get(CONF_TOPIC_BLACKLIST, DEFAULT_USER_TOPIC_BLACKLIST)
-        combined_blacklist = SYSTEM_TOPIC_BLACKLIST + user_blacklist
+        # Get and normalize the topic blacklist using clean separation of concerns
+        # current_blacklist_default_topic = current topics we want to push as developers
+        # old_blacklist_default_topic = topics that have been in the list, but now are gone  
+        # user_blacklist_topics = a user based list
+        # ALL_BLACKLIST_TOPICS = current_blacklist_default_topic - old_blacklist_default_topic + user_blacklist_topics
+        
+        stored_blacklist = config.get(CONF_TOPIC_BLACKLIST, DEFAULT_USER_TOPIC_BLACKLIST)
+        
+        # Extract only true user patterns (remove any system patterns that might be stored)
+        if isinstance(stored_blacklist, list):
+            user_blacklist_topics = [pattern for pattern in stored_blacklist if pattern not in ALL_SYSTEM_TOPIC_BLACKLIST]
+        else:
+            user_blacklist_topics = DEFAULT_USER_TOPIC_BLACKLIST
+            
+        # Final blacklist: current system patterns + user patterns (old system patterns excluded)
+        combined_blacklist = CURRENT_SYSTEM_TOPIC_BLACKLIST + user_blacklist_topics
         self.topic_blacklist = self._normalize_blacklist(combined_blacklist)
 
     def _format_structure_prefix(self) -> str:
