@@ -43,13 +43,20 @@ DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by d
 SYSTEM_TOPIC_BLACKLIST = [
     "log",
     "gear",
+    "notify",
     "net/good/sq",
     "net/ip",
+    "gps/sq/bad",
+    "gps/sq/good",
+    "aux/12v/blip",
     "modem/muxstart",
     "modem/netwait", 
     "modem/netstart",
     "modem/netmode",
-    "modem/gotip"
+    "modem/gotip",
+    "server/web/socket",
+    "egpio/output",
+    "power/can1"
 ]
 
 # User customizable blacklist - additional patterns users can configure
