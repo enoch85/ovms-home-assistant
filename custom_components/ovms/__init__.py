@@ -113,11 +113,9 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
             # Get existing blacklist (mix of system + user patterns)
             existing_blacklist = current_options.get(CONF_TOPIC_BLACKLIST, current_data.get(CONF_TOPIC_BLACKLIST, []))
 
-                        # Extract only user-added patterns (remove system patterns)
             from .const import COMBINED_TOPIC_BLACKLIST
             user_only_patterns = [pattern for pattern in existing_blacklist if pattern not in COMBINED_TOPIC_BLACKLIST]
 
-            # Update to store only user patterns (system patterns will be applied automatically)
             if user_only_patterns != existing_blacklist:
                 current_options[CONF_TOPIC_BLACKLIST] = user_only_patterns
                 hass.config_entries.async_update_entry(config_entry, options=current_options)

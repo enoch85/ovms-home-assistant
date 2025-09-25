@@ -30,18 +30,14 @@ class TopicParser:
         self.structure_prefix = self._format_structure_prefix()
         self.coordinate_entities_created = {}  # Track which coordinate entities we've created
 
-        # Get and normalize the topic blacklist using clean separation of concerns
-        # current_blacklist_default_topic = current topics we want to push as developers
-        # Extract user blacklist patterns from config (defaults to empty list)
+        # Initialize topic blacklist with system patterns plus user-defined patterns
         stored_blacklist = config.get(CONF_TOPIC_BLACKLIST, USER_TOPIC_BLACKLIST)
         
-        # Extract only true user patterns (remove any system patterns that might be stored)
         if isinstance(stored_blacklist, list):
             user_patterns = [pattern for pattern in stored_blacklist if pattern not in COMBINED_TOPIC_BLACKLIST]
         else:
             user_patterns = USER_TOPIC_BLACKLIST
             
-        # Final blacklist: current system patterns + user patterns (legacy patterns excluded)
         final_blacklist = SYSTEM_TOPIC_BLACKLIST + user_patterns
         self.topic_blacklist = self._normalize_blacklist(final_blacklist)
 
