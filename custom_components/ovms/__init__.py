@@ -148,6 +148,41 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
                     if user_only_patterns:
                         _LOGGER.info("Migration: preserved %d user patterns: %s", len(user_only_patterns), user_only_patterns)
 
+        if version == 2:
+            # Version 2 to 3: Clean up blacklist to remove legacy patterns
+            current_data = dict(config_entry.data)
+            current_options = dict(config_entry.options)
+            
+            # Get existing blacklist
+            existing_blacklist = current_options.get(CONF_TOPIC_BLACKLIST, current_data.get(CONF_TOPIC_BLACKLIST, []))
+            
+            from .const import COMBINED_TOPIC_BLACKLIST, SYSTEM_TOPIC_BLACKLIST, LEGACY_TOPIC_BLACKLIST
+            
+            if existing_blacklist:
+                # Identify truly custom user patterns (not in any system list)
+                user_only_patterns = [pattern for pattern in existing_blacklist if pattern not in COMBINED_TOPIC_BLACKLIST]
+                
+                # For migration, we want: current system patterns + user-only patterns
+                # This replaces legacy system patterns with current ones while preserving user customizations
+                updated_blacklist = SYSTEM_TOPIC_BLACKLIST[:] + user_only_patterns  # Start with current system patterns
+                updated_blacklist = list(dict.fromkeys(updated_blacklist))  # Remove any duplicates
+                
+                # Always update to clean up legacy patterns
+                current_options[CONF_TOPIC_BLACKLIST] = updated_blacklist
+                hass.config_entries.async_update_entry(config_entry, options=current_options)
+                
+                # Log what changed
+                removed_legacy = [p for p in existing_blacklist if p in LEGACY_TOPIC_BLACKLIST]
+                added_current = [p for p in SYSTEM_TOPIC_BLACKLIST if p not in existing_blacklist]
+                
+                _LOGGER.info("V2->V3 Migration: Cleaned up blacklist patterns")
+                if removed_legacy:
+                    _LOGGER.info("V2->V3 Migration: removed %d legacy patterns: %s", len(removed_legacy), removed_legacy)
+                if added_current:
+                    _LOGGER.info("V2->V3 Migration: ensured %d current system patterns: %s", len(added_current), added_current)
+                if user_only_patterns:
+                    _LOGGER.info("V2->V3 Migration: preserved %d user patterns: %s", len(user_only_patterns), user_only_patterns)
+
         # Update the config entry version
         hass.config_entries.async_update_entry(config_entry, version=CONFIG_VERSION)
         return True

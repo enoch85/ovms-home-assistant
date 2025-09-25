@@ -37,6 +37,28 @@ class OVMSOptionsFlow(OptionsFlow):
         self._config_entry = config_entry
         _LOGGER.debug("Initializing options flow for entry: %s", config_entry.entry_id)
 
+    def _get_clean_blacklist_display(self, entry_options, entry_data):
+        """Get a clean blacklist for display, replacing legacy patterns with current ones."""
+        from .const import SYSTEM_TOPIC_BLACKLIST, COMBINED_TOPIC_BLACKLIST, LEGACY_TOPIC_BLACKLIST
+        
+        # Get current stored blacklist
+        current_blacklist = entry_options.get(CONF_TOPIC_BLACKLIST, entry_data.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST))
+        
+        # If it contains legacy patterns, clean it up for display
+        has_legacy = any(pattern in LEGACY_TOPIC_BLACKLIST for pattern in current_blacklist)
+        
+        if has_legacy:
+            # Smart cleanup: keep current system patterns + user-only patterns
+            user_only_patterns = [pattern for pattern in current_blacklist if pattern not in COMBINED_TOPIC_BLACKLIST]
+            clean_blacklist = SYSTEM_TOPIC_BLACKLIST[:] + user_only_patterns
+            clean_blacklist = list(dict.fromkeys(clean_blacklist))  # Remove duplicates
+            _LOGGER.debug("Options flow - cleaned blacklist for display: removed legacy patterns")
+            return ','.join(clean_blacklist)
+        else:
+            # No legacy patterns, just deduplicate
+            clean_blacklist = list(dict.fromkeys(current_blacklist))
+            return ','.join(clean_blacklist)
+
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         _LOGGER.debug("Options flow async_step_init with input: %s", user_input)
@@ -99,6 +121,11 @@ class OVMSOptionsFlow(OptionsFlow):
         # Get current settings
         entry_data = self.config_entry.data
         entry_options = self.config_entry.options
+        
+        # Debug: Log what we're getting from config
+        current_blacklist = entry_options.get(CONF_TOPIC_BLACKLIST, entry_data.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST))
+        _LOGGER.debug("Options flow - current blacklist from config: %s", current_blacklist)
+        _LOGGER.debug("Options flow - DEFAULT_TOPIC_BLACKLIST: %s", DEFAULT_TOPIC_BLACKLIST)
 
         # Determine current port selection
         current_port = entry_data.get(CONF_PORT, 8883)
@@ -158,7 +185,7 @@ class OVMSOptionsFlow(OptionsFlow):
             ): vol.In(TOPIC_STRUCTURES),
             vol.Optional(
                 CONF_TOPIC_BLACKLIST,
-                default=','.join(list(dict.fromkeys(entry_options.get(CONF_TOPIC_BLACKLIST, entry_data.get(CONF_TOPIC_BLACKLIST, DEFAULT_TOPIC_BLACKLIST))))),  # Remove duplicates
+                default=self._get_clean_blacklist_display(entry_options, entry_data),
                 description="Topic patterns to filter out. You can add, remove, or modify any patterns including system defaults. Comma-separated list (e.g. log,gear,custom_pattern)"
             ): str,
         })
