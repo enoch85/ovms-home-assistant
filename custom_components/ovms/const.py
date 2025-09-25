@@ -77,24 +77,6 @@ LEGACY_TOPIC_BLACKLIST = [
 COMBINED_TOPIC_BLACKLIST = SYSTEM_TOPIC_BLACKLIST + LEGACY_TOPIC_BLACKLIST
 
 # Default user topic blacklist patterns - these can be customized by users
-USER_TOPIC_BLACKLIST = []# Legacy blacklist - old patterns that were in the system list before but now removed
-LEGACY_BLACKLIST_TOPICS = [
-    ".log", 
-    "battery.log", 
-    "power.log", 
-    "gps.log", 
-    "xrt.log",
-    "event.system.modem.muxstart",
-    "event.system.modem.netwait",
-    "event.system.modem.netstart", 
-    "event.system.modem.netmode",
-    "event.system.modem.gotip"
-]
-
-# All system topic blacklist patterns combined (current + legacy)
-COMBINED_TOPIC_BLACKLIST = SYSTEM_TOPIC_BLACKLIST + LEGACY_TOPIC_BLACKLIST
-
-# Default user topic blacklist patterns - these can be customized by users
 USER_TOPIC_BLACKLIST = []
 
 DEFAULT_ENTITY_STALENESS_MANAGEMENT = None  # Disabled by default - None means disabled, any number means enabled with that many hours

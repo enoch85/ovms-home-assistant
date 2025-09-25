@@ -157,7 +157,7 @@ class OVMSOptionsFlow(OptionsFlow):
             vol.Optional(
                 CONF_TOPIC_BLACKLIST,
                 default=','.join(entry_options.get(CONF_TOPIC_BLACKLIST, entry_data.get(CONF_TOPIC_BLACKLIST, USER_TOPIC_BLACKLIST))),
-                description="Additional topic patterns to filter out (system patterns are always applied). Comma-separated list (e.g. log,gear,notify)"
+                description="Additional topic patterns to filter out (system patterns are applied automatically). Comma-separated list (e.g. custom_pattern,test_topic)"
             ): str,
         })
 
