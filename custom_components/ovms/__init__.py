@@ -113,13 +113,24 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
             # Get existing blacklist (mix of system + user patterns)
             existing_blacklist = current_options.get(CONF_TOPIC_BLACKLIST, current_data.get(CONF_TOPIC_BLACKLIST, []))
 
-            from .const import COMBINED_TOPIC_BLACKLIST
-            user_only_patterns = [pattern for pattern in existing_blacklist if pattern not in COMBINED_TOPIC_BLACKLIST]
-
-            if user_only_patterns != existing_blacklist:
-                current_options[CONF_TOPIC_BLACKLIST] = user_only_patterns
+            from .const import COMBINED_TOPIC_BLACKLIST, SYSTEM_TOPIC_BLACKLIST
+            
+            if not existing_blacklist:
+                # New user - populate with system defaults 
+                current_options[CONF_TOPIC_BLACKLIST] = SYSTEM_TOPIC_BLACKLIST[:]  # Copy to avoid reference issues
                 hass.config_entries.async_update_entry(config_entry, options=current_options)
-                _LOGGER.info("Migrated blacklist: separated %d user patterns from system patterns", len(user_only_patterns))
+                _LOGGER.info("Initial setup: populated blacklist with system defaults")
+            else:
+                # Existing user - check if we need to add new system patterns
+                user_only_patterns = [pattern for pattern in existing_blacklist if pattern not in COMBINED_TOPIC_BLACKLIST]
+                new_system_patterns = [pattern for pattern in SYSTEM_TOPIC_BLACKLIST if pattern not in existing_blacklist]
+                
+                if new_system_patterns:
+                    # Add new system patterns to user's blacklist (they can remove them if needed)
+                    updated_blacklist = existing_blacklist + new_system_patterns
+                    current_options[CONF_TOPIC_BLACKLIST] = updated_blacklist
+                    hass.config_entries.async_update_entry(config_entry, options=current_options)
+                    _LOGGER.info("Updated blacklist: added %d new system patterns: %s", len(new_system_patterns), new_system_patterns)
 
         # Update the config entry version
         hass.config_entries.async_update_entry(config_entry, version=CONFIG_VERSION)

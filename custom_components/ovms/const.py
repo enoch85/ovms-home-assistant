@@ -79,6 +79,9 @@ COMBINED_TOPIC_BLACKLIST = SYSTEM_TOPIC_BLACKLIST + LEGACY_TOPIC_BLACKLIST
 # Default user topic blacklist patterns - these can be customized by users
 USER_TOPIC_BLACKLIST = []
 
+# Combined default for initial setup - new users get system patterns as starting point
+DEFAULT_TOPIC_BLACKLIST = SYSTEM_TOPIC_BLACKLIST
+
 DEFAULT_ENTITY_STALENESS_MANAGEMENT = None  # Disabled by default - None means disabled, any number means enabled with that many hours
 DEFAULT_DELETE_STALE_HISTORY = False  # Preserve history by default
 
