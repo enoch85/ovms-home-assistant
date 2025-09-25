@@ -39,7 +39,7 @@ DEFAULT_TOPIC_STRUCTURE = "{prefix}/{mqtt_username}/{vehicle_id}"
 DEFAULT_VERIFY_SSL = True
 DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by default
 
-# System/Integration blacklist - patterns that are always filtered (developer controlled)
+# System topic blacklist patterns - these are always applied and cannot be modified by users
 SYSTEM_TOPIC_BLACKLIST = [
     "log",
     "gear",
@@ -50,20 +50,53 @@ SYSTEM_TOPIC_BLACKLIST = [
     "gps/sq/good",
     "aux/12v/blip",
     "modem/muxstart",
-    "modem/netwait", 
+    "modem/netwait",
     "modem/netstart",
     "modem/netmode",
     "modem/gotip",
     "server/web/socket",
     "egpio/output",
-    "power/can1"
+    "power/can1",
 ]
 
-# User customizable blacklist - additional patterns users can configure
-DEFAULT_USER_TOPIC_BLACKLIST = []
+# Legacy topic blacklist patterns - kept for migration compatibility
+LEGACY_TOPIC_BLACKLIST = [
+    ".log",
+    "battery.log",
+    "power.log",
+    "gps.log",
+    "xrt.log",
+    "event.system.modem.muxstart",
+    "event.system.modem.netwait",
+    "event.system.modem.netstart",
+    "event.system.modem.netmode",
+    "event.system.modem.gotip",
+]
 
-# Combined default for initial setup
-DEFAULT_TOPIC_BLACKLIST = SYSTEM_TOPIC_BLACKLIST + DEFAULT_USER_TOPIC_BLACKLIST
+# All system topic blacklist patterns combined (current + legacy)
+COMBINED_TOPIC_BLACKLIST = SYSTEM_TOPIC_BLACKLIST + LEGACY_TOPIC_BLACKLIST
+
+# Default user topic blacklist patterns - these can be customized by users
+USER_TOPIC_BLACKLIST = []# Legacy blacklist - old patterns that were in the system list before but now removed
+LEGACY_BLACKLIST_TOPICS = [
+    ".log", 
+    "battery.log", 
+    "power.log", 
+    "gps.log", 
+    "xrt.log",
+    "event.system.modem.muxstart",
+    "event.system.modem.netwait",
+    "event.system.modem.netstart", 
+    "event.system.modem.netmode",
+    "event.system.modem.gotip"
+]
+
+# All system topic blacklist patterns combined (current + legacy)
+COMBINED_TOPIC_BLACKLIST = SYSTEM_TOPIC_BLACKLIST + LEGACY_TOPIC_BLACKLIST
+
+# Default user topic blacklist patterns - these can be customized by users
+USER_TOPIC_BLACKLIST = []
+
 DEFAULT_ENTITY_STALENESS_MANAGEMENT = None  # Disabled by default - None means disabled, any number means enabled with that many hours
 DEFAULT_DELETE_STALE_HISTORY = False  # Preserve history by default
 

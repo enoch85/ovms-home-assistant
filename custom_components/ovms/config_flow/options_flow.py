@@ -19,8 +19,7 @@ from ..const import (
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_TOPIC_STRUCTURE,
     DEFAULT_VERIFY_SSL,
-    DEFAULT_USER_TOPIC_BLACKLIST,
-    SYSTEM_TOPIC_BLACKLIST,
+    USER_TOPIC_BLACKLIST,
     DEFAULT_ENTITY_STALENESS_MANAGEMENT,
     DEFAULT_DELETE_STALE_HISTORY,
     TOPIC_STRUCTURES,
@@ -157,7 +156,7 @@ class OVMSOptionsFlow(OptionsFlow):
             ): vol.In(TOPIC_STRUCTURES),
             vol.Optional(
                 CONF_TOPIC_BLACKLIST,
-                default=','.join(entry_options.get(CONF_TOPIC_BLACKLIST, entry_data.get(CONF_TOPIC_BLACKLIST, DEFAULT_USER_TOPIC_BLACKLIST))),
+                default=','.join(entry_options.get(CONF_TOPIC_BLACKLIST, entry_data.get(CONF_TOPIC_BLACKLIST, USER_TOPIC_BLACKLIST))),
                 description="Additional topic patterns to filter out (system patterns are always applied). Comma-separated list (e.g. log,gear,notify)"
             ): str,
         })
