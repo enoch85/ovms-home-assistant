@@ -170,6 +170,9 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     try:
         version = config_entry.version
 
+        # Always check for missing client_id regardless of version
+        await _migrate_client_id(hass, config_entry, version)
+
         # If the config entry is already up-to-date, return True
         if version == CONFIG_VERSION:
             return True
@@ -180,9 +183,6 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         if version in [1, 2]:
             # Migrate blacklist patterns to clean format
             await _migrate_blacklist_patterns(hass, config_entry, version)
-
-        # Add stable MQTT client ID if missing (for all versions < 3)
-        await _migrate_client_id(hass, config_entry, version)
 
         # Update the config entry version
         hass.config_entries.async_update_entry(config_entry, version=CONFIG_VERSION)
