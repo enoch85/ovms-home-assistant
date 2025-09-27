@@ -32,6 +32,7 @@ from ..const import (
     CONF_TOPIC_STRUCTURE,
     CONF_VERIFY_SSL,
     CONF_ORIGINAL_VEHICLE_ID,
+    CONF_CLIENT_ID,
     TOPIC_STRUCTURES,
     LOGGER_NAME,
 )
@@ -413,6 +414,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
+
+                # Generate a stable MQTT client ID based on the same unique data
+                client_id_base = f"{self.mqtt_config[CONF_HOST]}_{user_input[CONF_VEHICLE_ID]}"
+                client_id = f"ha_ovms_{hashlib.md5(client_id_base.encode()).hexdigest()[:12]}"
+                self.mqtt_config[CONF_CLIENT_ID] = client_id
+                _LOGGER.debug("Generated stable MQTT client ID: %s", client_id)
 
                 # Ensure everything is serializable
                 self.mqtt_config["debug_info"] = self._ensure_serializable(self.debug_info)

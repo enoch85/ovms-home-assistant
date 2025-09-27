@@ -3,7 +3,7 @@ import asyncio
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import Platform, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
@@ -139,6 +139,32 @@ async def _migrate_blacklist_patterns(hass: HomeAssistant, config_entry: ConfigE
             _LOGGER.info("V%d Migration: preserved %d user patterns: %s", from_version, len(user_only_patterns), user_only_patterns)
 
 
+async def _migrate_client_id(hass: HomeAssistant, config_entry: ConfigEntry, from_version: int) -> None:
+    """Generate and store stable MQTT client ID for existing installations."""
+    import hashlib
+    from .const import CONF_CLIENT_ID, CONF_VEHICLE_ID
+    
+    current_data = dict(config_entry.data)
+    
+    # Check if client_id already exists
+    if CONF_CLIENT_ID in current_data and current_data[CONF_CLIENT_ID]:
+        _LOGGER.debug("V%d Migration: Client ID already exists: %s", from_version, current_data[CONF_CLIENT_ID])
+        return
+    
+    # Generate stable client ID based on host and vehicle_id
+    host = current_data.get(CONF_HOST, "unknown")
+    vehicle_id = current_data.get(CONF_VEHICLE_ID, "unknown")
+    
+    client_id_base = f"{host}_{vehicle_id}"
+    client_id = f"ha_ovms_{hashlib.md5(client_id_base.encode()).hexdigest()[:12]}"
+    
+    # Update the config entry data
+    current_data[CONF_CLIENT_ID] = client_id
+    hass.config_entries.async_update_entry(config_entry, data=current_data)
+    
+    _LOGGER.info("V%d Migration: Generated stable MQTT client ID: %s", from_version, client_id)
+
+
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migrate an old config entry to new version."""
     try:
@@ -154,6 +180,9 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         if version in [1, 2]:
             # Migrate blacklist patterns to clean format
             await _migrate_blacklist_patterns(hass, config_entry, version)
+
+        # Add stable MQTT client ID if missing (for all versions < 3)
+        await _migrate_client_id(hass, config_entry, version)
 
         # Update the config entry version
         hass.config_entries.async_update_entry(config_entry, version=CONFIG_VERSION)

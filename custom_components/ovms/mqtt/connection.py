@@ -105,6 +105,17 @@ class MQTTConnectionManager:
     async def _create_mqtt_client(self) -> mqtt.Client:
         """Create and configure the MQTT client."""
         client_id = self.config.get(CONF_CLIENT_ID)
+        
+        # Fallback: generate client_id if missing (should not happen after migration)
+        if not client_id:
+            import hashlib
+            import uuid
+            host = self.config.get(CONF_HOST, "unknown")
+            vehicle_id = self.config.get(CONF_VEHICLE_ID, "unknown")
+            fallback_base = f"{host}_{vehicle_id}_{uuid.uuid4().hex[:4]}"
+            client_id = f"ha_ovms_{hashlib.md5(fallback_base.encode()).hexdigest()[:12]}"
+            _LOGGER.warning("Client ID was missing, generated fallback: %s", client_id)
+        
         protocol = mqtt.MQTTv5 if hasattr(mqtt, "MQTTv5") else mqtt.MQTTv311
 
         _LOGGER.debug("Creating MQTT client with ID: %s", client_id)

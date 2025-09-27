@@ -31,7 +31,6 @@ CONF_DELETE_STALE_HISTORY = "delete_stale_history"  # Delete history when hiding
 DEFAULT_PORT = 1883
 DEFAULT_QOS = 1
 DEFAULT_PROTOCOL = "mqtt"
-DEFAULT_CLIENT_ID = "homeassistant_ovms"
 DEFAULT_TOPIC_PREFIX = "ovms"
 DEFAULT_SCAN_INTERVAL = 60
 DEFAULT_UNIT_SYSTEM = "metric"
