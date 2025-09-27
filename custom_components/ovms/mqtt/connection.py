@@ -52,6 +52,7 @@ class MQTTConnectionManager:
         self.reconnect_count = 0
         self.message_callback = message_callback
         self.connection_callback = connection_callback
+        self._use_fallback_tls = False
 
         # Format the structure prefix
         self.structure_prefix = self._format_structure_prefix()
@@ -152,11 +153,33 @@ class MQTTConnectionManager:
                 ssl.create_default_context
             )
 
-            # Allow self-signed certificates if verification is disabled
+            # Enhanced SSL/TLS configuration for broader broker compatibility
             if not verify_ssl:
                 _LOGGER.debug("SSL certificate verification disabled")
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
+            else:
+                # For verified connections, ensure we use secure TLS versions
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
+                
+            # Use Python's secure defaults first, fallback to permissive settings if needed
+            if self._use_fallback_tls:
+                _LOGGER.debug("Using fallback TLS configuration with SECLEVEL=1")
+                try:
+                    context.set_ciphers('DEFAULT:@SECLEVEL=1')
+                except ssl.SSLError:
+                    _LOGGER.warning("Failed to set fallback cipher configuration")
+            # Otherwise use Python's secure defaults (no explicit cipher configuration)
+            
+            # Set options for better TLS compatibility
+            context.options |= ssl.OP_CIPHER_SERVER_PREFERENCE
+            
+            # Additional compatibility settings for modern TLS implementations
+            try:
+                # Disable compression to avoid compatibility issues
+                context.options |= ssl.OP_NO_COMPRESSION
+            except AttributeError:
+                pass
 
             client.tls_set_context(context)
 
@@ -340,6 +363,16 @@ class MQTTConnectionManager:
             return False
 
         except Exception as ex:  # pylint: disable=broad-except
+            # Check if this is an SSL/TLS error and we haven't tried fallback yet
+            if ("SSL" in str(ex) or "TLS" in str(ex)) and not self._use_fallback_tls and self.config.get(CONF_PORT) == 8883:
+                _LOGGER.warning("SSL/TLS connection failed with secure defaults, retrying with fallback configuration")
+                self._use_fallback_tls = True
+                # Recreate client with fallback TLS settings
+                self.client = await self._create_mqtt_client()
+                if self.client:
+                    self._setup_callbacks()
+                    return await self.async_connect()
+                    
             _LOGGER.exception("Failed to connect to MQTT broker: %s", ex)
             return False
 
@@ -374,19 +407,33 @@ class MQTTConnectionManager:
             # Use clean_session=False for persistent sessions
             if hasattr(mqtt, "MQTTv5"):
                 try:
-                    client_options = {"clean_start": False}
-                    await self.hass.async_add_executor_job(
-                        self.client.reconnect, **client_options
-                    )
-                except TypeError:
+                    # For MQTT v5, set clean_start parameter directly on client
+                    original_clean_start = getattr(self.client, 'clean_start', None)
+                    self.client.clean_start = False
+                    await self.hass.async_add_executor_job(self.client.reconnect)
+                    # Restore original setting if it existed
+                    if original_clean_start is not None:
+                        self.client.clean_start = original_clean_start
+                except (TypeError, AttributeError):
                     # Fallback for older clients without clean_start parameter
-                    await self.hass.async_add_executor_job(
-                        self.client.reconnect
-                    )
+                    await self.hass.async_add_executor_job(self.client.reconnect)
             else:
                 await self.hass.async_add_executor_job(self.client.reconnect)
         except Exception as ex:  # pylint: disable=broad-except
-            _LOGGER.exception("Failed to reconnect to MQTT broker: %s", ex)
+            # Special handling for SSL/TLS errors
+            if ("SSL" in str(ex) or "TLS" in str(ex)) and not self._use_fallback_tls and self.config.get(CONF_PORT) == 8883:
+                _LOGGER.warning("SSL/TLS reconnection failed with secure defaults, enabling fallback configuration")
+                self._use_fallback_tls = True
+            elif "SSL" in str(ex) or "TLS" in str(ex):
+                _LOGGER.error(
+                    "SSL/TLS error during MQTT reconnection: %s. "
+                    "This may be due to broker upgrade or stricter TLS validation. "
+                    "Try rebooting your OVMS module or check SSL/TLS settings if issue persists.",
+                    ex
+                )
+            else:
+                _LOGGER.exception("Failed to reconnect to MQTT broker: %s", ex)
+            
             # Schedule another reconnect attempt
             if not self._shutting_down:
                 asyncio.create_task(self._async_reconnect())
