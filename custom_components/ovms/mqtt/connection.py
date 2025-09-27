@@ -169,17 +169,17 @@ class MQTTConnectionManager:
                     context.set_ciphers('DEFAULT:@SECLEVEL=1')
                 except ssl.SSLError:
                     _LOGGER.warning("Failed to set fallback cipher configuration")
-            # Otherwise use Python's secure defaults (no explicit cipher configuration)
-            
-            # Set options for better TLS compatibility
-            context.options |= ssl.OP_CIPHER_SERVER_PREFERENCE
-            
-            # Additional compatibility settings for modern TLS implementations
-            try:
-                # Disable compression to avoid compatibility issues
-                context.options |= ssl.OP_NO_COMPRESSION
-            except AttributeError:
-                pass
+                
+                # Set options for better TLS compatibility (fallback mode only)
+                context.options |= ssl.OP_CIPHER_SERVER_PREFERENCE
+                
+                # Additional compatibility settings for modern TLS implementations
+                try:
+                    # Disable compression to avoid compatibility issues
+                    context.options |= ssl.OP_NO_COMPRESSION
+                except AttributeError:
+                    pass
+            # Otherwise use Python's secure defaults (no explicit cipher or compatibility configuration)
 
             client.tls_set_context(context)
 
