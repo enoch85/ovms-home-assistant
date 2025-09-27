@@ -44,6 +44,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     try:
+        # Always check for missing client_id (critical for MQTT stability)
+        await _migrate_client_id(hass, entry, entry.version)
+        
         # Check if we need to migrate the config entry
         if entry.version < CONFIG_VERSION:
             _LOGGER.info("Migrating config entry from version %s to %s", entry.version, CONFIG_VERSION)
@@ -51,6 +54,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Merge entry.data with entry.options, giving priority to options
         config = _get_merged_config(entry)
+        
+        # Debug: Check if client_id is present in the merged config
+        from .const import CONF_CLIENT_ID
+        _LOGGER.debug("Setup: entry.data has client_id: %s", CONF_CLIENT_ID in entry.data)
+        _LOGGER.debug("Setup: entry.options has client_id: %s", CONF_CLIENT_ID in entry.options if entry.options else False)
+        _LOGGER.debug("Setup: merged config has client_id: %s", CONF_CLIENT_ID in config)
+        if CONF_CLIENT_ID in config:
+            _LOGGER.debug("Setup: client_id value: %s", config[CONF_CLIENT_ID])
 
         # Create MQTT client
         mqtt_client = OVMSMQTTClient(hass, config)
@@ -151,18 +162,32 @@ async def _migrate_client_id(hass: HomeAssistant, config_entry: ConfigEntry, fro
         _LOGGER.debug("V%d Migration: Client ID already exists: %s", from_version, current_data[CONF_CLIENT_ID])
         return
     
-    # Generate stable client ID based on host and vehicle_id
+    _LOGGER.info("V%d Migration: Client ID missing, generating new stable client ID", from_version)
+    
+    # Generate stable client ID including username to prevent collisions
+    # Multiple users can have same vehicle_id, but username must be unique on broker
+    from homeassistant.const import CONF_USERNAME
     host = current_data.get(CONF_HOST, "unknown")
+    username = current_data.get(CONF_USERNAME, "unknown")
     vehicle_id = current_data.get(CONF_VEHICLE_ID, "unknown")
     
-    client_id_base = f"{host}_{vehicle_id}"
+    # Debug logging to understand what values we're working with
+    _LOGGER.debug("V%d Migration: Raw config values - host: %s, username: %s, vehicle_id: %s", 
+                  from_version, repr(host), repr(username), repr(vehicle_id))
+    
+    client_id_base = f"{host}_{username}_{vehicle_id}"
     client_id = f"ha_ovms_{hashlib.md5(client_id_base.encode()).hexdigest()[:12]}"
+    
+    # Debug: Log the hash input and output
+    _LOGGER.debug("V%d Migration: Hash input: %s", from_version, repr(client_id_base))
+    _LOGGER.debug("V%d Migration: Generated hash: %s", from_version, hashlib.md5(client_id_base.encode()).hexdigest()[:12])
     
     # Update the config entry data
     current_data[CONF_CLIENT_ID] = client_id
     hass.config_entries.async_update_entry(config_entry, data=current_data)
     
     _LOGGER.info("V%d Migration: Generated stable MQTT client ID: %s", from_version, client_id)
+    _LOGGER.debug("V%d Migration: Updated config entry data with client_id", from_version)
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
