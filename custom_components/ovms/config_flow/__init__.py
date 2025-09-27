@@ -419,7 +419,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Multiple users can have same vehicle_id, but username must be unique on broker
                 # Hash input combines all unique identifiers but keeps username private
                 client_id_base = f"{self.mqtt_config[CONF_HOST]}_{self.mqtt_config[CONF_USERNAME]}_{user_input[CONF_VEHICLE_ID]}"
-                client_id = f"ha_ovms_{hashlib.md5(client_id_base.encode()).hexdigest()[:12]}"
+                client_id = f"ha_ovms_{hashlib.sha256(client_id_base.encode()).hexdigest()[:12]}"
                 self.mqtt_config[CONF_CLIENT_ID] = client_id
                 _LOGGER.debug("Generated stable MQTT client ID: %s", client_id)
 

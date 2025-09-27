@@ -545,7 +545,7 @@ The integration implements stable MQTT client ID management:
 - **Stable Client IDs**: Generates unique, persistent client IDs based on broker host and vehicle ID
 - **Format**: `ha_ovms_xxxxxxxxxxxx` (20 characters total)
 - **Compatibility**: Works with all MQTT versions (3.1, 3.1.1, and 5.0)
-- **Collision Resistance**: Uses MD5 hash with 281 trillion possible combinations
+- **Collision Resistance**: Uses SHA-256 hash with 281 trillion possible combinations
 - **Migration Support**: Automatically migrates existing installations to stable client IDs
 
 This ensures reliable MQTT connections and prevents authentication issues caused by rapidly changing client identifiers.

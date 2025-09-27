@@ -176,11 +176,11 @@ async def _migrate_client_id(hass: HomeAssistant, config_entry: ConfigEntry, fro
                   from_version, repr(host), repr(username), repr(vehicle_id))
     
     client_id_base = f"{host}_{username}_{vehicle_id}"
-    client_id = f"ha_ovms_{hashlib.md5(client_id_base.encode()).hexdigest()[:12]}"
+    client_id = f"ha_ovms_{hashlib.sha256(client_id_base.encode()).hexdigest()[:12]}"
     
     # Debug: Log the hash input and output
     _LOGGER.debug("V%d Migration: Hash input: %s", from_version, repr(client_id_base))
-    _LOGGER.debug("V%d Migration: Generated hash: %s", from_version, hashlib.md5(client_id_base.encode()).hexdigest()[:12])
+    _LOGGER.debug("V%d Migration: Generated hash: %s", from_version, hashlib.sha256(client_id_base.encode()).hexdigest()[:12])
     
     # Update the config entry data
     current_data[CONF_CLIENT_ID] = client_id
