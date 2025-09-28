@@ -52,7 +52,6 @@ class MQTTConnectionManager:
         self.reconnect_count = 0
         self.message_callback = message_callback
         self.connection_callback = connection_callback
-        self._use_fallback_tls = False
 
         # Format the structure prefix
         self.structure_prefix = self._format_structure_prefix()
@@ -153,33 +152,15 @@ class MQTTConnectionManager:
                 ssl.create_default_context
             )
 
-            # Enhanced SSL/TLS configuration for broader broker compatibility
             if not verify_ssl:
+                # When verification is disabled, use compatible settings
                 _LOGGER.debug("SSL certificate verification disabled")
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
             else:
-                # For verified connections, ensure we use secure TLS versions
+                # When verification is enabled, use secure defaults
+                _LOGGER.debug("SSL certificate verification enabled, using secure TLS settings")
                 context.minimum_version = ssl.TLSVersion.TLSv1_2
-                
-            # Use Python's secure defaults first, fallback to permissive settings if needed
-            if self._use_fallback_tls:
-                _LOGGER.debug("Using fallback TLS configuration with SECLEVEL=1")
-                try:
-                    context.set_ciphers('DEFAULT:@SECLEVEL=1')
-                except ssl.SSLError:
-                    _LOGGER.warning("Failed to set fallback cipher configuration")
-                
-                # Set options for better TLS compatibility (fallback mode only)
-                context.options |= ssl.OP_CIPHER_SERVER_PREFERENCE
-                
-                # Additional compatibility settings for modern TLS implementations
-                try:
-                    # Disable compression to avoid compatibility issues
-                    context.options |= ssl.OP_NO_COMPRESSION
-                except AttributeError:
-                    pass
-            # Otherwise use Python's secure defaults (no explicit cipher or compatibility configuration)
 
             client.tls_set_context(context)
 
@@ -363,16 +344,6 @@ class MQTTConnectionManager:
             return False
 
         except Exception as ex:  # pylint: disable=broad-except
-            # Check if this is an SSL/TLS error and we haven't tried fallback yet
-            if ("SSL" in str(ex) or "TLS" in str(ex)) and not self._use_fallback_tls and self.config.get(CONF_PORT) == 8883:
-                _LOGGER.warning("SSL/TLS connection failed with secure defaults, retrying with fallback configuration")
-                self._use_fallback_tls = True
-                # Recreate client with fallback TLS settings
-                self.client = await self._create_mqtt_client()
-                if self.client:
-                    self._setup_callbacks()
-                    return await self.async_connect()
-                    
             _LOGGER.exception("Failed to connect to MQTT broker: %s", ex)
             return False
 
@@ -420,15 +391,11 @@ class MQTTConnectionManager:
             else:
                 await self.hass.async_add_executor_job(self.client.reconnect)
         except Exception as ex:  # pylint: disable=broad-except
-            # Special handling for SSL/TLS errors
-            if ("SSL" in str(ex) or "TLS" in str(ex)) and not self._use_fallback_tls and self.config.get(CONF_PORT) == 8883:
-                _LOGGER.warning("SSL/TLS reconnection failed with secure defaults, enabling fallback configuration")
-                self._use_fallback_tls = True
-            elif "SSL" in str(ex) or "TLS" in str(ex):
+            if "SSL" in str(ex) or "TLS" in str(ex):
                 _LOGGER.error(
                     "SSL/TLS error during MQTT reconnection: %s. "
-                    "This may be due to broker upgrade or stricter TLS validation. "
-                    "Try rebooting your OVMS module or check SSL/TLS settings if issue persists.",
+                    "This may be due to broker issues or network connectivity problems. "
+                    "Try rebooting your OVMS module if issue persists.",
                     ex
                 )
             else:
