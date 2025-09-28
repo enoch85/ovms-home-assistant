@@ -225,28 +225,19 @@ class MQTTConnectionManager:
 
         return client
 
+    def _extract_reason_code(self, reason_code) -> int:
+        """Extract numeric value from reason code (handles both int and ReasonCode objects)."""
+        return reason_code.value if hasattr(reason_code, 'value') else reason_code
+
     def _get_reason_message(self, reason_code) -> str:
         """Get human-readable message for MQTT reason code."""
-        # Handle both integer codes and ReasonCode objects
-        if hasattr(reason_code, 'value'):
-            # ReasonCode object - extract the numeric value
-            code_value = reason_code.value
-        else:
-            # Plain integer
-            code_value = reason_code
-        
-        return MQTT_REASON_CODES.get(code_value, f"Unknown reason code: {code_value}")
+        code = self._extract_reason_code(reason_code)
+        return MQTT_REASON_CODES.get(code, f"Unknown reason code: {code}")
 
     def _should_retry_connection(self, reason_code) -> bool:
         """Determine if connection should be retried based on reason code."""
-        # Handle both integer codes and ReasonCode objects
-        if hasattr(reason_code, 'value'):
-            # ReasonCode object - extract the numeric value
-            code_value = reason_code.value
-        else:
-            # Plain integer
-            code_value = reason_code
-            
+        code = self._extract_reason_code(reason_code)
+        
         # Don't retry for these permanent failures
         permanent_failures = {
             1,   # Unacceptable protocol version
@@ -262,7 +253,7 @@ class MQTTConnectionManager:
             143, # Topic filter invalid
             144, # Topic name invalid
         }
-        return code_value not in permanent_failures
+        return code not in permanent_failures
 
     def _get_retry_delay(self, attempt: int) -> float:
         """Calculate retry delay with exponential backoff and jitter."""
@@ -302,15 +293,15 @@ class MQTTConnectionManager:
                 self.reconnect_count += 1
                 
                 # Enhanced disconnect logging
-                rc_value = rc.value if hasattr(rc, 'value') else rc
-                if rc_value == 0:
+                rc = self._extract_reason_code(rc)
+                if rc == 0:
                     _LOGGER.info("Cleanly disconnected from MQTT broker")
                 else:
                     reason_message = self._get_reason_message(rc)
-                    _LOGGER.warning("Disconnected from MQTT broker (code %d): %s", rc_value, reason_message)
+                    _LOGGER.warning("Disconnected from MQTT broker (code %d): %s", rc, reason_message)
 
                 # Schedule reconnection if not intentional disconnect
-                if rc_value != 0:
+                if rc != 0:
                     _LOGGER.info("Scheduling reconnection attempt with enhanced backoff")
                     asyncio.run_coroutine_threadsafe(
                         self._async_reconnect(rc),
@@ -351,9 +342,9 @@ class MQTTConnectionManager:
             reason_message = self._get_reason_message(rc)
             
             # Extract numeric value for comparison
-            rc_value = rc.value if hasattr(rc, 'value') else rc
+            rc = self._extract_reason_code(rc)
             
-            if rc_value == 0:
+            if rc == 0:
                 self.connected = True
                 _LOGGER.info("Connected to MQTT broker: %s", reason_message)
 
@@ -386,16 +377,16 @@ class MQTTConnectionManager:
                     self.connection_callback(False)
 
                 # Enhanced error logging with reason code details
-                _LOGGER.error("Failed to connect to MQTT broker (code %d): %s", rc_value, reason_message)
+                _LOGGER.error("Failed to connect to MQTT broker (code %d): %s", rc, reason_message)
                 
                 # Log additional guidance for common errors
-                if rc_value in [4, 134]:  # Bad username or password
+                if rc in [4, 134]:  # Bad username or password
                     _LOGGER.error("Check your MQTT username and password in the configuration")
-                elif rc_value in [5, 135]:  # Not authorized
+                elif rc in [5, 135]:  # Not authorized
                     _LOGGER.error("MQTT user is not authorized - check broker ACL settings")
-                elif rc_value in [3, 136]:  # Server unavailable
+                elif rc in [3, 136]:  # Server unavailable
                     _LOGGER.error("MQTT broker is unavailable - check if broker is running and accessible")
-                elif rc_value == 137:  # Server busy
+                elif rc == 137:  # Server busy
                     _LOGGER.warning("MQTT broker is busy - will retry with backoff")
         except Exception as ex:
             _LOGGER.exception("Error in connect callback: %s", ex)
