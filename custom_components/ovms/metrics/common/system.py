@@ -33,8 +33,8 @@ SYSTEM_METRICS = {
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "m.monotonic": {
-        "name": "Uptime",
-        "description": "Uptime in seconds",
+        "name": "OVMS Uptime",
+        "description": "Time since last module reboot",
         "icon": "mdi:timer-outline",
         "device_class": SensorDeviceClass.DURATION,
         "state_class": SensorStateClass.MEASUREMENT,
