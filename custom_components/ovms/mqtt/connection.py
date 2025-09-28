@@ -1,13 +1,4 @@
-"""MQTT connection manager for OVMS integration.
-
-Recent improvements:
-- Added universal MQTT reason code mapping (OASIS MQTT v3.1.1 & v5.0 standard)
-- Enhanced connection retry logic with jitter and reason-code-aware delays
-- Better error logging with human-readable messages and troubleshooting guidance
-
-TODO: Verify Option 1 and Option 2 implementation works correctly with all brokers
-TODO: Monitor retry behavior and adjust MAX_RECONNECTION_ATTEMPTS if needed
-"""
+"""MQTT connection manager for OVMS integration."""
 import asyncio
 import logging
 import random
@@ -488,7 +479,7 @@ class MQTTConnectionManager:
             else:
                 _LOGGER.exception("Failed to reconnect to MQTT broker: %s", ex)
             
-            # Schedule another reconnect attempt
+            # Schedule another reconnect attempt (no reason code available from exception)
             if not self._shutting_down:
                 asyncio.create_task(self._async_reconnect())
 
