@@ -7,6 +7,7 @@ The [Open Vehicle Monitoring System (OVMS)](https://www.openvehicles.com/) integ
 
 [![ovms-home-assistant_downloads](https://img.shields.io/github/downloads/enoch85/ovms-home-assistant/total)](https://github.com/enoch85/ovms-home-assistant)
 [![ovms-home-assistant_downloads](https://img.shields.io/github/downloads/enoch85/ovms-home-assistant/latest/total)](https://github.com/enoch85/ovms-home-assistant)
+[![Sponsor on GitHub](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-1f425f?logo=github&style=for-the-badge)](https://github.com/sponsors/enoch85)
 
 The OVMS integration discovers and creates Home Assistant entities from MQTT topics published by your OVMS module. The integration automatically:
 
