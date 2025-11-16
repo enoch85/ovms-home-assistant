@@ -9,7 +9,7 @@ from homeassistant.const import (  # noqa: W0611
 )
 
 DOMAIN = "ovms"
-CONFIG_VERSION = 2
+CONFIG_VERSION = 3
 
 # Configuration
 CONF_VEHICLE_ID = "vehicle_id"
@@ -31,7 +31,6 @@ CONF_DELETE_STALE_HISTORY = "delete_stale_history"  # Delete history when hiding
 DEFAULT_PORT = 1883
 DEFAULT_QOS = 1
 DEFAULT_PROTOCOL = "mqtt"
-DEFAULT_CLIENT_ID = "homeassistant_ovms"
 DEFAULT_TOPIC_PREFIX = "ovms"
 DEFAULT_SCAN_INTERVAL = 60
 DEFAULT_UNIT_SYSTEM = "metric"
@@ -39,8 +38,28 @@ DEFAULT_TOPIC_STRUCTURE = "{prefix}/{mqtt_username}/{vehicle_id}"
 DEFAULT_VERIFY_SSL = True
 DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by default
 
-# System/Integration blacklist - patterns that are always filtered (developer controlled)
+# System topic blacklist patterns - these are always applied and cannot be modified by users
 SYSTEM_TOPIC_BLACKLIST = [
+    "log",
+    "gear",
+    "notify",
+    "net/good/sq",
+    "net/ip",
+    "gps/sq/bad",
+    "gps/sq/good",
+    "aux/12v/blip",
+    "modem/muxstart",
+    "modem/netwait",
+    "modem/netstart",
+    "modem/netmode",
+    "modem/gotip",
+    "server/web/socket",
+    "egpio/output",
+    "power/can1",
+]
+
+# Legacy topic blacklist patterns - kept for migration compatibility
+LEGACY_TOPIC_BLACKLIST = [
     ".log",
     "battery.log",
     "power.log",
@@ -50,17 +69,28 @@ SYSTEM_TOPIC_BLACKLIST = [
     "event.system.modem.netwait",
     "event.system.modem.netstart",
     "event.system.modem.netmode",
-    "event.system.modem.gotip"
+    "event.system.modem.gotip",
 ]
 SYSTEM_SWITCH_BLACKLIST = ["v.e.cabinsetpoint"] #Metrics that could be parsed as switches but should not
 
-# User customizable blacklist - additional patterns users can configure
-DEFAULT_USER_TOPIC_BLACKLIST = []
+# All system topic blacklist patterns combined (current + legacy)
+COMBINED_TOPIC_BLACKLIST = SYSTEM_TOPIC_BLACKLIST + LEGACY_TOPIC_BLACKLIST
 
-# Combined default for initial setup
-DEFAULT_TOPIC_BLACKLIST = SYSTEM_TOPIC_BLACKLIST + DEFAULT_USER_TOPIC_BLACKLIST
+# Default user topic blacklist patterns - these can be customized by users
+USER_TOPIC_BLACKLIST = []
+
+# Combined default for initial setup - new users get system patterns as starting point
+DEFAULT_TOPIC_BLACKLIST = SYSTEM_TOPIC_BLACKLIST
+
 DEFAULT_ENTITY_STALENESS_MANAGEMENT = None  # Disabled by default - None means disabled, any number means enabled with that many hours
 DEFAULT_DELETE_STALE_HISTORY = False  # Preserve history by default
+
+# Entity staleness manager timing constants (seconds)
+STALENESS_INITIAL_CACHE_DELAY = 5
+STALENESS_DIAGNOSTIC_SENSOR_DELAY = 30
+STALENESS_CLEANUP_START_DELAY = 120
+STALENESS_CLEANUP_INTERVAL = 1800  # 30 minutes
+STALENESS_FIRST_RUN_EXTRA_WAIT = 180  # 3 minutes
 
 # Options
 PROTOCOLS = ["mqtt", "mqtts"]

@@ -5,10 +5,9 @@ The [Open Vehicle Monitoring System (OVMS)](https://www.openvehicles.com/) integ
 
 ## Overview
 
-<!--
 [![ovms-home-assistant_downloads](https://img.shields.io/github/downloads/enoch85/ovms-home-assistant/total)](https://github.com/enoch85/ovms-home-assistant)
 [![ovms-home-assistant_downloads](https://img.shields.io/github/downloads/enoch85/ovms-home-assistant/latest/total)](https://github.com/enoch85/ovms-home-assistant)
--->
+[![Sponsor on GitHub](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-1f425f?logo=github&style=for-the-badge)](https://github.com/sponsors/enoch85)
 
 The OVMS integration discovers and creates Home Assistant entities from MQTT topics published by your OVMS module. The integration automatically:
 
@@ -56,6 +55,7 @@ The OVMS integration discovers and creates Home Assistant entities from MQTT top
 
 - Home Assistant (2025.2.5 or newer) according to HACS specification
 - MQTT integration configured in Home Assistant
+- MQTT broker supporting MQTT 3.1, 3.1.1, or 5.0 (client ID length limit: 23 characters for 3.1/3.1.1)
 - OVMS module publishing to the same MQTT broker
 - OVMS firmware 3.3.001 or newer recommended (3.3.004+ for optimal performance)
 - Python package: paho-mqtt>=1.6.1 (installed automatically)
@@ -536,6 +536,18 @@ The integration implements sophisticated topic discovery:
 - **Adaptive Subscription**: Subscribes to identified pattern for ongoing communication
 
 This allows the integration to work even when the exact topic structure isn't known in advance.
+
+### MQTT Connection Management
+
+The integration implements stable MQTT client ID management:
+
+- **Stable Client IDs**: Generates unique, persistent client IDs based on broker host and vehicle ID
+- **Format**: `ha_ovms_xxxxxxxxxxxx` (20 characters total)
+- **Compatibility**: Works with all MQTT versions (3.1, 3.1.1, and 5.0)
+- **Collision Resistance**: Uses SHA-256 hash with 281 trillion possible combinations
+- **Migration Support**: Automatically migrates existing installations to stable client IDs
+
+This ensures reliable MQTT connections and prevents authentication issues caused by rapidly changing client identifiers.
 
 ### Entity Classification
 
