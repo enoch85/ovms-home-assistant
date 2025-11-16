@@ -8,7 +8,6 @@ from ..const import (
     LOGGER_NAME,
     CONF_TOPIC_BLACKLIST,
     SYSTEM_TOPIC_BLACKLIST,
-    SYSTEM_SWITCH_BLACKLIST,
     LEGACY_TOPIC_BLACKLIST,
     COMBINED_TOPIC_BLACKLIST,
     USER_TOPIC_BLACKLIST
@@ -211,20 +210,6 @@ class TopicParser:
         # Check if this should be a binary sensor
         if self._should_be_binary_sensor(parts, metric_path):
             return "binary_sensor"
-
-        # Check for commands/switches
-        if metric_path not in SYSTEM_SWITCH_BLACKLIST and (
-            "command" in parts or any(
-            switch_pattern in "_".join(parts).lower())
-            for switch_pattern in [
-                "switch",
-                "toggle",
-                "set",
-                "enable",
-                "disable",
-            ]
-        ):
-            return "switch"
 
         # GPS metrics should be sensors
         if self._is_gps_metric_topic(parts, "_".join(parts), topic):
