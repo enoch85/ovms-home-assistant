@@ -8,6 +8,7 @@ from ..const import (
     LOGGER_NAME,
     CONF_TOPIC_BLACKLIST,
     SYSTEM_TOPIC_BLACKLIST,
+    SYSTEM_SWITCH_BLACKLIST,
     LEGACY_TOPIC_BLACKLIST,
     COMBINED_TOPIC_BLACKLIST,
     USER_TOPIC_BLACKLIST
@@ -212,8 +213,9 @@ class TopicParser:
             return "binary_sensor"
 
         # Check for commands/switches
-        if "command" in parts or any(
-            switch_pattern in "_".join(parts).lower()
+        if metric_path not in SYSTEM_SWITCH_BLACKLIST and (
+            "command" in parts or any(
+            switch_pattern in "_".join(parts).lower())
             for switch_pattern in [
                 "switch",
                 "toggle",

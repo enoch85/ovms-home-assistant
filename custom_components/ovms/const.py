@@ -58,6 +58,9 @@ SYSTEM_TOPIC_BLACKLIST = [
     "power/can1",
 ]
 
+# System switch blacklist patterns - because switches are generated as long as they have "set" in the name, some switches are incorrectly generated; exclude them
+SYSTEM_SWITCH_BLACKLIST = ["v.e.cabinsetpoint"] #Metrics that could be parsed as switches but should not
+
 # Legacy topic blacklist patterns - kept for migration compatibility
 LEGACY_TOPIC_BLACKLIST = [
     ".log",
@@ -71,7 +74,6 @@ LEGACY_TOPIC_BLACKLIST = [
     "event.system.modem.netmode",
     "event.system.modem.gotip",
 ]
-SYSTEM_SWITCH_BLACKLIST = ["v.e.cabinsetpoint"] #Metrics that could be parsed as switches but should not
 
 # All system topic blacklist patterns combined (current + legacy)
 COMBINED_TOPIC_BLACKLIST = SYSTEM_TOPIC_BLACKLIST + LEGACY_TOPIC_BLACKLIST
