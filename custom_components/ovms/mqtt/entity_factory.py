@@ -12,6 +12,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from ..const import (
     DOMAIN,
     LOGGER_NAME,
+    SWITCH_COMMANDS,
     SIGNAL_ADD_ENTITIES,
 )
 from ..naming_service import EntityNamingService
@@ -101,6 +102,33 @@ class EntityFactory:
                 "device_info": self._get_device_info(),
                 "attributes": attributes,
             }
+
+            # Explicit command-based switches
+            if raw_name in SWITCH_COMMANDS:
+                switch_info = SWITCH_COMMANDS[raw_name]
+
+                # Use the friendly name from the dictionary if available, otherwise fallback
+                switch_name = switch_info.get("name", f"{friendly_name} Switch")
+
+                switch_data = {
+                    "entity_type": "switch",
+                    "unique_id": f"{unique_id}_switch",
+                    "name": switch_name,
+                    "friendly_name": switch_name,
+                    "topic": topic,
+                    "payload": payload,
+                    "device_info": self._get_device_info(),
+                    "attributes": attributes,
+                    "on_command": switch_info["on_command"],
+                    "off_command": switch_info["off_command"],
+                    "icon": switch_info.get("icon"),  # Optional icon
+                }
+
+                # Queue or dispatch
+                if self.platforms_loaded:
+                    async_dispatcher_send(self.hass, SIGNAL_ADD_ENTITIES, switch_data)
+                else:
+                    await self.entity_queue.put(switch_data)               
 
             # Check if this is a coordinate entity to track for the device tracker
             is_coordinate = self._is_coordinate_entity(topic, entity_data)

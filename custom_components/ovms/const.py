@@ -38,6 +38,29 @@ DEFAULT_TOPIC_STRUCTURE = "{prefix}/{mqtt_username}/{vehicle_id}"
 DEFAULT_VERIFY_SSL = True
 DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by default
 
+# Metric switch entities - metrics that are associated with switches
+SWITCH_COMMANDS = {
+    # metric_path: switch info
+    "metric_v_e_hvac": {
+        "name": "Climate",
+        "on_command": "climatecontrol on",
+        "off_command": "climatecontrol off",
+        "icon": "mdi:air-conditioner",
+    },
+    "metric_v_e_locked": {
+        "name": "Door Lock",
+        "on_command": "lock",
+        "off_command": "unlock",
+        "icon": "mdi:lock",
+    },
+    "metric_v_c_charging": {
+        "name": "Charge",
+        "on_command": "charge on",
+        "off_command": "charge off",
+        "icon": "mdi:plug",
+    },
+}
+
 # System topic blacklist patterns - these are always applied and cannot be modified by users
 SYSTEM_TOPIC_BLACKLIST = [
     "log",
