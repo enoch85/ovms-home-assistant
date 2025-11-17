@@ -103,9 +103,11 @@ class EntityFactory:
                 "attributes": attributes,
             }
 
+            metric_path = self._get_metric_path_from_topic(topic).replace("metric.","")
+
             # Explicit command-based switches
-            if raw_name in SWITCH_COMMANDS:
-                switch_info = SWITCH_COMMANDS[raw_name]
+            if metric_path in SWITCH_COMMANDS:
+                switch_info = SWITCH_COMMANDS[metric_path]
 
                 # Use the friendly name from the dictionary if available, otherwise fallback
                 switch_name = switch_info.get("name", f"{friendly_name} Switch")

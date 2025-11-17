@@ -41,22 +41,22 @@ DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by d
 # Metric switch entities - metrics that are associated with switches
 SWITCH_COMMANDS = {
     # metric_path: switch info
-    "metric_v_e_hvac": {
+    "v.e.hvac": {
         "name": "Climate",
         "on_command": "climatecontrol on",
         "off_command": "climatecontrol off",
         "icon": "mdi:air-conditioner",
     },
-    "metric_v_e_locked": {
+    "v.e.locked": {
         "name": "Door Lock",
         "on_command": "lock",
         "off_command": "unlock",
         "icon": "mdi:lock",
     },
-    "metric_v_c_charging": {
+    "v.c.charging": {
         "name": "Charge",
-        "on_command": "charge on",
-        "off_command": "charge off",
+        "on_command": "charge start",
+        "off_command": "charge stop",
         "icon": "mdi:plug",
     },
 }

@@ -338,30 +338,34 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         """Turn the switch on."""
         _LOGGER.debug("Turning on switch: %s using command: %s", self.name, self._command)
 
-        # Use the command function to send the command
+        # Send the command to the vehicle
         result = await self._command_function(
             command=self._command,
             parameters="on",
         )
 
-        if result["success"]:
-            self._attr_is_on = True
-            self.async_write_ha_state()
-        else:
-            _LOGGER.error("Failed to turn on switch %s: %s", self.name, result.get("error"))
+        if not result.get("success", False):
+            _LOGGER.error(
+                "Failed to turn on switch %s: %s", self.name, result.get("error")
+            )
+        # Do NOT set self._attr_is_on here; the switch state will be updated
+        # automatically via the metric through update_state
+
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
         _LOGGER.debug("Turning off switch: %s using command: %s", self.name, self._command)
 
-        # Use the command function to send the command
+        # Send the command to the vehicle
         result = await self._command_function(
             command=self._command,
             parameters="off",
         )
 
-        if result["success"]:
-            self._attr_is_on = False
-            self.async_write_ha_state()
-        else:
-            _LOGGER.error("Failed to turn off switch %s: %s", self.name, result.get("error"))
+        if not result.get("success", False):
+            _LOGGER.error(
+                "Failed to turn off switch %s: %s", self.name, result.get("error")
+            )
+        # Do NOT set self._attr_is_on here; the switch state will be updated
+        # automatically via the metric through update_state
+
