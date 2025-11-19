@@ -17,6 +17,7 @@ from homeassistant.util import dt as dt_util
 from ..const import (
     DOMAIN,
     LOGGER_NAME,
+    SWITCH_TYPES,
     SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY,
     truncate_state_value
@@ -25,36 +26,6 @@ from ..const import (
 from ..metrics import get_metric_by_path, get_metric_by_pattern
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
-
-# A mapping of switch types
-SWITCH_TYPES = {
-    "climate": {
-        "icon": "mdi:thermometer",
-        "category": None,
-        "command": "climate",
-    },
-    "charge": {
-        "icon": "mdi:battery-charging",
-        "category": None,
-        "command": "charge",
-    },
-    "lock": {
-        "icon": "mdi:lock",
-        "category": None,
-        "command": "lock",
-    },
-    "valet": {
-        "icon": "mdi:key",
-        "category": None,
-        "command": "valet",
-    },
-    "debug": {
-        "icon": "mdi:bug",
-        "category": EntityCategory.DIAGNOSTIC,
-        "command": "debug",
-    },
-}
-
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback

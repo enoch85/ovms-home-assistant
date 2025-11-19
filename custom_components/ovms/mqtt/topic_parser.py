@@ -179,21 +179,14 @@ class TopicParser:
 
 
     def get_related_entities(self, primary_entity: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Get any additional entities that should be created alongside the primary entity.
-        
-        Args:
-            primary_entity: The primary entity dict returned from parse_topic()
-            
-        Returns:
-            List of additional entity dicts (e.g., switch entities for controllable metrics)
-        """
+        """Get any additional entities that should be created alongside the primary entity."""
         related_entities = []
-        
+
         try:
             metric_path = primary_entity.get("metric_path")
             if not metric_path:
                 return related_entities
-            
+
             # Check if this metric has an associated switch control
             if metric_path in SWITCH_TYPES:
                 _LOGGER.info("Creating switch entity for metric %s", metric_path)
@@ -270,19 +263,6 @@ class TopicParser:
         # Check if this should be a binary sensor
         if self._should_be_binary_sensor(parts, metric_path):
             return "binary_sensor"
-
-        # Check for commands/switches
-        if "command" in parts or any(
-            switch_pattern in "_".join(parts).lower()
-            for switch_pattern in [
-                "switch",
-                "toggle",
-                "set",
-                "enable",
-                "disable",
-            ]
-        ):
-            return "switch"
 
         # GPS metrics should be sensors
         if self._is_gps_metric_topic(parts, "_".join(parts), topic):
