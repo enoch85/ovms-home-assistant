@@ -39,39 +39,60 @@ class EntityFactory:
         self.combined_tracker_created = False  # Track if the combined tracker is created
 
     async def async_create_entities(self, topic: str, payload: str, entity_data: Dict[str, Any]) -> None:
-        """Create one or more Home Assistant entities from OVMS topic data."""
-
+        """Create entities based on parsed topic data."""
         try:
+            entity_type = entity_data.get("entity_type")
+            if not entity_type:
+                _LOGGER.warning("No entity_type provided for topic: %s", topic)
+                return
+
+            # Generate unique IDs
+            entity_data = self._generate_unique_ids(topic, entity_data)
+
+            # Check if we already processed this entity
+            unique_id = entity_data.get("unique_id")
+            if not unique_id:
+                _LOGGER.error("No unique_id generated for topic: %s", topic)
+                return
+
+            # Enhanced logging for debugging entity stability
+            if unique_id in self.created_entities:
+                # Reduce logging frequency - only log at debug level if specifically needed
+                return
+            else:
+                # Only log entity creation during initial setup or if debug logging is specifically enabled
+                if len(self.created_entities) < 10:  # First 10 entities for setup verification
+                    _LOGGER.debug("Creating new entity for topic: %s (unique_id: %s)", topic, unique_id)
+
+            # Get parts and metric info
             parts = entity_data.get("parts", [])
             raw_name = entity_data.get("raw_name", "")
             metric_info = entity_data.get("metric_info")
-            base_entity_type = entity_data.get("entity_type")
 
-            if not base_entity_type:
-                _LOGGER.warning("No base entity type for topic: %s", topic)
-                return
-            
-            # Generate base unique_id + friendly name
-            entity_data = self._generate_unique_ids(topic, entity_data)
-            unique_id = entity_data["unique_id"]
-
-            # Naming service provides the display name
+            # Create friendly name using the naming service
             friendly_name = self.naming_service.create_friendly_name(
                 parts, metric_info, topic, raw_name
             )
 
+            # Reduce logging frequency - only log entity creation for important entities or during setup
+            if len(self.created_entities) < 20 or entity_type in ["device_tracker", "binary_sensor"]:
+                _LOGGER.info("Creating %s: %s", entity_type, friendly_name)
+
+            # Record that we've processed this entity
+            self.created_entities.add(unique_id)
+
+            # Store in entity registry
+            priority = entity_data.get("priority", 0)
+            self.entity_registry.register_entity(topic, unique_id, entity_type, priority)
+
+            # Prepare attributes
             attributes = entity_data.get("attributes", {})
             category = attributes.get("category", "unknown")
-            attributes = self.attribute_manager.prepare_attributes(
-                topic, category, parts, metric_info
-            )
+            attributes = self.attribute_manager.prepare_attributes(topic, category, parts, metric_info)
 
-            # Prepare the list of entities to create
-            entities_to_create = []
-
-            # ---- Base sensor / binary_sensor ----
-            base_entity = {
-                "entity_type": base_entity_type,
+            # Create entity data for dispatcher
+            dispatcher_data = {
+                "entity_type": entity_type,
                 "unique_id": unique_id,
                 "name": entity_data.get("name"),
                 "friendly_name": friendly_name,
@@ -81,61 +102,34 @@ class EntityFactory:
                 "attributes": attributes,
             }
 
-            entities_to_create.append(base_entity)
+            # Add switch-specific config if this is a switch entity
+            if entity_type == "switch" and "switch_config" in entity_data:
+                dispatcher_data["switch_config"] = entity_data["switch_config"]
 
-            # If topic parser attached switch_info → create a second entity
-            switch_info = entity_data.get("switch_info")
-            if switch_info:
-                switch_unique = f"{unique_id}_switch"
-                switch_friendly = switch_info.get("name", f"{friendly_name}")
-
-                switch_entity = {
-                    "entity_type": "switch",
-                    "unique_id": switch_unique,
-                    "name": f"{entity_data.get('name')}_switch",
-                    "friendly_name": switch_friendly,
-                    "topic": topic,
-                    "payload": payload,
-                    "device_info": self._get_device_info(),
-                    "attributes": attributes,
-                    "on_command": switch_info.get("on_command"),
-                    "off_command": switch_info.get("off_command"),
-                }
-
-                entities_to_create.append(switch_entity)
-
-            # Coordinate tracking (lat/lon)
-            if self._is_coordinate_entity(topic, entity_data):
+            # Check if this is a coordinate entity to track for the device tracker
+            is_coordinate = self._is_coordinate_entity(topic, entity_data)
+            if is_coordinate:
                 await self._track_coordinate_entity(topic, unique_id, entity_data)
 
-            # Dispatch entities (immediately or queued)
-            for ent in entities_to_create:
-                ent_unique = ent["unique_id"]
-
-                if ent_unique in self.created_entities:
-                    continue
-
-                self.created_entities.add(ent_unique)
-                self.entity_registry.register_entity(
-                    topic, ent_unique, ent["entity_type"], priority=entity_data.get("priority", 0)
+            # Send to platform or queue for later
+            if self.platforms_loaded:
+                async_dispatcher_send(
+                    self.hass,
+                    SIGNAL_ADD_ENTITIES,
+                    dispatcher_data,
                 )
+            else:
+                await self.entity_queue.put(dispatcher_data)
 
-                if self.platforms_loaded:
-                    async_dispatcher_send(self.hass, SIGNAL_ADD_ENTITIES, ent)
-                else:
-                    await self.entity_queue.put(ent)
-
-            # If we have lat + lon → create combined device_tracker
-            if (
-                not self.combined_tracker_created
-                and "latitude" in self.location_entities
-                and "longitude" in self.location_entities
-            ):
+            # If we have both latitude and longitude entities tracked, create a combined device tracker
+            if (len(self.location_entities) >= 2 and
+                "latitude" in self.location_entities and
+                "longitude" in self.location_entities and
+                not self.combined_tracker_created):
                 await self._create_combined_device_tracker()
 
         except Exception as ex:
             _LOGGER.exception("Error creating entity: %s", ex)
-
 
     def _is_coordinate_entity(self, topic: str, entity_data: Dict[str, Any]) -> bool:
         """Check if this entity contains coordinate data (latitude/longitude)."""

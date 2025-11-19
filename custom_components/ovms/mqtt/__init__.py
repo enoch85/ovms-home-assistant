@@ -138,7 +138,13 @@ class OVMSMQTTClient:
             # New topic, create entity
             parsed_data = self.topic_parser.parse_topic(topic, payload)
             if parsed_data:
+                # Create the primary entity
                 await self.entity_factory.async_create_entities(topic, payload, parsed_data)
+                
+                # Create any related entities (e.g., switches for controllable metrics)
+                related_entities = self.topic_parser.get_related_entities(parsed_data)
+                for related_entity in related_entities:
+                    await self.entity_factory.async_create_entities(topic, payload, related_entity)
         else:
             # Existing topic, update entity
             self.update_dispatcher.dispatch_update(topic, payload)

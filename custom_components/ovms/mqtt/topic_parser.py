@@ -58,6 +58,7 @@ class TopicParser:
             vehicle_id = self.config.get("vehicle_id", "")
             return f"{prefix}/{vehicle_id}"
 
+
     def parse_topic(self, topic: str, payload: str) -> Optional[Dict[str, Any]]:
         """Parse a topic to determine the entity type and info."""
         try:
@@ -161,20 +162,6 @@ class TopicParser:
                 "parts": parts,
             }
 
-            # Optionally include switch info if this metric should be a switch
-            switch_info = None
-            if metric_path in SWITCH_TYPES:
-
-                _LOGGER.info("Add switch entity for metric %s", metric_path)
-
-                switch_type_data = SWITCH_TYPES[metric_path]
-                switch_info = {
-                    "on_command": switch_type_data.get("on_command", "on"),
-                    "off_command": switch_type_data.get("off_command", "off"),
-                    "icon": switch_type_data.get("icon"),
-                    "type": switch_type_data.get("type"),  # e.g., 'lock', 'charge', etc.
-                }
-
             return {
                 "entity_type": entity_type,
                 "name": name,
@@ -183,13 +170,70 @@ class TopicParser:
                 "metric_path": metric_path,
                 "metric_info": metric_info,
                 "attributes": attributes,
-                "switch_info": switch_info,  # may be None if not a switch
                 "priority": 5 if "version" in name.lower() else 0,
             }
 
         except Exception as ex:
             _LOGGER.exception("Error parsing topic: %s", ex)
             return None
+
+
+    def get_related_entities(self, primary_entity: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Get any additional entities that should be created alongside the primary entity.
+        
+        Args:
+            primary_entity: The primary entity dict returned from parse_topic()
+            
+        Returns:
+            List of additional entity dicts (e.g., switch entities for controllable metrics)
+        """
+        related_entities = []
+        
+        try:
+            metric_path = primary_entity.get("metric_path")
+            if not metric_path:
+                return related_entities
+            
+            # Check if this metric has an associated switch control
+            if metric_path in SWITCH_TYPES:
+                _LOGGER.info("Creating switch entity for metric %s", metric_path)
+                
+                switch_config = SWITCH_TYPES[metric_path]
+                
+                # Create switch entity name based on primary entity
+                base_name = primary_entity.get("name", "")
+                raw_name = primary_entity.get("raw_name", "")
+                
+                # Add suffix to distinguish from the state sensor
+                switch_name = f"{base_name}_control"
+                switch_raw_name = f"{raw_name}_control"
+                
+                # Build the switch entity
+                switch_entity = {
+                    "entity_type": "switch",
+                    "name": switch_name,
+                    "raw_name": switch_raw_name,
+                    "parts": primary_entity.get("parts", []),
+                    "metric_path": metric_path,
+                    "metric_info": primary_entity.get("metric_info"),
+                    "attributes": primary_entity.get("attributes", {}).copy(),
+                    "priority": primary_entity.get("priority", 0),
+                    # Switch-specific configuration
+                    "switch_config": {
+                        "on_command": switch_config.get("on_command"),
+                        "off_command": switch_config.get("off_command"),
+                        "icon": switch_config.get("icon"),
+                        "type": switch_config.get("type"),
+                        "state_metric": metric_path,  # Link to the metric for reading state
+                    },
+                }
+                
+                related_entities.append(switch_entity)
+                
+        except Exception as ex:
+            _LOGGER.exception("Error getting related entities: %s", ex)
+        
+        return related_entities
 
     def _convert_to_metric_path(self, parts: List[str]) -> str:
         """Convert topic parts to metric path."""
@@ -226,6 +270,19 @@ class TopicParser:
         # Check if this should be a binary sensor
         if self._should_be_binary_sensor(parts, metric_path):
             return "binary_sensor"
+
+        # Check for commands/switches
+        if "command" in parts or any(
+            switch_pattern in "_".join(parts).lower()
+            for switch_pattern in [
+                "switch",
+                "toggle",
+                "set",
+                "enable",
+                "disable",
+            ]
+        ):
+            return "switch"
 
         # GPS metrics should be sensors
         if self._is_gps_metric_topic(parts, "_".join(parts), topic):
