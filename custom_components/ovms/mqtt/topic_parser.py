@@ -7,6 +7,7 @@ from .. import metrics
 from ..const import (
     LOGGER_NAME,
     CONF_TOPIC_BLACKLIST,
+    SWITCH_TYPES,
     SYSTEM_TOPIC_BLACKLIST,
     LEGACY_TOPIC_BLACKLIST,
     COMBINED_TOPIC_BLACKLIST,
@@ -160,6 +161,20 @@ class TopicParser:
                 "parts": parts,
             }
 
+            # Optionally include switch info if this metric should be a switch
+            switch_info = None
+            if metric_path in SWITCH_TYPES:
+
+                _LOGGER.info("Add switch entity for metric %s", metric_path)
+
+                switch_type_data = SWITCH_TYPES[metric_path]
+                switch_info = {
+                    "on_command": switch_type_data.get("on_command", "on"),
+                    "off_command": switch_type_data.get("off_command", "off"),
+                    "icon": switch_type_data.get("icon"),
+                    "type": switch_type_data.get("type"),  # e.g., 'lock', 'charge', etc.
+                }
+
             return {
                 "entity_type": entity_type,
                 "name": name,
@@ -168,6 +183,7 @@ class TopicParser:
                 "metric_path": metric_path,
                 "metric_info": metric_info,
                 "attributes": attributes,
+                "switch_info": switch_info,  # may be None if not a switch
                 "priority": 5 if "version" in name.lower() else 0,
             }
 

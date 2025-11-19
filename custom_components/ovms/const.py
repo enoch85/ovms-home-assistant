@@ -6,6 +6,7 @@ from homeassistant.const import (  # noqa: W0611
     CONF_PORT,
     CONF_USERNAME,
     CONF_PROTOCOL,
+    EntityCategory,
 )
 
 DOMAIN = "ovms"
@@ -38,26 +39,45 @@ DEFAULT_TOPIC_STRUCTURE = "{prefix}/{mqtt_username}/{vehicle_id}"
 DEFAULT_VERIFY_SSL = True
 DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by default
 
-# Metric switch entities - metrics that are associated with switches
-SWITCH_COMMANDS = {
-    # metric_path: switch info
+# A mapping of switch types, commands, and metrics
+SWITCH_TYPES = {
     "v.e.hvac": {
-        "name": "Climate",
+        "type": "climate",
+        "metric": "v.e.hvac",
+        "icon": "mdi:thermometer",
+        "category": None,
         "on_command": "climatecontrol on",
         "off_command": "climatecontrol off",
-        "icon": "mdi:air-conditioner",
-    },
-    "v.e.locked": {
-        "name": "Door Lock",
-        "on_command": "lock",
-        "off_command": "unlock",
-        "icon": "mdi:lock",
     },
     "v.c.charging": {
-        "name": "Charge",
+        "type": "charge",
+        "metric": "v.c.charging", 
+        "icon": "mdi:battery-charging",
+        "category": None,
         "on_command": "charge start",
         "off_command": "charge stop",
-        "icon": "mdi:plug",
+    },
+    "v.e.locked": {
+        "type": "lock",
+        "metric": "v.e.locked",
+        "icon": "mdi:lock",
+        "category": None,
+        "on_command": "lock",
+        "off_command": "unlock",
+    },
+    "v.e.valet": {
+        "type": "valet",
+        "metric": "v.e.valet",
+        "icon": "mdi:key",
+        "category": None,
+        "on_command": "valet",
+        "off_command": "unvalet",
+    },
+    "debug": {
+        "icon": "mdi:bug",
+        "category": EntityCategory.DIAGNOSTIC,
+        "on_command": "debugon",
+        "off_command": "debugoff",
     },
 }
 
