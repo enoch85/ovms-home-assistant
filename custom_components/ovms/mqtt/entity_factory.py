@@ -102,8 +102,12 @@ class EntityFactory:
                 "attributes": attributes,
             }
 
+            #####ALEX DEBUG#######
+            _LOGGER.info("ALEX DEBUG: Entity type is: %s", entity_type)
+            ######################            
+
             # Add switch-specific config if this is a switch entity
-            if entity_type == "switch" and "switch_config" in entity_data:
+            if entity_type == "switch" and "switch_config" in entity_data:               
                 dispatcher_data["switch_config"] = entity_data["switch_config"]
 
             # Check if this is a coordinate entity to track for the device tracker
@@ -266,9 +270,20 @@ class EntityFactory:
         if len(topic_parts) >= 4:
             metric_path = '_'.join(topic_parts[3:])
             metric_path = re.sub(r'[^a-zA-Z0-9_]', '_', metric_path.lower())
-            unique_id = f"ovms_{vehicle_id}_{metric_path}_{topic_hash}"
+            
+            # If this is a switch entity (has switch_config), add suffix to make it unique
+            entity_type = entity_data.get("entity_type")
+            if entity_type == "switch":
+                unique_id = f"ovms_{vehicle_id}_{metric_path}_{topic_hash}_switch"
+            else:
+                unique_id = f"ovms_{vehicle_id}_{metric_path}_{topic_hash}"
         else:
-            unique_id = f"ovms_{vehicle_id}_{topic_hash}"
+            # If this is a switch entity, add suffix
+            entity_type = entity_data.get("entity_type")
+            if entity_type == "switch":
+                unique_id = f"ovms_{vehicle_id}_{topic_hash}_switch"
+            else:
+                unique_id = f"ovms_{vehicle_id}_{topic_hash}"
 
         entity_data["unique_id"] = unique_id
         return entity_data
