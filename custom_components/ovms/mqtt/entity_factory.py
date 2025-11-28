@@ -102,10 +102,6 @@ class EntityFactory:
                 "attributes": attributes,
             }
 
-            #####ALEX DEBUG#######
-            _LOGGER.info("ALEX DEBUG: Entity type is: %s", entity_type)
-            ######################            
-
             # Add switch-specific config if this is a switch entity
             if entity_type == "switch" and "switch_config" in entity_data:               
                 dispatcher_data["switch_config"] = entity_data["switch_config"]
