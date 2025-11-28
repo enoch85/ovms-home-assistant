@@ -30,45 +30,57 @@ class UpdateDispatcher:
     def dispatch_update(self, topic: str, payload: Any) -> None:
         """Dispatch update to entities subscribed to a topic."""
         try:
-            # Get the primary entity for this topic
-            entity_id = self.entity_registry.get_entity_for_topic(topic)
-            if not entity_id:
-                _LOGGER.debug("No entity registered for topic: %s", topic)
+            # Get ALL entities for this topic (supports multiple entities per topic)
+            entity_ids = self.entity_registry.get_entities_for_topic(topic)
+            if not entity_ids:
+                _LOGGER.debug("No entities registered for topic: %s", topic)
                 return
 
-            # Get the entity type
-            entity_type = self.entity_registry.get_entity_type(entity_id)
+            # Track if we've handled special topics to avoid duplicate processing
+            handled_special_topics = {
+                'location': False,
+                'version': False,
+                'gps_quality': False
+            }
 
-            # Update the primary entity
-            self._update_entity(entity_id, payload)
+            # Update all entities registered for this topic
+            for entity_id in entity_ids:
+                # Get the entity type
+                entity_type = self.entity_registry.get_entity_type(entity_id)
 
-            # Special handling for location topics
-            if self._is_coordinate_topic(topic):
-                self._handle_location_update(topic, entity_id, payload)
+                # Update the entity
+                self._update_entity(entity_id, payload)
 
-            # Special handling for version topics
-            if "version" in topic.lower() or "m.version" in topic.lower():
-                self._handle_version_update(topic, entity_id, payload)
+                # Special handling for location topics (only once per update)
+                if not handled_special_topics['location'] and self._is_coordinate_topic(topic):
+                    self._handle_location_update(topic, entity_id, payload)
+                    handled_special_topics['location'] = True
 
-            # Special handling for GPS quality topics
-            if self._is_gps_quality_topic(topic):
-                self._handle_gps_quality_update(topic, payload)
+                # Special handling for version topics (only once per update)
+                if not handled_special_topics['version'] and ("version" in topic.lower() or "m.version" in topic.lower()):
+                    self._handle_version_update(topic, entity_id, payload)
+                    handled_special_topics['version'] = True
 
-            # Update related entities
-            related_entities = self.entity_registry.get_related_entities(entity_id)
-            for related_id in related_entities:
-                # Get relationship type to determine how to handle the update
-                relationship_type = self.entity_registry.relationship_types.get((entity_id, related_id))
+                # Special handling for GPS quality topics (only once per update)
+                if not handled_special_topics['gps_quality'] and self._is_gps_quality_topic(topic):
+                    self._handle_gps_quality_update(topic, payload)
+                    handled_special_topics['gps_quality'] = True
 
-                if relationship_type == "location_sensor":
-                    # Direct pass-through for location sensor pairs
-                    self._update_entity(related_id, payload)
-                elif relationship_type == "combined_tracker":
-                    # For combined trackers, we need to update with all location data
-                    self._update_combined_tracker(related_id)
-                else:
-                    # Default behavior for other relationships
-                    self._update_entity(related_id, payload)
+                # Update related entities
+                related_entities = self.entity_registry.get_related_entities(entity_id)
+                for related_id in related_entities:
+                    # Get relationship type to determine how to handle the update
+                    relationship_type = self.entity_registry.relationship_types.get((entity_id, related_id))
+
+                    if relationship_type == "location_sensor":
+                        # Direct pass-through for location sensor pairs
+                        self._update_entity(related_id, payload)
+                    elif relationship_type == "combined_tracker":
+                        # For combined trackers, we need to update with all location data
+                        self._update_combined_tracker(related_id)
+                    else:
+                        # Default behavior for other relationships
+                        self._update_entity(related_id, payload)
 
         except Exception as ex:
             _LOGGER.exception("Error dispatching update: %s", ex)
