@@ -1,4 +1,5 @@
 """Update dispatcher for OVMS integration."""
+
 import logging
 import time
 from typing import Any, Dict, Optional, Set, List
@@ -16,10 +17,13 @@ from ..attribute_manager import AttributeManager
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
+
 class UpdateDispatcher:
     """Dispatcher for coordinating updates between related entities."""
 
-    def __init__(self, hass: HomeAssistant, entity_registry, attribute_manager: AttributeManager):
+    def __init__(
+        self, hass: HomeAssistant, entity_registry, attribute_manager: AttributeManager
+    ):
         """Initialize the update dispatcher."""
         self.hass = hass
         self.entity_registry = entity_registry
@@ -58,7 +62,9 @@ class UpdateDispatcher:
             related_entities = self.entity_registry.get_related_entities(entity_id)
             for related_id in related_entities:
                 # Get relationship type to determine how to handle the update
-                relationship_type = self.entity_registry.relationship_types.get((entity_id, related_id))
+                relationship_type = self.entity_registry.relationship_types.get(
+                    (entity_id, related_id)
+                )
 
                 if relationship_type == "location_sensor":
                     # Direct pass-through for location sensor pairs
@@ -80,7 +86,11 @@ class UpdateDispatcher:
             signal = f"{SIGNAL_UPDATE_ENTITY}_{entity_id}"
 
             # Reduce excessive logging - only log for critical entities or periodically
-            if entity_id.endswith("_location") or len(self.hass.data.get("ovms", {}).get("dispatched_updates", set())) < 20:
+            if (
+                entity_id.endswith("_location")
+                or len(self.hass.data.get("ovms", {}).get("dispatched_updates", set()))
+                < 20
+            ):
                 _LOGGER.debug("Dispatching update for %s", entity_id)
 
             async_dispatcher_send(self.hass, signal, payload)
@@ -100,7 +110,7 @@ class UpdateDispatcher:
         coordinate_keywords = ["latitude", "lat", "longitude", "long", "lon", "lng"]
 
         # Convert topic to parts for more precise matching
-        parts = topic.split('/')
+        parts = topic.split("/")
 
         # Only match exact coordinate keywords, not any topic containing "gps"
         for keyword in coordinate_keywords:
@@ -113,8 +123,10 @@ class UpdateDispatcher:
                 return True
 
         # For multi-part words like "v_p_latitude", we need additional check
-        if any(part.lower().endswith("_latitude") or
-               part.lower().endswith("_longitude") for part in parts):
+        if any(
+            part.lower().endswith("_latitude") or part.lower().endswith("_longitude")
+            for part in parts
+        ):
             return True
 
         return False
@@ -132,8 +144,13 @@ class UpdateDispatcher:
             now = dt_util.utcnow().timestamp()
 
             # Extract latitude/longitude values if applicable
-            is_latitude = any(keyword in topic.lower() for keyword in ["latitude", "lat"])
-            is_longitude = any(keyword in topic.lower() for keyword in ["longitude", "long", "lon", "lng"])
+            is_latitude = any(
+                keyword in topic.lower() for keyword in ["latitude", "lat"]
+            )
+            is_longitude = any(
+                keyword in topic.lower()
+                for keyword in ["longitude", "long", "lon", "lng"]
+            )
 
             # Update our location values cache
             if is_latitude:
@@ -144,7 +161,10 @@ class UpdateDispatcher:
                 self.last_location_update["longitude"] = now
 
             # Only update device trackers if we have both latitude and longitude
-            if "latitude" in self.location_values and "longitude" in self.location_values:
+            if (
+                "latitude" in self.location_values
+                and "longitude" in self.location_values
+            ):
                 self._update_all_device_trackers()
 
         except Exception as ex:
@@ -154,12 +174,19 @@ class UpdateDispatcher:
         """Handle updates to version topics with special priority."""
         try:
             # If this is a version topic, update the device info
-            is_version_topic = any(ver_keyword in topic.lower() for ver_keyword in ["version", "m.version"])
+            is_version_topic = any(
+                ver_keyword in topic.lower() for ver_keyword in ["version", "m.version"]
+            )
 
             # Only update device info for main module version (not vehicle-specific versions)
             is_main_version = is_version_topic and not any(
                 vehicle_prefix in topic.lower()
-                for vehicle_prefix in ["xvu", "xmg", "xsq", "xnl"]  # Vehicle-specific prefixes
+                for vehicle_prefix in [
+                    "xvu",
+                    "xmg",
+                    "xsq",
+                    "xnl",
+                ]  # Vehicle-specific prefixes
             )
 
             if is_version_topic:
@@ -168,7 +195,11 @@ class UpdateDispatcher:
                 # Truncate very long version strings to avoid potential issues
                 if payload and len(payload) > 255:
                     trimmed_payload = payload[:252] + "..."
-                    _LOGGER.warning("Version string too long, truncating: %s -> %s", payload, trimmed_payload)
+                    _LOGGER.warning(
+                        "Version string too long, truncating: %s -> %s",
+                        payload,
+                        trimmed_payload,
+                    )
                     payload = trimmed_payload
 
                 # Only update the device firmware version if this is the main module version
@@ -180,11 +211,14 @@ class UpdateDispatcher:
                             config = data["mqtt_client"].config
                             if "vehicle_id" in config:
                                 vehicle_id = config["vehicle_id"]
-                                _LOGGER.debug("Found vehicle_id '%s' in config", vehicle_id)
+                                _LOGGER.debug(
+                                    "Found vehicle_id '%s' in config", vehicle_id
+                                )
                                 break
 
                     # Find the device in the registry
                     from homeassistant.helpers import device_registry as dr
+
                     device_registry = dr.async_get(self.hass)
 
                     # Find OVMS device
@@ -202,23 +236,34 @@ class UpdateDispatcher:
                     if device:
                         try:
                             device_registry.async_update_device(
-                                device.id,
-                                sw_version=payload
+                                device.id, sw_version=payload
                             )
-                            _LOGGER.debug("Updated device %s firmware version to %s", device.id, payload)
+                            _LOGGER.debug(
+                                "Updated device %s firmware version to %s",
+                                device.id,
+                                payload,
+                            )
                         except Exception as ex:
-                            _LOGGER.error("Failed to update device with version: %s", ex)
+                            _LOGGER.error(
+                                "Failed to update device with version: %s", ex
+                            )
                             # Try an alternative approach
                             try:
                                 # Use a simpler update call as a fallback
                                 device_registry.async_update_device(
                                     device.id,
-                                    sw_version=payload[:100]  # Use just first 100 chars as a fallback
+                                    sw_version=payload[
+                                        :100
+                                    ],  # Use just first 100 chars as a fallback
                                 )
                             except Exception:
-                                _LOGGER.error("Failed to update device with shortened version too")
+                                _LOGGER.error(
+                                    "Failed to update device with shortened version too"
+                                )
                     else:
-                        _LOGGER.debug("No OVMS device found in registry to update version")
+                        _LOGGER.debug(
+                            "No OVMS device found in registry to update version"
+                        )
 
                 # Ensure version topics have higher priority
                 current_priority = self.entity_registry.priorities.get(topic, 0)
@@ -241,13 +286,15 @@ class UpdateDispatcher:
 
                 if "gps_accuracy" in attributes:
                     # Update all device trackers with this GPS accuracy
-                    device_trackers = self.entity_registry.get_entities_by_type("device_tracker")
+                    device_trackers = self.entity_registry.get_entities_by_type(
+                        "device_tracker"
+                    )
                     for tracker_id in device_trackers:
                         # Create update payload with accuracy
                         quality_payload = {
                             "gps_accuracy": attributes["gps_accuracy"],
                             "gps_accuracy_unit": "m",  # Add proper unit
-                            "last_updated": dt_util.utcnow().isoformat()
+                            "last_updated": dt_util.utcnow().isoformat(),
                         }
                         self._update_entity(tracker_id, quality_payload)
 
@@ -297,7 +344,9 @@ class UpdateDispatcher:
         """Update all device trackers with current location data."""
         try:
             # Find all device trackers
-            device_trackers = self.entity_registry.get_entities_by_type("device_tracker")
+            device_trackers = self.entity_registry.get_entities_by_type(
+                "device_tracker"
+            )
 
             # Get GPS accuracy if available
             accuracy = None

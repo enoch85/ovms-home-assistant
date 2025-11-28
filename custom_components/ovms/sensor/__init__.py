@@ -1,10 +1,14 @@
 """Support for OVMS sensors."""
+
 import logging
 from typing import Any, Dict
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
+from homeassistant.helpers.dispatcher import (
+    async_dispatcher_connect,
+    async_dispatcher_send,
+)
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from ..const import LOGGER_NAME, SIGNAL_ADD_ENTITIES
@@ -12,10 +16,12 @@ from .entities import OVMSSensor, CellVoltageSensor
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up OVMS sensors based on a config entry."""
+
     @callback
     def async_add_sensor(data: Dict[str, Any]) -> None:
         """Add sensor based on discovery data."""
@@ -40,7 +46,9 @@ async def async_setup_entry(
 
         # Handle cell sensors differently
         if "cell_sensors" in data:
-            _LOGGER.debug("Adding cell sensors from parent entity: %s", data.get("parent_entity"))
+            _LOGGER.debug(
+                "Adding cell sensors from parent entity: %s", data.get("parent_entity")
+            )
             try:
                 sensors = []
                 for cell_config in data["cell_sensors"]:

@@ -1,4 +1,5 @@
 """OVMS sensor factory functions."""
+
 import logging
 import hashlib
 from typing import Any, Dict, List, Optional, Union
@@ -23,7 +24,10 @@ from ..metrics.patterns import TOPIC_PATTERNS
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
-def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
+
+def determine_sensor_type(
+    internal_name: str, topic: str, attributes: Dict[str, Any]
+) -> Dict[str, Any]:
     """Determine the sensor type based on metrics definitions."""
     result: Dict[str, Any] = {
         "device_class": None,
@@ -40,10 +44,13 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         # Apply diagnostic entity category to network and system sensors
         if category in ["diagnostic", "network", "system"]:
             result["entity_category"] = EntityCategory.DIAGNOSTIC
-            if category != "diagnostic":  # Don't return for network/system to allow further processing
+            if (
+                category != "diagnostic"
+            ):  # Don't return for network/system to allow further processing
                 _LOGGER.debug(
                     "Setting EntityCategory.DIAGNOSTIC for %s category: %s",
-                    category, internal_name
+                    category,
+                    internal_name,
                 )
 
     # Special check for timer mode sensors
@@ -64,12 +71,12 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
 
     # Extract metric path from topic
     topic_suffix = topic
-    if topic.count('/') >= 3:  # Skip the prefix part
-        parts = topic.split('/')
+    if topic.count("/") >= 3:  # Skip the prefix part
+        parts = topic.split("/")
         # Find where the actual metric path starts
         for i, part in enumerate(parts):
             if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
-                topic_suffix = '/'.join(parts[i:])
+                topic_suffix = "/".join(parts[i:])
                 break
 
     # Create both standard and alternative metric paths for matching
@@ -89,9 +96,11 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
 
     # If no exact match, try by pattern in name and topic
     if not metric_info:
-        topic_parts = topic_suffix.split('/')
-        name_parts = internal_name.split('_')
-        metric_info = get_metric_by_pattern(topic_parts) or get_metric_by_pattern(name_parts)
+        topic_parts = topic_suffix.split("/")
+        name_parts = internal_name.split("_")
+        metric_info = get_metric_by_pattern(topic_parts) or get_metric_by_pattern(
+            name_parts
+        )
 
     # Apply metric info if found
     if metric_info:
@@ -106,7 +115,9 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
         if "icon" in metric_info:
             result["icon"] = metric_info["icon"]
         if "suggested_display_precision" in metric_info:
-            result["suggested_display_precision"] = metric_info["suggested_display_precision"]
+            result["suggested_display_precision"] = metric_info[
+                "suggested_display_precision"
+            ]
         return result
 
     # If no metric info found, try matching by pattern from TOPIC_PATTERNS
@@ -123,12 +134,17 @@ def determine_sensor_type(internal_name: str, topic: str, attributes: Dict[str, 
             if "icon" in pattern_info:
                 result["icon"] = pattern_info["icon"]
             if "suggested_display_precision" in pattern_info:
-                result["suggested_display_precision"] = pattern_info["suggested_display_precision"]
+                result["suggested_display_precision"] = pattern_info[
+                    "suggested_display_precision"
+                ]
             break
 
     return result
 
-def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any, native_value: Any) -> Dict[str, Any]:
+
+def add_device_specific_attributes(
+    attributes: Dict[str, Any], device_class: Any, native_value: Any
+) -> Dict[str, Any]:
     """Add attributes based on device class and value."""
     updated_attrs = attributes.copy()
 
@@ -154,7 +170,10 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
             if native_value is not None:
                 try:
                     temp = float(native_value)
-                    if "ambient" in updated_attrs.get("category", "").lower() or "cabin" in updated_attrs.get("category", "").lower():
+                    if (
+                        "ambient" in updated_attrs.get("category", "").lower()
+                        or "cabin" in updated_attrs.get("category", "").lower()
+                    ):
                         if temp < 0:
                             updated_attrs["temperature_level"] = "freezing"
                         elif temp < 10:
@@ -172,10 +191,16 @@ def add_device_specific_attributes(attributes: Dict[str, Any], device_class: Any
 
     return updated_attrs
 
-def create_cell_sensors(topic: str, cell_values: List[float],
-                        vehicle_id: str, parent_unique_id: str,
-                        device_info: Dict[str, Any], attributes: Dict[str, Any],
-                        create_individual_sensors: bool = False) -> List[Dict[str, Any]]:
+
+def create_cell_sensors(
+    topic: str,
+    cell_values: List[float],
+    vehicle_id: str,
+    parent_unique_id: str,
+    device_info: Dict[str, Any],
+    attributes: Dict[str, Any],
+    create_individual_sensors: bool = False,
+) -> List[Dict[str, Any]]:
     """Create configuration for individual cell sensors.
 
     Args:
@@ -194,15 +219,15 @@ def create_cell_sensors(topic: str, cell_values: List[float],
 
     # Parse topic to extract just the metric path
     topic_suffix = topic
-    if topic.count('/') >= 3:
-        parts = topic.split('/')
+    if topic.count("/") >= 3:
+        parts = topic.split("/")
         for i, part in enumerate(parts):
             if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
-                topic_suffix = '/'.join(parts[i:])
+                topic_suffix = "/".join(parts[i:])
                 break
 
     # Convert to metric path
-    topic_parts = topic_suffix.split('/')
+    topic_parts = topic_suffix.split("/")
     metric_path = "_".join(topic_parts)
 
     # Determine the appropriate attribute name type based on sensor context
@@ -212,8 +237,9 @@ def create_cell_sensors(topic: str, cell_values: List[float],
     device_class = attributes.get("device_class")
 
     # Check if this is a tire sensor
-    is_tire = (device_class == SensorDeviceClass.PRESSURE or
-               (device_class == SensorDeviceClass.TEMPERATURE and category == "tire"))
+    is_tire = device_class == SensorDeviceClass.PRESSURE or (
+        device_class == SensorDeviceClass.TEMPERATURE and category == "tire"
+    )
 
     if is_tire:
         stat_type = "tire"
@@ -230,12 +256,16 @@ def create_cell_sensors(topic: str, cell_values: List[float],
             # Use tire position names for tire sensors
             position_name, position_code = TIRE_POSITIONS[i]
             entity_name = f"ovms_{vehicle_id}_{category}_{metric_path}_{position_code.lower()}".lower()
-            cell_unique_id = f"{vehicle_id}_{category}_{topic_hash}_{position_code.lower()}"
+            cell_unique_id = (
+                f"{vehicle_id}_{category}_{topic_hash}_{position_code.lower()}"
+            )
             friendly_name = f"{attributes.get('name', 'Tire')} {position_name}"
             topic_suffix = f"{position_code.lower()}"
         else:
             # Use generic naming for other sensors or additional values beyond 4 tires
-            entity_name = f"ovms_{vehicle_id}_{category}_{metric_path}_{stat_type}_{i+1}".lower()
+            entity_name = (
+                f"ovms_{vehicle_id}_{category}_{metric_path}_{stat_type}_{i+1}".lower()
+            )
             cell_unique_id = f"{vehicle_id}_{category}_{topic_hash}_{stat_type}_{i+1}"
             friendly_name = f"{attributes.get('name', stat_type.capitalize())} {stat_type.capitalize()} {i+1}"
             topic_suffix = f"{stat_type}/{i+1}"

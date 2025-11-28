@@ -58,7 +58,6 @@ POWER_METRICS = {
         "suggested_display_precision": 2,
         "category": "power",
     },
-
     # Generator metrics (power output)
     "v.g.generating": {
         "name": "Generating",

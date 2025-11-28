@@ -1,4 +1,5 @@
 """Config flow for OVMS integration."""
+
 import asyncio
 import hashlib
 import logging
@@ -42,7 +43,7 @@ from .topic_discovery import (
     discover_topics,
     test_topic_availability,
     extract_vehicle_ids,
-    format_structure_prefix
+    format_structure_prefix,
 )
 from .options_flow import OVMSOptionsFlow
 
@@ -76,16 +77,17 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return [self._ensure_serializable(item) for item in obj]
         elif isinstance(obj, tuple):
             return [self._ensure_serializable(item) for item in obj]
-        elif hasattr(obj, '__dict__'):
+        elif hasattr(obj, "__dict__"):
             _LOGGER.debug(
                 "Converting object with __dict__ to serializable: %s",
-                type(obj).__name__
+                type(obj).__name__,
             )
             return {
                 k: self._ensure_serializable(v)
-                for k, v in obj.__dict__.items() if not k.startswith('_')
+                for k, v in obj.__dict__.items()
+                if not k.startswith("_")
             }
-        elif obj.__class__.__name__ == 'ReasonCodes':
+        elif obj.__class__.__name__ == "ReasonCodes":
             _LOGGER.debug("Converting ReasonCodes to serializable")
             try:
                 return [int(code) for code in obj]
@@ -101,7 +103,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             _LOGGER.debug(
                 "Starting OVMS MQTT broker setup with input: %s",
-                {k: v for k, v in user_input.items() if k != CONF_PASSWORD}
+                {k: v for k, v in user_input.items() if k != CONF_PASSWORD},
             )
             self.debug_info["broker_setup_start"] = time.time()
 
@@ -112,12 +114,16 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     user_input[CONF_PROTOCOL] = "mqtts"
                     user_input[CONF_PORT] = 8883
                     # Use the checkbox value for secure ports
-                    user_input[CONF_VERIFY_SSL] = user_input.get("verify_ssl_certificate", True)
+                    user_input[CONF_VERIFY_SSL] = user_input.get(
+                        "verify_ssl_certificate", True
+                    )
                 elif port_selection == "8084":
                     user_input[CONF_PROTOCOL] = "wss"
                     user_input[CONF_PORT] = 8084
                     # Use the checkbox value for secure ports
-                    user_input[CONF_VERIFY_SSL] = user_input.get("verify_ssl_certificate", True)
+                    user_input[CONF_VERIFY_SSL] = user_input.get(
+                        "verify_ssl_certificate", True
+                    )
                 elif port_selection == "1883":
                     user_input[CONF_PROTOCOL] = "mqtt"
                     user_input[CONF_PORT] = 1883
@@ -140,21 +146,26 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             self.debug_info["broker_setup_end"] = time.time()
             self.debug_info["broker_setup_duration"] = (
-                self.debug_info["broker_setup_end"] - self.debug_info["broker_setup_start"]
+                self.debug_info["broker_setup_end"]
+                - self.debug_info["broker_setup_start"]
             )
 
             _LOGGER.debug(
                 "MQTT connection test completed in %.2f seconds: %s",
                 self.debug_info["broker_setup_duration"],
-                result
+                result,
             )
 
             if result["success"]:
                 # Save the config
-                _LOGGER.debug("MQTT Connection test successful: %s", result.get("details", ""))
+                _LOGGER.debug(
+                    "MQTT Connection test successful: %s", result.get("details", "")
+                )
                 self.mqtt_config.update(user_input)
                 # Store debug info for later
-                self.mqtt_config["debug_info"] = self._ensure_serializable(self.debug_info)
+                self.mqtt_config["debug_info"] = self._ensure_serializable(
+                    self.debug_info
+                )
                 return await self.async_step_topics()
 
             _LOGGER.error("MQTT Connection test failed: %s", result["message"])
@@ -163,24 +174,28 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if "details" in result:
                 errors["details"] = result["details"]
 
-       # Build the schema with expanded port options
+        # Build the schema with expanded port options
         schema_dict = {
             vol.Required(CONF_HOST): str,
-            vol.Required("Port", default="8883"): vol.In({
-                "1883": "TCP Port: 1883 (mqtt://)",
-                "8083": "WebSocket Port: 8083 (ws://)",
-                "8883": "SSL/TLS Port: 8883 (mqtts://)",
-                "8084": "Secure WebSocket Port: 8084 (wss://)",
-            }),
+            vol.Required("Port", default="8883"): vol.In(
+                {
+                    "1883": "TCP Port: 1883 (mqtt://)",
+                    "8083": "WebSocket Port: 8083 (ws://)",
+                    "8883": "SSL/TLS Port: 8883 (mqtts://)",
+                    "8084": "Secure WebSocket Port: 8084 (wss://)",
+                }
+            ),
             vol.Required("verify_ssl_certificate", default=True): bool,
         }
 
         # Continue with remaining form fields
-        schema_dict.update({
-            vol.Optional(CONF_USERNAME): str,
-            vol.Optional(CONF_PASSWORD): str,
-            vol.Required(CONF_QOS, default=DEFAULT_QOS): vol.In([0, 1, 2]),
-        })
+        schema_dict.update(
+            {
+                vol.Optional(CONF_USERNAME): str,
+                vol.Optional(CONF_PASSWORD): str,
+                vol.Required(CONF_QOS, default=DEFAULT_QOS): vol.In([0, 1, 2]),
+            }
+        )
 
         data_schema = vol.Schema(schema_dict)
 
@@ -190,7 +205,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders={
                 "ssl_note": "data_description",
-                "debug_info": str(self.debug_info) if self.debug_info else ""
+                "debug_info": str(self.debug_info) if self.debug_info else "",
             },
         )
 
@@ -206,24 +221,29 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             # If custom structure was selected, go to custom topic step
             if user_input[CONF_TOPIC_STRUCTURE] == "custom":
-                _LOGGER.debug("Custom topic structure selected, moving to custom_topic step")
+                _LOGGER.debug(
+                    "Custom topic structure selected, moving to custom_topic step"
+                )
                 return await self.async_step_custom_topic()
 
             # Otherwise continue to topic discovery
-            _LOGGER.debug("Standard topic structure selected, moving to topic_discovery step")
+            _LOGGER.debug(
+                "Standard topic structure selected, moving to topic_discovery step"
+            )
             return await self.async_step_topic_discovery()
 
         # Build the schema with default MQTT username set to broker username
-        data_schema = vol.Schema({
-            vol.Required(CONF_TOPIC_PREFIX, default=DEFAULT_TOPIC_PREFIX): str,
-            vol.Required(CONF_TOPIC_STRUCTURE, default=DEFAULT_TOPIC_STRUCTURE): vol.In(
-                TOPIC_STRUCTURES
-            ),
-            vol.Optional(
-                CONF_MQTT_USERNAME,
-                default=self.mqtt_config.get(CONF_USERNAME, "")
-            ): str,
-        })
+        data_schema = vol.Schema(
+            {
+                vol.Required(CONF_TOPIC_PREFIX, default=DEFAULT_TOPIC_PREFIX): str,
+                vol.Required(
+                    CONF_TOPIC_STRUCTURE, default=DEFAULT_TOPIC_STRUCTURE
+                ): vol.In(TOPIC_STRUCTURES),
+                vol.Optional(
+                    CONF_MQTT_USERNAME, default=self.mqtt_config.get(CONF_USERNAME, "")
+                ): str,
+            }
+        )
 
         return self.async_show_form(
             step_id="topics",
@@ -251,11 +271,11 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Test for valid format (no invalid placeholders)
                 try:
                     test_format = custom_structure.format(
-                        prefix="test",
-                        vehicle_id="test",
-                        mqtt_username="test"
+                        prefix="test", vehicle_id="test", mqtt_username="test"
                     )
-                    _LOGGER.debug("Custom structure validation successful: %s", test_format)
+                    _LOGGER.debug(
+                        "Custom structure validation successful: %s", test_format
+                    )
                     self.mqtt_config[CONF_TOPIC_STRUCTURE] = custom_structure
                     return await self.async_step_topic_discovery()
                 except KeyError as ex:
@@ -267,9 +287,11 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LOGGER.error("Invalid format in custom structure: %s", ex)
 
         # Build the schema
-        data_schema = vol.Schema({
-            vol.Required("custom_structure"): str,
-        })
+        data_schema = vol.Schema(
+            {
+                vol.Required("custom_structure"): str,
+            }
+        )
 
         return self.async_show_form(
             step_id="custom_topic",
@@ -297,26 +319,28 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.discovered_topics = discovery_result.get("discovered_topics", set())
 
             topics_count = len(self.discovered_topics or [])
-            topics_sample = (list(self.discovered_topics)[:5]
-                if topics_count > 5 else list(self.discovered_topics))
+            topics_sample = (
+                list(self.discovered_topics)[:5]
+                if topics_count > 5
+                else list(self.discovered_topics)
+            )
 
             # Fill sample topics, ensure we have 5 placeholders even if fewer topics
             sample_topics = topics_sample + [""] * (5 - len(topics_sample))
 
-            _LOGGER.debug(
-                "Discovered %d topics: %s",
-                topics_count,
-                topics_sample
-            )
+            _LOGGER.debug("Discovered %d topics: %s", topics_count, topics_sample)
 
             # Extract potential vehicle IDs from discovered topics
             potential_vehicle_ids = extract_vehicle_ids(
-                self.discovered_topics,
-                self.mqtt_config
+                self.discovered_topics, self.mqtt_config
             )
 
             # Format vehicle IDs with newlines for bullet points
-            formatted_vehicle_ids = "\n• ".join(potential_vehicle_ids) if potential_vehicle_ids else "None found"
+            formatted_vehicle_ids = (
+                "\n• ".join(potential_vehicle_ids)
+                if potential_vehicle_ids
+                else "None found"
+            )
 
             self.debug_info["potential_vehicle_ids"] = list(potential_vehicle_ids)
             _LOGGER.debug("Potential vehicle IDs: %s", potential_vehicle_ids)
@@ -343,9 +367,11 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.error("Topic discovery failed: %s", discovery_result["message"])
 
         # Create an empty schema to show error
-        data_schema = vol.Schema({
-            vol.Required("retry_discovery", default=True): bool,
-        })
+        data_schema = vol.Schema(
+            {
+                vol.Required("retry_discovery", default=True): bool,
+            }
+        )
 
         return self.async_show_form(
             step_id="topic_discovery",
@@ -362,14 +388,13 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Suggest vehicle IDs from discovery if available
         suggested_vehicle_ids = extract_vehicle_ids(
-            self.discovered_topics,
-            self.mqtt_config
+            self.discovered_topics, self.mqtt_config
         )
         default_vehicle_id = next(iter(suggested_vehicle_ids), "")
         _LOGGER.debug(
             "Suggested vehicle IDs: %s, default: %s",
             suggested_vehicle_ids,
-            default_vehicle_id
+            default_vehicle_id,
         )
 
         if user_input is not None:
@@ -378,7 +403,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             _LOGGER.debug(
                 "Starting OVMS topic availability test for vehicle: %s",
-                user_input[CONF_VEHICLE_ID]
+                user_input[CONF_VEHICLE_ID],
             )
             self.debug_info["topic_test_start"] = time.time()
 
@@ -398,18 +423,24 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.debug(
                 "Topic availability test completed in %.2f seconds: %s",
                 self.debug_info["topic_test_duration"],
-                result
+                result,
             )
 
             if result["success"]:
-                _LOGGER.debug("Topic availability test successful: %s", result.get("details", ""))
+                _LOGGER.debug(
+                    "Topic availability test successful: %s", result.get("details", "")
+                )
 
                 # Store original vehicle ID for maintaining entity ID consistency
                 self.mqtt_config[CONF_ORIGINAL_VEHICLE_ID] = user_input[CONF_VEHICLE_ID]
 
                 # Create a stable unique ID that won't change if vehicle_id changes
-                unique_id_base = f"{self.mqtt_config[CONF_HOST]}_{user_input[CONF_VEHICLE_ID]}"
-                unique_id = f"ovms_{hashlib.md5(unique_id_base.encode()).hexdigest()[:8]}"
+                unique_id_base = (
+                    f"{self.mqtt_config[CONF_HOST]}_{user_input[CONF_VEHICLE_ID]}"
+                )
+                unique_id = (
+                    f"ovms_{hashlib.md5(unique_id_base.encode()).hexdigest()[:8]}"
+                )
                 _LOGGER.debug("Generated unique ID for config entry: %s", unique_id)
 
                 await self.async_set_unique_id(unique_id)
@@ -424,20 +455,19 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.debug("Generated stable MQTT client ID: %s", client_id)
 
                 # Ensure everything is serializable
-                self.mqtt_config["debug_info"] = self._ensure_serializable(self.debug_info)
+                self.mqtt_config["debug_info"] = self._ensure_serializable(
+                    self.debug_info
+                )
 
                 # Log complete final configuration
                 _LOGGER.debug(
                     "Final config for entry creation: %s",
-                    {k: v for k, v in self.mqtt_config.items() if k != CONF_PASSWORD}
+                    {k: v for k, v in self.mqtt_config.items() if k != CONF_PASSWORD},
                 )
 
                 title = f"OVMS - {self.mqtt_config[CONF_VEHICLE_ID]}"
                 _LOGGER.info("Creating config entry with title: %s", title)
-                return self.async_create_entry(
-                    title=title,
-                    data=self.mqtt_config
-                )
+                return self.async_create_entry(title=title, data=self.mqtt_config)
 
             _LOGGER.error("Topic availability test failed: %s", result["message"])
             errors["base"] = result["error_type"]
@@ -446,9 +476,11 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["details"] = result["details"]
 
         # Build the schema
-        data_schema = vol.Schema({
-            vol.Required(CONF_VEHICLE_ID, default=default_vehicle_id): str,
-        })
+        data_schema = vol.Schema(
+            {
+                vol.Required(CONF_VEHICLE_ID, default=default_vehicle_id): str,
+            }
+        )
 
         return self.async_show_form(
             step_id="vehicle",
@@ -456,7 +488,9 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders={
                 "suggested_ids": (
-                    ", ".join(suggested_vehicle_ids) if suggested_vehicle_ids else "None detected"
+                    ", ".join(suggested_vehicle_ids)
+                    if suggested_vehicle_ids
+                    else "None detected"
                 ),
                 "debug_info": str(self.debug_info) if self.debug_info else "",
             },

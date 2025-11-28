@@ -1,10 +1,12 @@
 """Entity registry for OVMS integration."""
+
 import logging
 from typing import Dict, Any, Optional, List, Set
 
 from ..const import LOGGER_NAME
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
 
 class EntityRegistry:
     """Registry for tracking OVMS entities and their relationships."""
@@ -14,12 +16,16 @@ class EntityRegistry:
         self.topics = {}  # Maps topic -> entity_id
         self.entities = {}  # Maps entity_id -> entity_info
         self.relationships = {}  # Maps entity_id -> list of related entity_ids
-        self.relationship_types = {}  # Maps (entity_id, related_id) -> relationship_type
+        self.relationship_types = (
+            {}
+        )  # Maps (entity_id, related_id) -> relationship_type
         self.priorities = {}  # Maps topic -> priority
         self.entity_types = {}  # Maps entity_id -> entity_type
         self.reverse_lookup = {}  # Maps entity_id -> topic
 
-    def register_entity(self, topic: str, entity_id: str, entity_type: str, priority: int = 0) -> bool:
+    def register_entity(
+        self, topic: str, entity_id: str, entity_type: str, priority: int = 0
+    ) -> bool:
         """Register an entity for a topic with specified priority."""
         try:
             # Check if the topic already has a registered entity
@@ -30,7 +36,9 @@ class EntityRegistry:
                 if existing_priority >= priority:
                     _LOGGER.debug(
                         "Skipping registration for %s, existing entity has higher priority (%d vs %d)",
-                        topic, existing_priority, priority
+                        topic,
+                        existing_priority,
+                        priority,
                     )
                     return False
 
@@ -38,7 +46,11 @@ class EntityRegistry:
                 old_entity_id = self.topics[topic]
                 _LOGGER.debug(
                     "Replacing entity %s with %s for topic %s (priority %d vs %d)",
-                    old_entity_id, entity_id, topic, existing_priority, priority
+                    old_entity_id,
+                    entity_id,
+                    topic,
+                    existing_priority,
+                    priority,
                 )
 
                 # Remove from reverse lookup
@@ -62,7 +74,9 @@ class EntityRegistry:
             _LOGGER.exception("Error registering entity: %s", ex)
             return False
 
-    def register_relationship(self, entity_id: str, related_id: str, relationship_type: str) -> None:
+    def register_relationship(
+        self, entity_id: str, related_id: str, relationship_type: str
+    ) -> None:
         """Register a relationship between two entities."""
         try:
             # Ensure both entities have relationship entries
@@ -82,7 +96,9 @@ class EntityRegistry:
 
             _LOGGER.debug(
                 "Registered %s relationship between %s and %s",
-                relationship_type, entity_id, related_id
+                relationship_type,
+                entity_id,
+                related_id,
             )
 
         except Exception as ex:
@@ -100,11 +116,14 @@ class EntityRegistry:
         """Get all entities related to the specified entity."""
         return self.relationships.get(entity_id, set())
 
-    def get_related_entities_by_type(self, entity_id: str, relationship_type: str) -> List[str]:
+    def get_related_entities_by_type(
+        self, entity_id: str, relationship_type: str
+    ) -> List[str]:
         """Get entities related to the specified entity with the given relationship type."""
         related_entities = self.relationships.get(entity_id, set())
         return [
-            related_id for related_id in related_entities
+            related_id
+            for related_id in related_entities
             if self.relationship_types.get((entity_id, related_id)) == relationship_type
         ]
 
@@ -126,7 +145,8 @@ class EntityRegistry:
     def get_entities_by_type(self, entity_type: str) -> List[str]:
         """Get all entities of a specific type."""
         return [
-            entity_id for entity_id, etype in self.entity_types.items()
+            entity_id
+            for entity_id, etype in self.entity_types.items()
             if etype == entity_type
         ]
 

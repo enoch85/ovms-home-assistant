@@ -60,7 +60,6 @@ BATTERY_METRICS = {
         "suggested_display_precision": 2,
         "category": "battery",
     },
-
     # Main battery cell metrics
     "v.b.c.temp": {
         "name": "Cell Temperatures",
@@ -72,7 +71,6 @@ BATTERY_METRICS = {
         "category": "battery",
         "has_cell_data": True,
     },
-
     "v.b.c.temp.dev.max": {
         "name": "Max Cell Temperature Deviation",
         "description": "Cell maximum temperature deviation observed",
@@ -114,7 +112,6 @@ BATTERY_METRICS = {
         "category": "battery",
         "has_cell_data": True,
     },
-
     "v.b.c.voltage.dev.max": {
         "name": "Max Cell Voltage Deviation",
         "description": "Cell maximum voltage deviation observed",
@@ -148,7 +145,6 @@ BATTERY_METRICS = {
         "category": "battery",
         "has_cell_data": True,
     },
-
     # Main battery metrics
     "v.b.cac": {
         "name": "Battery Capacity",
@@ -264,7 +260,6 @@ BATTERY_METRICS = {
         "icon": "mdi:battery-heart",
         "category": "battery",
     },
-
     # Battery pack level metrics
     "v.b.p.level.avg": {
         "name": "Cell Level Average",

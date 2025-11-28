@@ -1,4 +1,5 @@
 """Diagnostics support for OVMS."""
+
 from typing import Any, Dict
 
 from homeassistant.components.diagnostics import async_redact_data
@@ -16,8 +17,9 @@ REDACT_FIELDS = {
     "auth",
     "password",
     "token",
-    "secret"
+    "secret",
 }
+
 
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
@@ -47,7 +49,7 @@ async def async_get_config_entry_diagnostics(
                 "calls_remaining": mqtt_client.command_handler.command_limiter.calls_remaining(),
                 "max_calls": mqtt_client.command_handler.command_limiter.max_calls,
                 "period": mqtt_client.command_handler.command_limiter.period,
-            }
+            },
         },
         "entities": {
             "total": len(mqtt_client.entity_registry.get_all_entities()),
@@ -60,10 +62,14 @@ async def async_get_config_entry_diagnostics(
 
     diagnostics_data["sample_topics"] = {
         topic: {
-            "last_payload_length": len(mqtt_client.topic_cache[topic]["payload"])
-                if "payload" in mqtt_client.topic_cache[topic] else 0,
+            "last_payload_length": (
+                len(mqtt_client.topic_cache[topic]["payload"])
+                if "payload" in mqtt_client.topic_cache[topic]
+                else 0
+            ),
             "last_update": mqtt_client.topic_cache[topic].get("timestamp", 0),
-        } for topic in sample_topics
+        }
+        for topic in sample_topics
     }
 
     # Include parsed topic information
@@ -74,7 +80,9 @@ async def async_get_config_entry_diagnostics(
             topic_parsing_examples[topic] = {
                 "entity_type": parsed_data.get("entity_type", "unknown"),
                 "name": parsed_data.get("name", "unknown"),
-                "category": parsed_data.get("attributes", {}).get("category", "unknown"),
+                "category": parsed_data.get("attributes", {}).get(
+                    "category", "unknown"
+                ),
             }
 
     diagnostics_data["topic_parsing_examples"] = topic_parsing_examples

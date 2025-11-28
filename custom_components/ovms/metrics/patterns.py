@@ -88,8 +88,8 @@ TOPIC_PATTERNS = {
                 "kw": UnitOfPower.KILO_WATT,
                 "kilowatt": UnitOfPower.KILO_WATT,
                 "kilowatts": UnitOfPower.KILO_WATT,
-            }
-        }
+            },
+        },
     },
     "energy": {
         "name": "Energy",

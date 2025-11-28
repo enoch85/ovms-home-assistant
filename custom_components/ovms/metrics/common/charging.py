@@ -188,8 +188,7 @@ CHARGING_METRICS = {
     },
     "v.c.timerstart": {
         "name": "Charge Timer Start",
-        "description": ("Time timer is due to start, "
-                        "seconds since midnight UTC"),
+        "description": ("Time timer is due to start, " "seconds since midnight UTC"),
         "icon": "mdi:timer",
         "device_class": SensorDeviceClass.TIMESTAMP,
         "category": "charging",

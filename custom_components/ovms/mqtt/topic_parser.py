@@ -1,4 +1,5 @@
 """Topic parser for OVMS MQTT messages."""
+
 import logging
 import re
 from typing import Dict, Any, Optional, Tuple, List
@@ -10,7 +11,7 @@ from ..const import (
     SYSTEM_TOPIC_BLACKLIST,
     LEGACY_TOPIC_BLACKLIST,
     COMBINED_TOPIC_BLACKLIST,
-    USER_TOPIC_BLACKLIST
+    USER_TOPIC_BLACKLIST,
 )
 from ..metrics import (
     BINARY_METRICS,
@@ -20,6 +21,7 @@ from ..metrics import (
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
+
 class TopicParser:
     """Parser for OVMS MQTT topics."""
 
@@ -28,7 +30,9 @@ class TopicParser:
         self.config = config
         self.entity_registry = entity_registry
         self.structure_prefix = self._format_structure_prefix()
-        self.coordinate_entities_created = {}  # Track which coordinate entities we've created
+        self.coordinate_entities_created = (
+            {}
+        )  # Track which coordinate entities we've created
 
         # Initialize topic blacklist from user configuration (defaults to system patterns)
         configured_blacklist = config.get(CONF_TOPIC_BLACKLIST, SYSTEM_TOPIC_BLACKLIST)
@@ -37,7 +41,9 @@ class TopicParser:
     def _format_structure_prefix(self) -> str:
         """Format the topic structure prefix based on configuration."""
         try:
-            structure = self.config.get("topic_structure", "{prefix}/{mqtt_username}/{vehicle_id}")
+            structure = self.config.get(
+                "topic_structure", "{prefix}/{mqtt_username}/{vehicle_id}"
+            )
             prefix = self.config.get("topic_prefix", "ovms")
             vehicle_id = self.config.get("vehicle_id", "")
             mqtt_username = self.config.get("mqtt_username", "")
@@ -83,7 +89,11 @@ class TopicParser:
             if self.topic_blacklist:
                 for pattern in self.topic_blacklist:
                     if pattern in topic:
-                        _LOGGER.debug("Skipping blacklisted topic pattern '%s': %s", pattern, topic)
+                        _LOGGER.debug(
+                            "Skipping blacklisted topic pattern '%s': %s",
+                            pattern,
+                            topic,
+                        )
                         return None
 
             # Check if topic matches our structure prefix
@@ -107,7 +117,7 @@ class TopicParser:
                     return None
             else:
                 # Extract the normal way
-                topic_suffix = topic[len(self.structure_prefix):].lstrip("/")
+                topic_suffix = topic[len(self.structure_prefix) :].lstrip("/")
 
             if not topic_suffix:
                 return None
@@ -119,7 +129,9 @@ class TopicParser:
             # Log the topic and the derived parts only during initial setup
             # This prevents the "logging too frequently" warning
             if len(parts) < 5:  # Only log for shorter, likely important paths
-                _LOGGER.debug(f"Pre-categorization: Topic='{topic}', Suffix='{topic_suffix}', Derived Parts='{parts}'")
+                _LOGGER.debug(
+                    f"Pre-categorization: Topic='{topic}', Suffix='{topic_suffix}', Derived Parts='{parts}'"
+                )
 
             if len(parts) < 2:
                 return None
@@ -140,8 +152,12 @@ class TopicParser:
             category = metrics.determine_category_from_topic(parts)
 
             # Additional logging for GPS location topics
-            if any(keyword in topic.lower() for keyword in ["latitude", "longitude", "gps"]) or (len(parts) >= 2 and parts[0] == "v" and parts[1] == "p"):
-                _LOGGER.info(f"GPS Location Topic Processing - Topic: {topic}, Parts: {parts}, Category: {category}")
+            if any(
+                keyword in topic.lower() for keyword in ["latitude", "longitude", "gps"]
+            ) or (len(parts) >= 2 and parts[0] == "v" and parts[1] == "p"):
+                _LOGGER.info(
+                    f"GPS Location Topic Processing - Topic: {topic}, Parts: {parts}, Category: {category}"
+                )
 
             # Create entity name and add extra attributes
             raw_name = "_".join(parts) if parts else "unknown"
@@ -205,7 +221,9 @@ class TopicParser:
 
         return ".".join(parts)
 
-    def _determine_entity_type(self, parts: List[str], metric_path: str, topic: str) -> str:
+    def _determine_entity_type(
+        self, parts: List[str], metric_path: str, topic: str
+    ) -> str:
         """Determine the entity type based on topic parts and metric info."""
         # Check if this should be a binary sensor
         if self._should_be_binary_sensor(parts, metric_path):
@@ -258,19 +276,19 @@ class TopicParser:
                 "locked",
                 "door",
                 "charging",
-                "fan",       # Added for MG ZS-EV radiator fan
-                "relay",     # Added for MG ZS-EV relays
-                "error",     # Added for MG ZS-EV battery error
-                "auth",      # Added for MG ZS-EV auth
-                "polling",   # Added for MG ZS-EV polling
-                "heat",      # Added for Nissan Leaf remote heat
-                "cool",      # Added for Nissan Leaf remote cool
-                "granted",   # Added for Nissan Leaf heater granted
-                "present",   # Added for Nissan Leaf heater present
-                "requested", # Added for Nissan Leaf heat requested
+                "fan",  # Added for MG ZS-EV radiator fan
+                "relay",  # Added for MG ZS-EV relays
+                "error",  # Added for MG ZS-EV battery error
+                "auth",  # Added for MG ZS-EV auth
+                "polling",  # Added for MG ZS-EV polling
+                "heat",  # Added for Nissan Leaf remote heat
+                "cool",  # Added for Nissan Leaf remote cool
+                "granted",  # Added for Nissan Leaf heater granted
+                "present",  # Added for Nissan Leaf heater present
+                "requested",  # Added for Nissan Leaf heat requested
                 "progress",  # Added for Nissan Leaf request in progress
-                "quick",     # Added for Nissan Leaf quick charge status
-                "auto",      # Added for Nissan Leaf auto HVAC
+                "quick",  # Added for Nissan Leaf quick charge status
+                "auto",  # Added for Nissan Leaf auto HVAC
             ]
 
             # Special handling for "on" to avoid false matches
@@ -324,8 +342,10 @@ class TopicParser:
                 return True
 
         # For multi-part words like "v_p_latitude", we need additional check
-        if any(part.lower().endswith("_latitude") or
-               part.lower().endswith("_longitude") for part in parts):
+        if any(
+            part.lower().endswith("_latitude") or part.lower().endswith("_longitude")
+            for part in parts
+        ):
             return True
 
         return False
@@ -336,8 +356,9 @@ class TopicParser:
         coordinate_keywords = ["latitude", "lat", "longitude", "long", "lon", "lng"]
 
         # GPS topics OR coordinate topics should be sensors
-        if (any(keyword in topic.lower() for keyword in gps_keywords) or
-            any(keyword in topic.lower() for keyword in coordinate_keywords)):
+        if any(keyword in topic.lower() for keyword in gps_keywords) or any(
+            keyword in topic.lower() for keyword in coordinate_keywords
+        ):
             return True
 
         return False

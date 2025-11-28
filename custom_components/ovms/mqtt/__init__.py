@@ -1,10 +1,14 @@
 """MQTT Client for OVMS Integration."""
+
 import asyncio
 import logging
 from typing import Dict, Any, Optional, Set
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
+from homeassistant.helpers.dispatcher import (
+    async_dispatcher_connect,
+    async_dispatcher_send,
+)
 
 from ..const import (
     DOMAIN,
@@ -23,6 +27,7 @@ from ..attribute_manager import AttributeManager
 from ..entity_staleness_manager import EntityStalenessManager
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
 
 class OVMSMQTTClient:
     """MQTT Client for OVMS Integration."""
@@ -44,23 +49,22 @@ class OVMSMQTTClient:
         # Initialize components
         self.entity_registry = EntityRegistry()
         self.topic_parser = TopicParser(self.config, self.entity_registry)
-        self.update_dispatcher = UpdateDispatcher(hass, self.entity_registry, self.attribute_manager)
+        self.update_dispatcher = UpdateDispatcher(
+            hass, self.entity_registry, self.attribute_manager
+        )
         self.entity_factory = EntityFactory(
             hass,
             self.entity_registry,
             self.update_dispatcher,
             self.config,
             self.naming_service,
-            self.attribute_manager
+            self.attribute_manager,
         )
         self.command_handler = CommandHandler(hass, config)
 
         # Initialize connection manager last as it depends on other components
         self.connection_manager = MQTTConnectionManager(
-            hass,
-            config,
-            self._on_message_received,
-            self._on_connection_change
+            hass, config, self._on_message_received, self._on_connection_change
         )
 
         # For tracking metrics and diagnostics
@@ -104,7 +108,9 @@ class OVMSMQTTClient:
 
         # Try to discover by sending a test command if no topics found
         if not self.discovered_topics and self.connected:
-            _LOGGER.info("No topics discovered yet, trying to discover by sending a test command")
+            _LOGGER.info(
+                "No topics discovered yet, trying to discover by sending a test command"
+            )
             await self.command_handler.async_send_discovery_command()
 
     async def _on_message_received(self, topic: str, payload: str) -> None:
@@ -121,7 +127,7 @@ class OVMSMQTTClient:
         self.discovered_topics.add(topic)
 
         # Check if this is a command response and route it to the command handler
-        # This ensures command responses (client/rr/response/*) are properly 
+        # This ensures command responses (client/rr/response/*) are properly
         # routed to complete pending command futures instead of being treated
         # as regular entity data
         if "client/rr/response" in topic:
@@ -130,7 +136,10 @@ class OVMSMQTTClient:
             return
 
         # Track GPS quality topics for location accuracy
-        if any(kw in topic.lower() for kw in ["gpssq", "gps_sq", "gps/sq", "gpshdop", "gps_hdop"]):
+        if any(
+            kw in topic.lower()
+            for kw in ["gpssq", "gps_sq", "gps/sq", "gpshdop", "gps_hdop"]
+        ):
             self._track_gps_quality_topic(topic, payload)
 
         # Process message and create/update entities
@@ -138,7 +147,9 @@ class OVMSMQTTClient:
             # New topic, create entity
             parsed_data = self.topic_parser.parse_topic(topic, payload)
             if parsed_data:
-                await self.entity_factory.async_create_entities(topic, payload, parsed_data)
+                await self.entity_factory.async_create_entities(
+                    topic, payload, parsed_data
+                )
         else:
             # Existing topic, update entity
             self.update_dispatcher.dispatch_update(topic, payload)
@@ -157,12 +168,12 @@ class OVMSMQTTClient:
             if "gpssq" in topic.lower():
                 self.gps_quality_topics[vehicle_id]["signal_quality"] = {
                     "topic": topic,
-                    "value": value
+                    "value": value,
                 }
             elif "gpshdop" in topic.lower():
                 self.gps_quality_topics[vehicle_id]["hdop"] = {
                     "topic": topic,
-                    "value": value
+                    "value": value,
                 }
         except (ValueError, TypeError):
             # Not a numeric value
@@ -192,7 +203,7 @@ class OVMSMQTTClient:
             listener_remove()
 
         # Shutdown staleness manager
-        if hasattr(self, 'staleness_manager'):
+        if hasattr(self, "staleness_manager"):
             await self.staleness_manager.async_shutdown()
 
         await self.connection_manager.async_shutdown()

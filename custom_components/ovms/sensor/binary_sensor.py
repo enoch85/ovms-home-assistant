@@ -1,4 +1,5 @@
 """Support for OVMS binary sensors."""
+
 import logging
 from typing import Any, Dict, Optional
 
@@ -20,7 +21,7 @@ from ..const import (
     LOGGER_NAME,
     SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY,
-    truncate_state_value
+    truncate_state_value,
 )
 
 from ..metrics import (
@@ -56,7 +57,7 @@ BINARY_SENSOR_TYPES = {
     "hvac": {
         "device_class": None,
         "icon": "mdi:air-conditioner",
-    }
+    },
 }
 
 
@@ -64,6 +65,7 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up OVMS binary sensors based on a config entry."""
+
     @callback
     def async_add_binary_sensor(data: Dict[str, Any]) -> None:
         """Add binary sensor based on discovery data."""
@@ -141,9 +143,7 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
         if hass:
             try:
                 self.entity_id = async_generate_entity_id(
-                    "binary_sensor.{}",
-                    name.lower(),
-                    hass=hass
+                    "binary_sensor.{}", name.lower(), hass=hass
                 )
             except Exception as ex:
                 _LOGGER.exception("Error generating entity_id: %s", ex)
@@ -164,7 +164,8 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                 if state.attributes:
                     # Don't overwrite entity attributes like device_class, icon
                     saved_attributes = {
-                        k: v for k, v in state.attributes.items()
+                        k: v
+                        for k, v in state.attributes.items()
                         if k not in ["device_class", "icon"]
                     }
                     self._attr_extra_state_attributes.update(saved_attributes)
@@ -176,7 +177,11 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                     # Ensure payload is properly truncated if it's a string
                     if isinstance(payload, str) and len(payload) > 255:
                         truncated_payload = truncate_state_value(payload)
-                        payload = truncated_payload if truncated_payload is not None else payload
+                        payload = (
+                            truncated_payload
+                            if truncated_payload is not None
+                            else payload
+                        )
 
                     self._attr_is_on = self._parse_state(payload)
 
@@ -205,7 +210,9 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
             # Get invert state flag in a safe way
             invert_state = False
             if hasattr(self, "_attr_extra_state_attributes"):
-                invert_state = self._attr_extra_state_attributes.get("invert_state", False)
+                invert_state = self._attr_extra_state_attributes.get(
+                    "invert_state", False
+                )
 
             # Parse the value to boolean
             result = False
@@ -251,8 +258,11 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                     self._attr_entity_category = EntityCategory.DIAGNOSTIC
                     if category != "diagnostic":
                         # Don't return for network/system to allow further processing
-                        _LOGGER.debug("Setting EntityCategory.DIAGNOSTIC for %s category: %s",
-                                    category, self._internal_name)
+                        _LOGGER.debug(
+                            "Setting EntityCategory.DIAGNOSTIC for %s category: %s",
+                            category,
+                            self._internal_name,
+                        )
 
                 return category == "diagnostic"
             return False
@@ -264,12 +274,21 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
         """Extract metric path from topic."""
         try:
             topic_suffix = self._topic
-            if self._topic.count('/') >= 3:  # Skip the prefix part
-                parts = self._topic.split('/')
+            if self._topic.count("/") >= 3:  # Skip the prefix part
+                parts = self._topic.split("/")
                 # Find where the actual metric path starts
                 for i, part in enumerate(parts):
-                    if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
-                        topic_suffix = '/'.join(parts[i:])
+                    if part in [
+                        "metric",
+                        "status",
+                        "notify",
+                        "command",
+                        "m",
+                        "v",
+                        "s",
+                        "t",
+                    ]:
+                        topic_suffix = "/".join(parts[i:])
                         break
 
             return topic_suffix.replace("/", ".")
@@ -288,9 +307,11 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
 
             # If no exact match, try by pattern in name and topic
             if not metric_info:
-                topic_parts = self._topic.split('/')
-                name_parts = self._internal_name.split('_')
-                metric_info = get_metric_by_pattern(topic_parts) or get_metric_by_pattern(name_parts)
+                topic_parts = self._topic.split("/")
+                name_parts = self._internal_name.split("_")
+                metric_info = get_metric_by_pattern(
+                    topic_parts
+                ) or get_metric_by_pattern(name_parts)
 
             # Apply metric info if found
             if metric_info:
@@ -301,7 +322,9 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                 if "entity_category" in metric_info:
                     self._attr_entity_category = metric_info["entity_category"]
                 if "invert_state" in metric_info:
-                    self._attr_extra_state_attributes["invert_state"] = metric_info["invert_state"]
+                    self._attr_extra_state_attributes["invert_state"] = metric_info[
+                        "invert_state"
+                    ]
                 return True
             return False
         except Exception as ex:

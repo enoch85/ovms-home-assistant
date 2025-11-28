@@ -1,4 +1,5 @@
 """MQTT connection handling for OVMS configuration."""
+
 import asyncio
 import logging
 import socket
@@ -43,12 +44,13 @@ def ensure_serializable(obj):
         return [ensure_serializable(item) for item in obj]
     if isinstance(obj, tuple):
         return [ensure_serializable(item) for item in obj]
-    if hasattr(obj, '__dict__'):
+    if hasattr(obj, "__dict__"):
         return {
             k: ensure_serializable(v)
-            for k, v in obj.__dict__.items() if not k.startswith('_')
+            for k, v in obj.__dict__.items()
+            if not k.startswith("_")
         }
-    if obj.__class__.__name__ == 'ReasonCodes':
+    if obj.__class__.__name__ == "ReasonCodes":
         try:
             return [int(code) for code in obj]
         except (ValueError, TypeError):
@@ -56,7 +58,9 @@ def ensure_serializable(obj):
     return obj
 
 
-async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
+async def test_mqtt_connection(
+    hass: HomeAssistant, config
+):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
     """Test if we can connect to the MQTT broker."""
     log_prefix = f"MQTT connection test to {config[CONF_HOST]}:{config[CONF_PORT]}"
     _LOGGER.debug("%s - Starting", log_prefix)
@@ -72,13 +76,17 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
 
     # Generate a random client ID for this connection test
     client_id = f"ha_ovms_{uuid.uuid4().hex[:8]}"
-    protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
+    protocol = mqtt.MQTTv5 if hasattr(mqtt, "MQTTv5") else mqtt.MQTTv311
 
-    debug_info["mqtt_protocol_version"] = "MQTTv5" if hasattr(mqtt, 'MQTTv5') else "MQTTv311"
+    debug_info["mqtt_protocol_version"] = (
+        "MQTTv5" if hasattr(mqtt, "MQTTv5") else "MQTTv311"
+    )
 
     _LOGGER.debug(
         "%s - Creating client with ID: %s and protocol: %s",
-        log_prefix, client_id, debug_info["mqtt_protocol_version"]
+        log_prefix,
+        client_id,
+        debug_info["mqtt_protocol_version"],
     )
 
     mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
@@ -95,7 +103,9 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
         # Using time.time() instead of asyncio.get_event_loop().time()
         connection_status["timestamp"] = time.time()
 
-        _LOGGER.debug("%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags)
+        _LOGGER.debug(
+            "%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags
+        )
 
     def on_disconnect(_, __, rc, _properties=None):
         """Handle disconnection."""
@@ -110,12 +120,13 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
         _LOGGER.debug("%s - MQTT Log: %s", log_prefix, buf)
 
     # Configure client callbacks
-    if hasattr(mqtt, 'MQTTv5'):
+    if hasattr(mqtt, "MQTTv5"):
         mqttc.on_connect = on_connect
     else:
         # For MQTT v3.1.1
         def on_connect_v311(client, userdata, flags, rc):
             on_connect(client, userdata, flags, rc, None)
+
         mqttc.on_connect = on_connect_v311
 
     mqttc.on_disconnect = on_disconnect
@@ -138,7 +149,7 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
             if not verify_ssl:
                 _LOGGER.debug(
                     "%s - SSL certificate verification disabled (insecure TLS/SSL allowed)",
-                    log_prefix
+                    log_prefix,
                 )
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
@@ -185,8 +196,7 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
                 "error_type": ERROR_CANNOT_CONNECT,
                 "message": f"DNS resolution failed: {dns_error}",
                 "details": (
-                    f"Could not resolve hostname '{config[CONF_HOST]}': "
-                    f"{dns_error}"
+                    f"Could not resolve hostname '{config[CONF_HOST]}': " f"{dns_error}"
                 ),
             }
 
@@ -213,7 +223,7 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
             _LOGGER.error(
                 "%s - Port check failed, port %d is closed",
                 log_prefix,
-                config[CONF_PORT]
+                config[CONF_PORT],
             )
             debug_info["port_check"]["error"] = f"Port {config[CONF_PORT]} is closed"
             return {
@@ -244,11 +254,14 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
         # Wait for connection to establish
         connected = False
         for i in range(10):  # Try for up to 5 seconds
-            _LOGGER.debug("%s - Waiting for connection (%d/10)", log_prefix, i+1)
+            _LOGGER.debug("%s - Waiting for connection (%d/10)", log_prefix, i + 1)
             if connection_status.get("connected"):
                 connected = True
                 break
-            if connection_status.get("rc") is not None and connection_status.get("rc") != 0:
+            if (
+                connection_status.get("rc") is not None
+                and connection_status.get("rc") != 0
+            ):
                 # Connection failed with specific error code
                 break
             await asyncio.sleep(0.5)
@@ -277,7 +290,9 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
 
                 # Prepare detailed error message
                 error_topic = sub_result.get("topic", "unknown")
-                error_details_text = sub_result.get("details", "Could not subscribe to test topics")
+                error_details_text = sub_result.get(
+                    "details", "Could not subscribe to test topics"
+                )
 
                 return {
                     "success": False,
@@ -318,11 +333,15 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
             elif rc == 4:
                 error_message = "Connection refused - bad username or password"
                 error_type = ERROR_INVALID_AUTH
-                details = "Authentication failed. Please check your username and password."
+                details = (
+                    "Authentication failed. Please check your username and password."
+                )
             elif rc == 5:
                 error_message = "Connection refused - not authorized"
                 error_type = ERROR_INVALID_AUTH
-                details = "Not authorized to connect. Check your credentials and permissions."
+                details = (
+                    "Not authorized to connect. Check your credentials and permissions."
+                )
 
         _LOGGER.error("%s - %s (rc=%s)", log_prefix, error_message, rc)
         debug_info["error"] = {
@@ -357,7 +376,9 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
     # Handling exception order correctly
     except ConnectionError as conn_ex:
         _LOGGER.error("%s - Connection error: %s", log_prefix, conn_ex)
-        _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
+        _LOGGER.debug(
+            "%s - Connection error details: %s", log_prefix, traceback.format_exc()
+        )
         debug_info["error"] = {
             "type": "connection",
             "message": str(conn_ex),
@@ -371,7 +392,9 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
         }
     except TimeoutError as timeout_ex:
         _LOGGER.error("%s - Timeout error: %s", log_prefix, timeout_ex)
-        _LOGGER.debug("%s - Timeout error details: %s", log_prefix, traceback.format_exc())
+        _LOGGER.debug(
+            "%s - Timeout error details: %s", log_prefix, traceback.format_exc()
+        )
         debug_info["error"] = {
             "type": "timeout",
             "message": str(timeout_ex),
@@ -385,7 +408,9 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
         }
     except socket.error as socket_err:
         _LOGGER.error("%s - Socket error: %s", log_prefix, socket_err)
-        _LOGGER.debug("%s - Socket error details: %s", log_prefix, traceback.format_exc())
+        _LOGGER.debug(
+            "%s - Socket error details: %s", log_prefix, traceback.format_exc()
+        )
         debug_info["error"] = {
             "type": "socket",
             "message": str(socket_err),
@@ -399,7 +424,9 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
         }
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
-        _LOGGER.debug("%s - Unexpected error details: %s", log_prefix, traceback.format_exc())
+        _LOGGER.debug(
+            "%s - Unexpected error details: %s", log_prefix, traceback.format_exc()
+        )
         error_type = ERROR_UNKNOWN
 
         if "failed to connect" in str(ex).lower():
@@ -420,7 +447,9 @@ async def test_mqtt_connection(hass: HomeAssistant, config):  # pylint: disable=
         }
 
 
-async def test_subscription(hass, mqtt_client, config, client_id):  # pylint: disable=too-many-locals
+async def test_subscription(
+    hass, mqtt_client, config, client_id
+):  # pylint: disable=too-many-locals
     """Test if we can subscribe to a topic."""
     log_prefix = f"MQTT subscription test for {config[CONF_HOST]}:{config[CONF_PORT]}"
 
@@ -433,17 +462,20 @@ async def test_subscription(hass, mqtt_client, config, client_id):  # pylint: di
     # Define callback for subscription
     def on_subscribe(_, __, mid, granted_qos, _properties=None):
         """Handle subscription result."""
-        _LOGGER.debug("%s - Subscription callback: mid=%s, qos=%s", log_prefix, mid, granted_qos)
+        _LOGGER.debug(
+            "%s - Subscription callback: mid=%s, qos=%s", log_prefix, mid, granted_qos
+        )
         subscription_result["success"] = True
         subscription_result["granted_qos"] = granted_qos
 
     # Configure client callback
-    if hasattr(mqtt, 'MQTTv5'):
+    if hasattr(mqtt, "MQTTv5"):
         mqtt_client.on_subscribe = on_subscribe
     else:
         # For MQTT v3.1.1
         def on_subscribe_v311(client, userdata, mid, granted_qos):
             on_subscribe(client, userdata, mid, granted_qos, None)
+
         mqtt_client.on_subscribe = on_subscribe_v311
 
     try:
@@ -464,7 +496,9 @@ async def test_subscription(hass, mqtt_client, config, client_id):  # pylint: di
                 subscription_confirmed = True
                 break
             await asyncio.sleep(0.5)
-            _LOGGER.debug("%s - Waiting for subscription confirmation (%d/5)", log_prefix, i+1)
+            _LOGGER.debug(
+                "%s - Waiting for subscription confirmation (%d/5)", log_prefix, i + 1
+            )
 
         if subscription_confirmed:
             _LOGGER.debug("%s - Subscription successful", log_prefix)
@@ -480,31 +514,37 @@ async def test_subscription(hass, mqtt_client, config, client_id):  # pylint: di
                 "This may be due to ACL rules on the broker preventing subscription to the "
                 "test topic, connectivity issues, or broker configuration. "
                 "Check the broker's logs and access control settings."
-            )
+            ),
         }
 
     # Correct exception order
     except ConnectionError as conn_ex:
         _LOGGER.exception("%s - Connection error: %s", log_prefix, conn_ex)
-        _LOGGER.debug("%s - Connection error details: %s", log_prefix, traceback.format_exc())
+        _LOGGER.debug(
+            "%s - Connection error details: %s", log_prefix, traceback.format_exc()
+        )
         return {
             "success": False,
             "message": f"Connection error: {conn_ex}",
             "topic": test_topic,
-            "details": f"Connection error during subscription: {conn_ex}"
+            "details": f"Connection error during subscription: {conn_ex}",
         }
     except TimeoutError as timeout_ex:
         _LOGGER.exception("%s - Timeout error: %s", log_prefix, timeout_ex)
-        _LOGGER.debug("%s - Timeout error details: %s", log_prefix, traceback.format_exc())
+        _LOGGER.debug(
+            "%s - Timeout error details: %s", log_prefix, traceback.format_exc()
+        )
         return {
             "success": False,
             "message": f"Timeout error: {timeout_ex}",
             "topic": test_topic,
-            "details": f"Timeout error during subscription: {timeout_ex}"
+            "details": f"Timeout error during subscription: {timeout_ex}",
         }
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.exception("%s - Subscription error: %s", log_prefix, ex)
-        _LOGGER.debug("%s - Subscription error details: %s", log_prefix, traceback.format_exc())
+        _LOGGER.debug(
+            "%s - Subscription error details: %s", log_prefix, traceback.format_exc()
+        )
         return {
             "success": False,
             "message": f"Subscription error: {ex}",
@@ -513,5 +553,5 @@ async def test_subscription(hass, mqtt_client, config, client_id):  # pylint: di
                 f"Error while attempting to subscribe to the test topic "
                 f"'{test_topic}'. Check your broker connection and permissions. "
                 f"Full error: {ex}"
-            )
+            ),
         }

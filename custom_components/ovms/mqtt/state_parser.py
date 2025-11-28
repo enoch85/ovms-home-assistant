@@ -1,4 +1,5 @@
 """State parser for OVMS integration."""
+
 import json
 import logging
 import re
@@ -26,19 +27,28 @@ NUMERIC_DEVICE_CLASSES = [
 # Special string values that should be converted to None for numeric sensors
 SPECIAL_STATE_VALUES = ["unavailable", "unknown", "none", "", "null", "nan"]
 
+
 class StateParser:
     """Parser for OVMS state values."""
 
     @staticmethod
-    def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None,
-                   topic: str = "") -> Any:
+    def parse_value(
+        value: Any,
+        device_class: Optional[Any] = None,
+        state_class: Optional[Any] = None,
+        topic: str = "",
+    ) -> Any:
         """Parse the value from the payload with enhanced precision and validation."""
         # Handle special state values for numeric sensors
-        if StateParser.requires_numeric_value(device_class, state_class) and StateParser.is_special_state_value(value):
+        if StateParser.requires_numeric_value(
+            device_class, state_class
+        ) and StateParser.is_special_state_value(value):
             return None
 
         # Special handling for yes/no values in numeric sensors
-        if StateParser.requires_numeric_value(device_class, state_class) and isinstance(value, str):
+        if StateParser.requires_numeric_value(device_class, state_class) and isinstance(
+            value, str
+        ):
             # Convert common boolean strings to numeric values
             if value.lower() in ["no", "off", "false", "disabled"]:
                 return 0
@@ -50,12 +60,16 @@ class StateParser:
             # Check if this is cell data that should NOT be averaged
             is_cell_data = StateParser._is_cell_data_topic(topic)
 
-            _LOGGER.debug(f"StateParser: Processing comma-separated value for topic '{topic}': {value}")
+            _LOGGER.debug(
+                f"StateParser: Processing comma-separated value for topic '{topic}': {value}"
+            )
             _LOGGER.debug(f"StateParser: Is cell data: {is_cell_data}")
 
             if is_cell_data:
                 # For cell data, return the raw comma-separated string for processing by sensor entities
-                _LOGGER.debug(f"StateParser: Returning raw cell data for topic '{topic}': {value}")
+                _LOGGER.debug(
+                    f"StateParser: Returning raw cell data for topic '{topic}': {value}"
+                )
                 return value
 
             try:
@@ -65,7 +79,9 @@ class StateParser:
                     # If all parts were empty after splitting,
                     # raise ValueError to fall through to 'pass'
                     # This will then correctly result in None for a numeric sensor.
-                    raise ValueError("No valid numeric parts found in comma-separated value")
+                    raise ValueError(
+                        "No valid numeric parts found in comma-separated value"
+                    )
 
                 parts = [float(p) for p in parts_str]
                 if parts:
@@ -81,7 +97,7 @@ class StateParser:
                     return result
             except (ValueError, TypeError):
                 # If any part can't be converted to float, or cleaning fails to produce valid parts
-                pass # Fall through to other parsing methods or return None
+                pass  # Fall through to other parsing methods or return None
 
         # Try parsing as JSON first
         try:
@@ -206,14 +222,11 @@ class StateParser:
     @staticmethod
     def requires_numeric_value(device_class: Any, state_class: Any) -> bool:
         """Check if this sensor requires a numeric value based on its device class."""
-        return (
-            device_class in NUMERIC_DEVICE_CLASSES or
-            state_class in [
-                "measurement",
-                "total",
-                "total_increasing"
-            ]
-        )
+        return device_class in NUMERIC_DEVICE_CLASSES or state_class in [
+            "measurement",
+            "total",
+            "total_increasing",
+        ]
 
     @staticmethod
     def is_special_state_value(value: Any) -> bool:
@@ -243,9 +256,11 @@ class StateParser:
             sorted_values = sorted(values)
             n = len(sorted_values)
             if n % 2 == 0:
-                stats["median"] = (sorted_values[n//2 - 1] + sorted_values[n//2]) / 2
+                stats["median"] = (
+                    sorted_values[n // 2 - 1] + sorted_values[n // 2]
+                ) / 2
             else:
-                stats["median"] = sorted_values[n//2]
+                stats["median"] = sorted_values[n // 2]
 
             return stats
 
@@ -329,21 +344,29 @@ class StateParser:
 
             # 1. Values that are likely in milliwatts but should be watts
             if value > 100000:  # > 100kW, probably milliwatts
-                _LOGGER.debug(f"Converting suspected milliwatts to watts for topic {topic}: {value} -> {value/1000}")
+                _LOGGER.debug(
+                    f"Converting suspected milliwatts to watts for topic {topic}: {value} -> {value/1000}"
+                )
                 return round(value / 1000, 3)
 
             # 2. Negative power values for charging should be positive
             if "charg" in topic.lower() and value < 0:
-                _LOGGER.debug(f"Converting negative charging power to positive for topic {topic}: {value} -> {abs(value)}")
+                _LOGGER.debug(
+                    f"Converting negative charging power to positive for topic {topic}: {value} -> {abs(value)}"
+                )
                 return abs(value)
 
             # 3. Very small values that might be in wrong units
             if 0 < value < 0.001:  # Very small, might be kW instead of W
-                _LOGGER.debug(f"Converting suspected kW to watts for topic {topic}: {value} -> {value*1000}")
+                _LOGGER.debug(
+                    f"Converting suspected kW to watts for topic {topic}: {value} -> {value*1000}"
+                )
                 return round(value * 1000, 3)
 
             return value
 
         except Exception as ex:
-            _LOGGER.exception(f"Error validating power value {value} for topic {topic}: {ex}")
+            _LOGGER.exception(
+                f"Error validating power value {value} for topic {topic}: {ex}"
+            )
             return value

@@ -1,4 +1,5 @@
 """Utility functions for OVMS integration."""
+
 import json
 import logging
 import re
@@ -41,7 +42,7 @@ def convert_temperature(value: float, to_unit: str) -> float:
     if to_unit == UnitOfTemperature.CELSIUS:
         return value
     if to_unit == UnitOfTemperature.FAHRENHEIT:
-        return (value * 9/5) + 32
+        return (value * 9 / 5) + 32
     return value
 
 
@@ -107,7 +108,7 @@ def parse_numeric_value(value: Any) -> Optional[float]:
     if isinstance(value, str):
         try:
             # Remove units and other non-numeric characters
-            numeric_str = re.sub(r'[^\d.-]', '', value)
+            numeric_str = re.sub(r"[^\d.-]", "", value)
             return float(numeric_str)
         except (ValueError, TypeError):
             pass
@@ -179,7 +180,7 @@ def generate_unique_id(components: List[str]) -> str:
         return hashlib.md5(combined.encode()).hexdigest()[:8]
 
     # Otherwise just clean up the string
-    return re.sub(r'[^a-zA-Z0-9_]', '_', combined)
+    return re.sub(r"[^a-zA-Z0-9_]", "_", combined)
 
 
 def parse_gps_coordinates(payload: str) -> Tuple[Optional[float], Optional[float]]:
@@ -231,7 +232,9 @@ def parse_gps_coordinates(payload: str) -> Tuple[Optional[float], Optional[float
     return None, None
 
 
-def format_command_parameters(command: str, parameters: Union[str, Dict[str, Any]]) -> str:
+def format_command_parameters(
+    command: str, parameters: Union[str, Dict[str, Any]]
+) -> str:
     """Format command parameters for OVMS command execution."""
     if not parameters:
         return command

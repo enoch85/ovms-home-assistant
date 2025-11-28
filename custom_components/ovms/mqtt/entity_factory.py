@@ -1,4 +1,5 @@
 """Entity factory for OVMS integration."""
+
 import asyncio
 import logging
 import hashlib
@@ -20,11 +21,19 @@ from ..metrics import get_metric_by_path, get_metric_by_pattern
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
+
 class EntityFactory:
     """Factory for creating OVMS entities."""
 
-    def __init__(self, hass: HomeAssistant, entity_registry, update_dispatcher, config: Dict[str, Any],
-                naming_service: EntityNamingService, attribute_manager: AttributeManager):
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entity_registry,
+        update_dispatcher,
+        config: Dict[str, Any],
+        naming_service: EntityNamingService,
+        attribute_manager: AttributeManager,
+    ):
         """Initialize the entity factory."""
         self.hass = hass
         self.entity_registry = entity_registry
@@ -36,9 +45,13 @@ class EntityFactory:
         self.platforms_loaded = False
         self.created_entities = set()
         self.location_entities = {}  # Track location-related entities
-        self.combined_tracker_created = False  # Track if the combined tracker is created
+        self.combined_tracker_created = (
+            False  # Track if the combined tracker is created
+        )
 
-    async def async_create_entities(self, topic: str, payload: str, entity_data: Dict[str, Any]) -> None:
+    async def async_create_entities(
+        self, topic: str, payload: str, entity_data: Dict[str, Any]
+    ) -> None:
         """Create entities based on parsed topic data."""
         try:
             entity_type = entity_data.get("entity_type")
@@ -61,8 +74,14 @@ class EntityFactory:
                 return
             else:
                 # Only log entity creation during initial setup or if debug logging is specifically enabled
-                if len(self.created_entities) < 10:  # First 10 entities for setup verification
-                    _LOGGER.debug("Creating new entity for topic: %s (unique_id: %s)", topic, unique_id)
+                if (
+                    len(self.created_entities) < 10
+                ):  # First 10 entities for setup verification
+                    _LOGGER.debug(
+                        "Creating new entity for topic: %s (unique_id: %s)",
+                        topic,
+                        unique_id,
+                    )
 
             # Get parts and metric info
             parts = entity_data.get("parts", [])
@@ -75,7 +94,10 @@ class EntityFactory:
             )
 
             # Reduce logging frequency - only log entity creation for important entities or during setup
-            if len(self.created_entities) < 20 or entity_type in ["device_tracker", "binary_sensor"]:
+            if len(self.created_entities) < 20 or entity_type in [
+                "device_tracker",
+                "binary_sensor",
+            ]:
                 _LOGGER.info("Creating %s: %s", entity_type, friendly_name)
 
             # Record that we've processed this entity
@@ -83,12 +105,16 @@ class EntityFactory:
 
             # Store in entity registry
             priority = entity_data.get("priority", 0)
-            self.entity_registry.register_entity(topic, unique_id, entity_type, priority)
+            self.entity_registry.register_entity(
+                topic, unique_id, entity_type, priority
+            )
 
             # Prepare attributes
             attributes = entity_data.get("attributes", {})
             category = attributes.get("category", "unknown")
-            attributes = self.attribute_manager.prepare_attributes(topic, category, parts, metric_info)
+            attributes = self.attribute_manager.prepare_attributes(
+                topic, category, parts, metric_info
+            )
 
             # Create entity data for dispatcher
             dispatcher_data = {
@@ -118,10 +144,12 @@ class EntityFactory:
                 await self.entity_queue.put(dispatcher_data)
 
             # If we have both latitude and longitude entities tracked, create a combined device tracker
-            if (len(self.location_entities) >= 2 and
-                "latitude" in self.location_entities and
-                "longitude" in self.location_entities and
-                not self.combined_tracker_created):
+            if (
+                len(self.location_entities) >= 2
+                and "latitude" in self.location_entities
+                and "longitude" in self.location_entities
+                and not self.combined_tracker_created
+            ):
                 await self._create_combined_device_tracker()
 
         except Exception as ex:
@@ -133,28 +161,40 @@ class EntityFactory:
         name = entity_data.get("name", "").lower()
 
         # Check for latitude/longitude keywords
-        if any(keyword in topic_lower or keyword in name
-               for keyword in ["latitude", "lat", "longitude", "long", "lon", "lng"]):
+        if any(
+            keyword in topic_lower or keyword in name
+            for keyword in ["latitude", "lat", "longitude", "long", "lon", "lng"]
+        ):
 
             # More specific checks to avoid false positives
-            parts = topic.split('/')
+            parts = topic.split("/")
             for part in parts:
                 part_lower = part.lower()
                 if part_lower in ["latitude", "lat", "longitude", "long", "lon", "lng"]:
                     return True
 
             # Check for common patterns in topic paths
-            if any(pattern in topic_lower for pattern in ["/p/lat", "/p/lon", ".p.lat", ".p.lon"]):
+            if any(
+                pattern in topic_lower
+                for pattern in ["/p/lat", "/p/lon", ".p.lat", ".p.lon"]
+            ):
                 return True
 
         return False
 
-    async def _track_coordinate_entity(self, topic: str, unique_id: str, entity_data: Dict[str, Any]) -> None:
+    async def _track_coordinate_entity(
+        self, topic: str, unique_id: str, entity_data: Dict[str, Any]
+    ) -> None:
         """Track a coordinate entity for use in the combined device tracker."""
         try:
             # Determine if this is latitude or longitude
-            is_latitude = any(keyword in topic.lower() for keyword in ["latitude", "lat"])
-            is_longitude = any(keyword in topic.lower() for keyword in ["longitude", "long", "lon", "lng"])
+            is_latitude = any(
+                keyword in topic.lower() for keyword in ["latitude", "lat"]
+            )
+            is_longitude = any(
+                keyword in topic.lower()
+                for keyword in ["longitude", "long", "lon", "lng"]
+            )
 
             # Track the entity ID for later use in creating the combined tracker
             if is_latitude:
@@ -187,7 +227,9 @@ class EntityFactory:
 
             # Skip if already created
             if tracker_id in self.created_entities:
-                _LOGGER.debug("Combined tracker entity already exists, skipping creation")
+                _LOGGER.debug(
+                    "Combined tracker entity already exists, skipping creation"
+                )
                 return
 
             self.created_entities.add(tracker_id)
@@ -199,10 +241,12 @@ class EntityFactory:
             attributes = self.attribute_manager.prepare_attributes(
                 "combined_location", "location", []
             )
-            attributes.update({
-                "lat_entity_id": self.location_entities.get("latitude"),
-                "lon_entity_id": self.location_entities.get("longitude"),
-            })
+            attributes.update(
+                {
+                    "lat_entity_id": self.location_entities.get("latitude"),
+                    "lon_entity_id": self.location_entities.get("longitude"),
+                }
+            )
 
             # Create device tracker data
             tracker_data = {
@@ -222,20 +266,18 @@ class EntityFactory:
             # Register relationships with individual lat/lon entities
             if "latitude" in self.location_entities:
                 self.entity_registry.register_relationship(
-                    self.location_entities["latitude"],
-                    tracker_id,
-                    "combined_tracker"
+                    self.location_entities["latitude"], tracker_id, "combined_tracker"
                 )
 
             if "longitude" in self.location_entities:
                 self.entity_registry.register_relationship(
-                    self.location_entities["longitude"],
-                    tracker_id,
-                    "combined_tracker"
+                    self.location_entities["longitude"], tracker_id, "combined_tracker"
                 )
 
             # Add to entity registry
-            self.entity_registry.register_entity("combined_location", tracker_id, "device_tracker", priority=10)
+            self.entity_registry.register_entity(
+                "combined_location", tracker_id, "device_tracker", priority=10
+            )
 
             # Send to platform or queue for later
             if self.platforms_loaded:
@@ -252,16 +294,18 @@ class EntityFactory:
         except Exception as ex:
             _LOGGER.exception("Error creating combined device tracker: %s", ex)
 
-    def _generate_unique_ids(self, topic: str, entity_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _generate_unique_ids(
+        self, topic: str, entity_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Generate unique IDs for entities."""
         vehicle_id = self.config.get("vehicle_id", "unknown").lower()
         topic_hash = hashlib.md5(topic.encode()).hexdigest()[:6]
 
         # Extract metric path from topic (everything after vehicle ID)
-        topic_parts = topic.split('/')
+        topic_parts = topic.split("/")
         if len(topic_parts) >= 4:
-            metric_path = '_'.join(topic_parts[3:])
-            metric_path = re.sub(r'[^a-zA-Z0-9_]', '_', metric_path.lower())
+            metric_path = "_".join(topic_parts[3:])
+            metric_path = re.sub(r"[^a-zA-Z0-9_]", "_", metric_path.lower())
             unique_id = f"ovms_{vehicle_id}_{metric_path}_{topic_hash}"
         else:
             unique_id = f"ovms_{vehicle_id}_{topic_hash}"
@@ -285,21 +329,28 @@ class EntityFactory:
             _LOGGER.exception("Error getting device info: %s", ex)
             # Return minimal device info
             return {
-                "identifiers": {
-                    (DOMAIN, self.config.get("vehicle_id", "unknown"))
-                },
+                "identifiers": {(DOMAIN, self.config.get("vehicle_id", "unknown"))},
                 "name": f"OVMS - {self.config.get('vehicle_id', 'unknown')}",
             }
 
     def _get_metric_path_from_topic(self, topic: str) -> str:
         """Extract metric path from topic."""
         topic_suffix = topic
-        if topic.count('/') >= 3:  # Skip the prefix part
-            parts = topic.split('/')
+        if topic.count("/") >= 3:  # Skip the prefix part
+            parts = topic.split("/")
             # Find where the actual metric path starts
             for i, part in enumerate(parts):
-                if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
-                    topic_suffix = '/'.join(parts[i:])
+                if part in [
+                    "metric",
+                    "status",
+                    "notify",
+                    "command",
+                    "m",
+                    "v",
+                    "s",
+                    "t",
+                ]:
+                    topic_suffix = "/".join(parts[i:])
                     break
 
         return topic_suffix.replace("/", ".")

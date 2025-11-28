@@ -1,4 +1,5 @@
 """Support for OVMS switches."""
+
 import logging
 import json
 from typing import Any, Callable, Dict, Optional
@@ -19,7 +20,7 @@ from ..const import (
     LOGGER_NAME,
     SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY,
-    truncate_state_value
+    truncate_state_value,
 )
 
 from ..metrics import get_metric_by_path, get_metric_by_pattern
@@ -60,6 +61,7 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up OVMS switches based on a config entry."""
+
     @callback
     def async_add_switch(data: Dict[str, Any]) -> None:
         """Add switch based on discovery data."""
@@ -131,9 +133,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         # Explicitly set entity_id - this ensures consistent naming
         if hass:
             self.entity_id = async_generate_entity_id(
-                "switch.{}",
-                name.lower(),
-                hass=hass
+                "switch.{}", name.lower(), hass=hass
             )
 
         # Determine switch type and attributes
@@ -161,7 +161,8 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             if state.attributes:
                 # Don't overwrite entity attributes like icon, etc.
                 saved_attributes = {
-                    k: v for k, v in state.attributes.items()
+                    k: v
+                    for k, v in state.attributes.items()
                     if k not in ["icon", "entity_category"]
                 }
                 self._attr_extra_state_attributes.update(saved_attributes)
@@ -172,7 +173,9 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             # Ensure payload is properly truncated if it's a string
             if isinstance(payload, str) and len(payload) > 255:
                 truncated_payload = truncate_state_value(payload)
-                payload = truncated_payload if truncated_payload is not None else payload
+                payload = (
+                    truncated_payload if truncated_payload is not None else payload
+                )
 
             self._attr_is_on = self._parse_state(payload)
 
@@ -253,12 +256,21 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
 
         # Try to find matching metric by converting topic to dot notation
         topic_suffix = self._topic
-        if self._topic.count('/') >= 3:  # Skip the prefix part
-            parts = self._topic.split('/')
+        if self._topic.count("/") >= 3:  # Skip the prefix part
+            parts = self._topic.split("/")
             # Find where the actual metric path starts
             for i, part in enumerate(parts):
-                if part in ["metric", "status", "notify", "command", "m", "v", "s", "t"]:
-                    topic_suffix = '/'.join(parts[i:])
+                if part in [
+                    "metric",
+                    "status",
+                    "notify",
+                    "command",
+                    "m",
+                    "v",
+                    "s",
+                    "t",
+                ]:
+                    topic_suffix = "/".join(parts[i:])
                     break
 
         metric_path = topic_suffix.replace("/", ".")
@@ -268,9 +280,11 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
 
         # If no exact match, try by pattern in name and topic
         if not metric_info:
-            topic_parts = topic_suffix.split('/')
-            name_parts = self._internal_name.split('_')
-            metric_info = get_metric_by_pattern(topic_parts) or get_metric_by_pattern(name_parts)
+            topic_parts = topic_suffix.split("/")
+            name_parts = self._internal_name.split("_")
+            metric_info = get_metric_by_pattern(topic_parts) or get_metric_by_pattern(
+                name_parts
+            )
 
         # Apply metric info if found
         if metric_info:
@@ -316,19 +330,25 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             # Ensure payload is properly truncated if it's a string
             if isinstance(payload, str) and len(payload) > 255:
                 truncated_payload = truncate_state_value(payload)
-                payload = truncated_payload if truncated_payload is not None else payload
+                payload = (
+                    truncated_payload if truncated_payload is not None else payload
+                )
 
             json_data = json.loads(payload)
             if isinstance(json_data, dict):
                 # Add useful attributes from the data
                 for key, value in json_data.items():
-                    if (key not in ["value", "state", "status"] and
-                            key not in self._attr_extra_state_attributes):
+                    if (
+                        key not in ["value", "state", "status"]
+                        and key not in self._attr_extra_state_attributes
+                    ):
                         self._attr_extra_state_attributes[key] = value
 
                 # If there's a timestamp in the JSON, use it
                 if "timestamp" in json_data:
-                    self._attr_extra_state_attributes["device_timestamp"] = json_data["timestamp"]
+                    self._attr_extra_state_attributes["device_timestamp"] = json_data[
+                        "timestamp"
+                    ]
 
         except (ValueError, json.JSONDecodeError):
             # Not JSON, that's fine
@@ -336,7 +356,9 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
-        _LOGGER.debug("Turning on switch: %s using command: %s", self.name, self._command)
+        _LOGGER.debug(
+            "Turning on switch: %s using command: %s", self.name, self._command
+        )
 
         # Use the command function to send the command
         result = await self._command_function(
@@ -348,11 +370,15 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             self._attr_is_on = True
             self.async_write_ha_state()
         else:
-            _LOGGER.error("Failed to turn on switch %s: %s", self.name, result.get("error"))
+            _LOGGER.error(
+                "Failed to turn on switch %s: %s", self.name, result.get("error")
+            )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
-        _LOGGER.debug("Turning off switch: %s using command: %s", self.name, self._command)
+        _LOGGER.debug(
+            "Turning off switch: %s using command: %s", self.name, self._command
+        )
 
         # Use the command function to send the command
         result = await self._command_function(
@@ -364,4 +390,6 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             self._attr_is_on = False
             self.async_write_ha_state()
         else:
-            _LOGGER.error("Failed to turn off switch %s: %s", self.name, result.get("error"))
+            _LOGGER.error(
+                "Failed to turn off switch %s: %s", self.name, result.get("error")
+            )

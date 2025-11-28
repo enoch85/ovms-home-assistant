@@ -100,7 +100,6 @@ RENAULT_TWIZY_METRICS = {
         "suggested_display_precision": 2,
         "category": "renault_twizy",
     },
-
     # BMS metrics
     "xrt.bms.balancetime": {
         "name": "Renault Twizy BMS Balance Time",
@@ -159,7 +158,6 @@ RENAULT_TWIZY_METRICS = {
         "category": "renault_twizy",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
-
     # Configuration metrics
     "xrt.cfg.applied": {
         "name": "Renault Twizy Config Applied",
@@ -215,7 +213,6 @@ RENAULT_TWIZY_METRICS = {
         "category": "renault_twizy",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
-
     # Inverter metrics
     "xrt.i.cur.act": {
         "name": "Renault Twizy Inverter Current",
@@ -308,7 +305,6 @@ RENAULT_TWIZY_METRICS = {
         "unit": PERCENTAGE,
         "category": "renault_twizy",
     },
-
     # Module version
     "xrt.m.version": {
         "name": "Renault Twizy Module Version",
@@ -317,7 +313,6 @@ RENAULT_TWIZY_METRICS = {
         "category": "renault_twizy",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
-
     # Vehicle statistics
     "xrt.p.stats.acc.dist": {
         "name": "Renault Twizy Acceleration Distance",
@@ -495,7 +490,6 @@ RENAULT_TWIZY_METRICS = {
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "category": "renault_twizy",
     },
-
     # Scale metrics
     "xrt.s.b.pwr.drv": {
         "name": "Renault Twizy Battery Power Drive Scale",
@@ -525,7 +519,6 @@ RENAULT_TWIZY_METRICS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "category": "renault_twizy",
     },
-
     # Vehicle alerts and status
     "xrt.v.b.alert.12v": {
         "name": "Renault Twizy 12V Alert",

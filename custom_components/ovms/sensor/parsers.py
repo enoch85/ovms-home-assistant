@@ -1,4 +1,5 @@
 """OVMS sensor state parsers."""
+
 import json
 import logging
 import re
@@ -46,14 +47,12 @@ def is_tire_sensor(device_class: Any = None, category: Optional[str] = None) -> 
 
 def requires_numeric_value(device_class: Any, state_class: Any) -> bool:
     """Check if this sensor requires a numeric value based on its device class."""
-    return (
-        device_class in NUMERIC_DEVICE_CLASSES or
-        state_class in [
-            SensorStateClass.MEASUREMENT,
-            SensorStateClass.TOTAL,
-            SensorStateClass.TOTAL_INCREASING
-        ]
-    )
+    return device_class in NUMERIC_DEVICE_CLASSES or state_class in [
+        SensorStateClass.MEASUREMENT,
+        SensorStateClass.TOTAL,
+        SensorStateClass.TOTAL_INCREASING,
+    ]
+
 
 def is_special_state_value(value) -> bool:
     """Check if a value is a special state value that should be converted to None."""
@@ -63,6 +62,7 @@ def is_special_state_value(value) -> bool:
         return True
     return False
 
+
 def calculate_median(values: List[float]) -> Optional[float]:
     """Calculate the median of a list of values."""
     if not values:
@@ -70,10 +70,16 @@ def calculate_median(values: List[float]) -> Optional[float]:
     sorted_values = sorted(values)
     n = len(sorted_values)
     if n % 2 == 0:
-        return (sorted_values[n//2 - 1] + sorted_values[n//2]) / 2
-    return sorted_values[n//2]
+        return (sorted_values[n // 2 - 1] + sorted_values[n // 2]) / 2
+    return sorted_values[n // 2]
 
-def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sensor: bool = False, stat_type: str = "cell") -> Optional[Dict[str, Any]]:
+
+def parse_comma_separated_values(
+    value: str,
+    entity_name: str = "",
+    is_cell_sensor: bool = False,
+    stat_type: str = "cell",
+) -> Optional[Dict[str, Any]]:
     """Parse comma-separated values into a dictionary with statistics."""
     # Always attempt to parse if it looks like a comma-separated string,
     # is_cell_sensor will determine if we create individual attributes.
@@ -85,7 +91,7 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
         # Value is assumed to be cleaned (no units) by StateParser at this point.
         parts_str = [s.strip() for s in value.split(",") if s.strip()]
         if not parts_str:
-            return None # No valid parts
+            return None  # No valid parts
 
         parts = [float(p) for p in parts_str]
 
@@ -107,8 +113,9 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
         if is_cell_sensor:
             for i, val in enumerate(parts):
                 # Check if this is a tire sensor by stat_type or if it's specifically tire data
-                is_tire_data = (stat_type in ["tire", "pressure"] and
-                               stat_type != "cell" and i < 4)
+                is_tire_data = (
+                    stat_type in ["tire", "pressure"] and stat_type != "cell" and i < 4
+                )
                 if is_tire_data:
                     # Use tire position labels for tire sensors (up to 4 tires)
                     position_name, position_code = TIRE_POSITIONS[i]
@@ -120,15 +127,24 @@ def parse_comma_separated_values(value: str, entity_name: str = "", is_cell_sens
         # The main 'value' of the sensor will be the median for cell sensors
         # This matches the behavior shown in the working cell voltage display
         result["value"] = round(result["median"], 4)
-        _LOGGER.debug(f"parse_comma_separated_values: Processed '{value}' -> median: {result['median']}, final value: {result['value']}")
+        _LOGGER.debug(
+            f"parse_comma_separated_values: Processed '{value}' -> median: {result['median']}, final value: {result['value']}"
+        )
         return result
     except (ValueError, TypeError):
-        _LOGGER.warning(f"Could not parse comma-separated values for {entity_name}: '{value}'")
+        _LOGGER.warning(
+            f"Could not parse comma-separated values for {entity_name}: '{value}'"
+        )
         pass
     return None
 
-def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Optional[Any] = None,\
-                is_cell_sensor: bool = False) -> Any:
+
+def parse_value(
+    value: Any,
+    device_class: Optional[Any] = None,
+    state_class: Optional[Any] = None,
+    is_cell_sensor: bool = False,
+) -> Any:
     """Parse the value from the payload."""
     # Handle timestamp device class specifically
     if device_class == SensorDeviceClass.TIMESTAMP and isinstance(value, str):
@@ -143,11 +159,11 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             import re
 
             # Match format "2025-03-25 17:42:57 TIMEZONE" and extract datetime part
-            match = re.match(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', value)
+            match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", value)
             if match:
                 dt_str = match.group(1)
                 # Create a datetime object without timezone info
-                dt_obj = datetime.datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+                dt_obj = datetime.datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
                 # Home Assistant requires tzinfo, but we'll use local time zone
                 return dt_util.as_local(dt_obj)
 
@@ -165,7 +181,9 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
         # If parsing fails, continue with standard processing
 
     # Handle special state values for numeric sensors
-    if requires_numeric_value(device_class, state_class) and is_special_state_value(value):
+    if requires_numeric_value(device_class, state_class) and is_special_state_value(
+        value
+    ):
         return None
 
     # Special handling for yes/no values in numeric sensors
@@ -182,7 +200,9 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             # and returned the raw comma-separated string. Now we process it to get median/attributes.
             # This should ideally be harmonized with StateParser to avoid any duplication.
             stat_type = "tire" if is_tire_sensor(device_class) else "cell"
-            parsed_data = parse_comma_separated_values(value, "", is_cell_sensor, stat_type)
+            parsed_data = parse_comma_separated_values(
+                value, "", is_cell_sensor, stat_type
+            )
             if parsed_data and "value" in parsed_data:
                 # The main sensor state will be the median value from parse_comma_separated_values
                 return parsed_data["value"]
@@ -271,8 +291,14 @@ def parse_value(value: Any, device_class: Optional[Any] = None, state_class: Opt
             # Otherwise return as is
             return value
 
-def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: str = "",\
-                        is_cell_sensor: bool = False, stat_type: str = "cell") -> Dict[str, Any]:
+
+def process_json_payload(
+    payload: str,
+    attributes: Dict[str, Any],
+    entity_name: str = "",
+    is_cell_sensor: bool = False,
+    stat_type: str = "cell",
+) -> Dict[str, Any]:
     """Process JSON payload to extract additional attributes."""
     updated_attributes = attributes.copy()
 
@@ -281,11 +307,21 @@ def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: 
         # parse it for individual values and statistics to add as attributes.
         if is_cell_sensor and isinstance(payload, str) and "," in payload:
             # The payload string should be pre-cleaned by StateParser by this point
-            stat_type = "tire" if is_tire_sensor(attributes.get("device_class"), attributes.get("category")) else "cell"
-            parsed_cells = parse_comma_separated_values(payload, entity_name, is_cell_sensor, stat_type)
+            stat_type = (
+                "tire"
+                if is_tire_sensor(
+                    attributes.get("device_class"), attributes.get("category")
+                )
+                else "cell"
+            )
+            parsed_cells = parse_comma_separated_values(
+                payload, entity_name, is_cell_sensor, stat_type
+            )
             if parsed_cells:
                 for key, val in parsed_cells.items():
-                    if key != "value": # 'value' is the main state, others are attributes
+                    if (
+                        key != "value"
+                    ):  # 'value' is the main state, others are attributes
                         updated_attributes[key] = val
 
         # If not a cell sensor or payload is not a comma-separated string, try JSON parsing for attributes.
@@ -296,7 +332,10 @@ def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: 
                 if isinstance(json_data, dict):
                     # Add all fields as attributes
                     for key, value in json_data.items():
-                        if key not in ["value", "state", "data"] and key not in updated_attributes:
+                        if (
+                            key not in ["value", "state", "data"]
+                            and key not in updated_attributes
+                        ):
                             updated_attributes[key] = value
 
                     # If there's a timestamp in the JSON, use it
@@ -304,7 +343,10 @@ def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: 
                         updated_attributes["device_timestamp"] = json_data["timestamp"]
 
                     # If there's a unit in the JSON, use it for native unit
-                    if "unit" in json_data and "unit_of_measurement" not in updated_attributes:
+                    if (
+                        "unit" in json_data
+                        and "unit_of_measurement" not in updated_attributes
+                    ):
                         updated_attributes["unit"] = json_data["unit"]
 
                     # Extract and add any nested attributes
@@ -325,7 +367,9 @@ def process_json_payload(payload: str, attributes: Dict[str, Any], entity_name: 
                         numeric_values = [float(val) for val in json_data]
                         updated_attributes["min"] = min(numeric_values)
                         updated_attributes["max"] = max(numeric_values)
-                        updated_attributes["mean"] = sum(numeric_values) / len(numeric_values)
+                        updated_attributes["mean"] = sum(numeric_values) / len(
+                            numeric_values
+                        )
                         updated_attributes["median"] = calculate_median(numeric_values)
                     except (ValueError, TypeError):
                         # Not all elements are numeric

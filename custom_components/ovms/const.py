@@ -1,4 +1,5 @@
 """Constants for the OVMS integration."""
+
 # Re-exported constants from Home Assistant for convenience
 from homeassistant.const import (  # noqa: W0611
     CONF_HOST,
@@ -22,10 +23,14 @@ CONF_MQTT_USERNAME = "mqtt_username"
 CONF_TOPIC_STRUCTURE = "topic_structure"
 CONF_VERIFY_SSL = "verify_ssl"
 CONF_ORIGINAL_VEHICLE_ID = "original_vehicle_id"
-CONF_CREATE_CELL_SENSORS = "create_cell_sensors"  # Option to create individual cell sensors
+CONF_CREATE_CELL_SENSORS = (
+    "create_cell_sensors"  # Option to create individual cell sensors
+)
 CONF_TOPIC_BLACKLIST = "topic_blacklist"  # Option to blacklist topics
 CONF_ENTITY_STALENESS_MANAGEMENT = "entity_staleness_management"  # Hours after which unavailable entities are hidden from UI to reduce clutter (history preserved)
-CONF_DELETE_STALE_HISTORY = "delete_stale_history"  # Delete history when hiding stale entities
+CONF_DELETE_STALE_HISTORY = (
+    "delete_stale_history"  # Delete history when hiding stale entities
+)
 
 # Defaults
 DEFAULT_PORT = 1883
@@ -100,7 +105,7 @@ TOPIC_STRUCTURES = [
     "{prefix}/{mqtt_username}/{vehicle_id}",  # ovms/username/vehicleid
     "{prefix}/client/{vehicle_id}",  # Traditional structure
     "{prefix}/{vehicle_id}",  # Simple structure
-    "custom"  # Allow fully custom format
+    "custom",  # Allow fully custom format
 ]
 
 # MQTT Topics
@@ -160,6 +165,7 @@ DEFAULT_COMMAND_RATE_PERIOD = 60.0  # seconds
 # Maximum length for state values in Home Assistant
 MAX_STATE_LENGTH = 255
 
+
 def truncate_state_value(value, max_length=MAX_STATE_LENGTH):
     """Truncate state value to the maximum allowed length.
 
@@ -179,6 +185,6 @@ def truncate_state_value(value, max_length=MAX_STATE_LENGTH):
 
     # Check length and truncate if needed
     if len(value) > max_length:
-        return value[:max_length-3] + "..."
+        return value[: max_length - 3] + "..."
 
     return value

@@ -1,4 +1,5 @@
 """Topic discovery utilities for OVMS config flow."""
+
 import asyncio
 import logging
 import re
@@ -54,9 +55,7 @@ def format_structure_prefix(config):
 
         # Replace the variables in the structure
         structure_prefix = structure.format(
-            prefix=prefix,
-            vehicle_id=vehicle_id,
-            mqtt_username=mqtt_username
+            prefix=prefix, vehicle_id=vehicle_id, mqtt_username=mqtt_username
         )
 
         _LOGGER.debug("Formatted structure prefix: %s", structure_prefix)
@@ -87,7 +86,9 @@ def extract_vehicle_ids(topics, config):
         # Keep {vehicle_id} as a capture group
         pattern_str = structure.replace("{prefix}", re.escape(prefix))
         if mqtt_username:
-            pattern_str = pattern_str.replace("{mqtt_username}", re.escape(mqtt_username))
+            pattern_str = pattern_str.replace(
+                "{mqtt_username}", re.escape(mqtt_username)
+            )
         else:
             # Handle case when username isn't provided but is in the structure
             pattern_str = pattern_str.replace("{mqtt_username}", "[^/]+")
@@ -106,17 +107,24 @@ def extract_vehicle_ids(topics, config):
             if match and len(match.groups()) > 0:
                 vehicle_id = match.group(1)
                 if vehicle_id not in ["client", "rr"]:
-                    _LOGGER.debug("Found potential vehicle ID '%s' from exact structure match in topic '%s'",
-                                  vehicle_id, topic)
+                    _LOGGER.debug(
+                        "Found potential vehicle ID '%s' from exact structure match in topic '%s'",
+                        vehicle_id,
+                        topic,
+                    )
                     potential_ids.add(vehicle_id)
 
     # Phase 2: Only if no IDs found with exact structure, use the generic pattern approach
     if not potential_ids:
-        _LOGGER.debug("No vehicle IDs found with exact structure, trying generic pattern")
+        _LOGGER.debug(
+            "No vehicle IDs found with exact structure, trying generic pattern"
+        )
 
         # General pattern to match various username formats for OVMS
-        general_pattern = fr"^{re.escape(prefix)}/([^/]+)/([^/]+)/"
-        _LOGGER.debug("Using general pattern to extract vehicle IDs: %s", general_pattern)
+        general_pattern = rf"^{re.escape(prefix)}/([^/]+)/([^/]+)/"
+        _LOGGER.debug(
+            "Using general pattern to extract vehicle IDs: %s", general_pattern
+        )
 
         for topic in topics:
             match = re.match(general_pattern, topic)
@@ -126,7 +134,9 @@ def extract_vehicle_ids(topics, config):
                 if vehicle_id not in ["client", "rr"]:
                     _LOGGER.debug(
                         "Found potential vehicle ID '%s' with username '%s' from topic '%s'",
-                        vehicle_id, username, topic
+                        vehicle_id,
+                        username,
+                        topic,
                     )
                     # Save the discovered username for future use
                     discovered_username = username
@@ -138,12 +148,16 @@ def extract_vehicle_ids(topics, config):
         if current_username != discovered_username:
             _LOGGER.debug(
                 "Updating MQTT username from '%s' to discovered '%s'",
-                current_username, discovered_username
+                current_username,
+                discovered_username,
             )
             config[CONF_MQTT_USERNAME] = discovered_username
 
-    _LOGGER.debug("Extracted %d potential vehicle IDs: %s", len(potential_ids), potential_ids)
+    _LOGGER.debug(
+        "Extracted %d potential vehicle IDs: %s", len(potential_ids), potential_ids
+    )
     return potential_ids
+
 
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 async def discover_topics(hass: HomeAssistant, config):
@@ -165,7 +179,7 @@ async def discover_topics(hass: HomeAssistant, config):
 
     # Set up a test client
     client_id = f"ha_ovms_discovery_{uuid.uuid4().hex[:8]}"
-    protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
+    protocol = mqtt.MQTTv5 if hasattr(mqtt, "MQTTv5") else mqtt.MQTTv311
 
     _LOGGER.debug("%s - Creating client with ID: %s", log_prefix, client_id)
     mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
@@ -181,13 +195,13 @@ async def discover_topics(hass: HomeAssistant, config):
         # Using time.time() instead of asyncio.get_event_loop().time()
         connection_status["timestamp"] = time.time()
 
-        _LOGGER.debug("%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags)
+        _LOGGER.debug(
+            "%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags
+        )
 
         if rc == 0:
             _LOGGER.debug(
-                "%s - Subscribing to discovery topic: %s",
-                log_prefix,
-                discovery_topic
+                "%s - Subscribing to discovery topic: %s", log_prefix, discovery_topic
             )
             mqttc.subscribe(discovery_topic, qos=config.get(CONF_QOS, 1))
 
@@ -195,7 +209,9 @@ async def discover_topics(hass: HomeAssistant, config):
         """Handle incoming messages."""
         _LOGGER.debug(
             "%s - Message received on topic: %s (payload len: %d)",
-            log_prefix, msg.topic, len(msg.payload)
+            log_prefix,
+            msg.topic,
+            len(msg.payload),
         )
         discovered_topics.add(msg.topic)
 
@@ -212,12 +228,13 @@ async def discover_topics(hass: HomeAssistant, config):
         _LOGGER.debug("%s - MQTT Log: %s", log_prefix, buf)
 
     # Configure the client
-    if hasattr(mqtt, 'MQTTv5'):
+    if hasattr(mqtt, "MQTTv5"):
         mqttc.on_connect = on_connect
     else:
         # For MQTT v3.1.1
         def on_connect_v311(client, userdata, flags, rc):
             on_connect(client, userdata, flags, rc, None)
+
         mqttc.on_connect = on_connect_v311
 
     mqttc.on_message = on_message
@@ -275,7 +292,7 @@ async def discover_topics(hass: HomeAssistant, config):
                 connected = True
                 break
             await asyncio.sleep(0.5)
-            _LOGGER.debug("%s - Waiting for connection (%d/10)", log_prefix, i+1)
+            _LOGGER.debug("%s - Waiting for connection (%d/10)", log_prefix, i + 1)
 
         if not connected:
             mqttc.loop_stop()
@@ -294,8 +311,7 @@ async def discover_topics(hass: HomeAssistant, config):
         # Try to publish a message to stimulate response
         try:
             _LOGGER.debug(
-                "%s - Publishing test message to stimulate responses",
-                log_prefix
+                "%s - Publishing test message to stimulate responses", log_prefix
             )
             command_id = uuid.uuid4().hex[:8]
             # Use a generic discovery command - this will be ignored if the structure is wrong
@@ -312,15 +328,11 @@ async def discover_topics(hass: HomeAssistant, config):
                 alt_test_topic = (
                     f"{topic_prefix}/+/{vehicle_id}/client/rr/command/{command_id}"
                 )
-                mqttc.publish(
-                    alt_test_topic,
-                    test_payload,
-                    qos=config.get(CONF_QOS, 1)
-                )
+                mqttc.publish(alt_test_topic, test_payload, qos=config.get(CONF_QOS, 1))
                 _LOGGER.debug(
                     "%s - Also testing alternative topic: %s",
                     log_prefix,
-                    alt_test_topic
+                    alt_test_topic,
                 )
 
             # Wait a bit longer for responses
@@ -330,7 +342,7 @@ async def discover_topics(hass: HomeAssistant, config):
             _LOGGER.debug(
                 "%s - Test message error details: %s",
                 log_prefix,
-                traceback.format_exc()
+                traceback.format_exc(),
             )
 
         # Clean up
@@ -344,12 +356,17 @@ async def discover_topics(hass: HomeAssistant, config):
         topics_count = len(discovered_topics)
 
         debug_info["topics_count"] = topics_count
-        debug_info["discovered_topics"] = list(discovered_topics) if \
-            len(discovered_topics) < 50 else list(discovered_topics)[:50]
+        debug_info["discovered_topics"] = (
+            list(discovered_topics)
+            if len(discovered_topics) < 50
+            else list(discovered_topics)[:50]
+        )
 
         _LOGGER.debug(
             "%s - Discovery complete. Found %d topics: %s",
-            log_prefix, topics_count, list(discovered_topics)[:10]
+            log_prefix,
+            topics_count,
+            list(discovered_topics)[:10],
         )
 
         return {
@@ -370,9 +387,7 @@ async def discover_topics(hass: HomeAssistant, config):
     except ConnectionError as conn_ex:
         _LOGGER.error("%s - Connection error: %s", log_prefix, conn_ex)
         _LOGGER.debug(
-            "%s - Connection error details: %s",
-            log_prefix,
-            traceback.format_exc()
+            "%s - Connection error details: %s", log_prefix, traceback.format_exc()
         )
         return {
             "success": False,
@@ -382,9 +397,7 @@ async def discover_topics(hass: HomeAssistant, config):
     except TimeoutError as timeout_ex:
         _LOGGER.error("%s - Timeout error: %s", log_prefix, timeout_ex)
         _LOGGER.debug(
-            "%s - Timeout error details: %s",
-            log_prefix,
-            traceback.format_exc()
+            "%s - Timeout error details: %s", log_prefix, traceback.format_exc()
         )
         return {
             "success": False,
@@ -394,9 +407,7 @@ async def discover_topics(hass: HomeAssistant, config):
     except socket.error as socket_err:
         _LOGGER.error("%s - Connection error: %s", log_prefix, socket_err)
         _LOGGER.debug(
-            "%s - Connection error details: %s",
-            log_prefix,
-            traceback.format_exc()
+            "%s - Connection error details: %s", log_prefix, traceback.format_exc()
         )
         return {
             "success": False,
@@ -411,6 +422,7 @@ async def discover_topics(hass: HomeAssistant, config):
             "error_type": ERROR_UNKNOWN,
             "message": f"Error during topic discovery: {ex}",
         }
+
 
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 async def test_topic_availability(hass: HomeAssistant, config):
@@ -437,12 +449,10 @@ async def test_topic_availability(hass: HomeAssistant, config):
     # Format command and response topics for request-response test
     command_id = uuid.uuid4().hex[:8]
     command_topic = CONST_COMMAND_TOPIC_TEMPLATE.format(
-        structure_prefix=structure_prefix,
-        command_id=command_id
+        structure_prefix=structure_prefix, command_id=command_id
     )
     response_topic = CONST_RESPONSE_TOPIC_TEMPLATE.format(
-        structure_prefix=structure_prefix,
-        command_id=command_id
+        structure_prefix=structure_prefix, command_id=command_id
     )
 
     _LOGGER.debug("%s - Using command topic: %s", log_prefix, command_topic)
@@ -453,7 +463,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
 
     # Set up a test client
     client_id = f"ha_ovms_topic_test_{uuid.uuid4().hex[:8]}"
-    protocol = mqtt.MQTTv5 if hasattr(mqtt, 'MQTTv5') else mqtt.MQTTv311
+    protocol = mqtt.MQTTv5 if hasattr(mqtt, "MQTTv5") else mqtt.MQTTv311
 
     _LOGGER.debug("%s - Creating client with ID: %s", log_prefix, client_id)
     mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
@@ -471,7 +481,9 @@ async def test_topic_availability(hass: HomeAssistant, config):
         # Using time.time() instead of asyncio.get_event_loop().time()
         connection_status["timestamp"] = time.time()
 
-        _LOGGER.debug("%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags)
+        _LOGGER.debug(
+            "%s - Connection callback: rc=%s, flags=%s", log_prefix, rc, flags
+        )
 
         if rc == 0:
             # Subscribe to general topics and response topic
@@ -479,9 +491,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
             mqttc.subscribe(topic, qos=config.get(CONF_QOS, 1))
 
             _LOGGER.debug(
-                "%s - Subscribing to response topic: %s",
-                log_prefix,
-                response_topic
+                "%s - Subscribing to response topic: %s", log_prefix, response_topic
             )
             mqttc.subscribe(response_topic, qos=config.get(CONF_QOS, 1))
 
@@ -494,29 +504,27 @@ async def test_topic_availability(hass: HomeAssistant, config):
                     direct_topic = f"{prefix}/{mqtt_username}/{vehicle_id}/#"
                     _LOGGER.debug(
                         "%s - Also subscribing to direct topic: %s",
-                        log_prefix, direct_topic
-                    )
-                    mqttc.subscribe(
+                        log_prefix,
                         direct_topic,
-                        qos=config.get(CONF_QOS, 1)
                     )
+                    mqttc.subscribe(direct_topic, qos=config.get(CONF_QOS, 1))
 
                 # Also try with the pattern matching any username
                 alt_topic = f"{prefix}/+/{vehicle_id}/#"
                 _LOGGER.debug(
                     "%s - Also subscribing to alternative topic: %s",
-                    log_prefix, alt_topic
-                )
-                mqttc.subscribe(
+                    log_prefix,
                     alt_topic,
-                    qos=config.get(CONF_QOS, 1)
                 )
+                mqttc.subscribe(alt_topic, qos=config.get(CONF_QOS, 1))
 
     def on_message(_, __, msg):
         """Handle incoming messages."""
         _LOGGER.debug(
             "%s - Message received on topic: %s (payload len: %d)",
-            log_prefix, msg.topic, len(msg.payload)
+            log_prefix,
+            msg.topic,
+            len(msg.payload),
         )
 
         message_info = {
@@ -528,7 +536,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
 
         # Try to decode payload for logging
         try:
-            payload_str = msg.payload.decode('utf-8')
+            payload_str = msg.payload.decode("utf-8")
             message_info["payload"] = payload_str
             _LOGGER.debug("%s - Payload: %s", log_prefix, payload_str)
         except UnicodeDecodeError:
@@ -557,12 +565,13 @@ async def test_topic_availability(hass: HomeAssistant, config):
         _LOGGER.debug("%s - MQTT Log: %s", log_prefix, buf)
 
     # Configure the client
-    if hasattr(mqtt, 'MQTTv5'):
+    if hasattr(mqtt, "MQTTv5"):
         mqttc.on_connect = on_connect
     else:
         # For MQTT v3.1.1
         def on_connect_v311(client, userdata, flags, rc):
             on_connect(client, userdata, flags, rc, None)
+
         mqttc.on_connect = on_connect_v311
 
     mqttc.on_message = on_message
@@ -626,7 +635,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
                 connected = True
                 break
             await asyncio.sleep(0.5)
-            _LOGGER.debug("%s - Waiting for connection (%d/10)", log_prefix, i+1)
+            _LOGGER.debug("%s - Waiting for connection (%d/10)", log_prefix, i + 1)
 
         if not connected:
             mqttc.loop_stop()
@@ -645,7 +654,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
         for i in range(5):  # Wait for up to 2.5 seconds
             if messages_received:
                 break
-            _LOGGER.debug("%s - No messages yet (%d/5)", log_prefix, i+1)
+            _LOGGER.debug("%s - No messages yet (%d/5)", log_prefix, i + 1)
             await asyncio.sleep(0.5)
 
         # Send a command to test request-response
@@ -660,7 +669,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
             for i in range(10):  # Wait for up to 5 seconds
                 if responses_received:
                     break
-                _LOGGER.debug("%s - No response yet (%d/10)", log_prefix, i+1)
+                _LOGGER.debug("%s - No response yet (%d/10)", log_prefix, i + 1)
                 await asyncio.sleep(0.5)
 
             if responses_received:
@@ -670,9 +679,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.warning("%s - Error sending command: %s", log_prefix, ex)
             _LOGGER.debug(
-                "%s - Command error details: %s",
-                log_prefix,
-                traceback.format_exc()
+                "%s - Command error details: %s", log_prefix, traceback.format_exc()
             )
 
         # Wait a bit longer for more messages to arrive
@@ -698,7 +705,10 @@ async def test_topic_availability(hass: HomeAssistant, config):
 
         _LOGGER.debug(
             "%s - Test complete. Messages: %d, Topics: %d, Responses: %d",
-            log_prefix, messages_count, topics_count, len(responses_received)
+            log_prefix,
+            messages_count,
+            topics_count,
+            len(responses_received),
         )
 
         # Even if we didn't receive messages, we'll consider it a success with a warning
@@ -726,9 +736,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
     except ConnectionError as conn_ex:
         _LOGGER.error("%s - Connection error: %s", log_prefix, conn_ex)
         _LOGGER.debug(
-            "%s - Connection error details: %s",
-            log_prefix,
-            traceback.format_exc()
+            "%s - Connection error details: %s", log_prefix, traceback.format_exc()
         )
         debug_info["error"] = {
             "type": "connection",
@@ -744,9 +752,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
     except TimeoutError as timeout_ex:
         _LOGGER.error("%s - Timeout error: %s", log_prefix, timeout_ex)
         _LOGGER.debug(
-            "%s - Timeout error details: %s",
-            log_prefix,
-            traceback.format_exc()
+            "%s - Timeout error details: %s", log_prefix, traceback.format_exc()
         )
         debug_info["error"] = {
             "type": "timeout",
@@ -761,7 +767,9 @@ async def test_topic_availability(hass: HomeAssistant, config):
         }
     except socket.error as socket_err:
         _LOGGER.error("%s - Socket error: %s", log_prefix, socket_err)
-        _LOGGER.debug("%s - Socket error details: %s", log_prefix, traceback.format_exc())
+        _LOGGER.debug(
+            "%s - Socket error details: %s", log_prefix, traceback.format_exc()
+        )
         debug_info["error"] = {
             "type": "socket",
             "message": str(socket_err),
@@ -776,9 +784,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
         _LOGGER.debug(
-            "%s - Unexpected error details: %s",
-            log_prefix,
-            traceback.format_exc()
+            "%s - Unexpected error details: %s", log_prefix, traceback.format_exc()
         )
         debug_info["error"] = {
             "type": "unexpected",

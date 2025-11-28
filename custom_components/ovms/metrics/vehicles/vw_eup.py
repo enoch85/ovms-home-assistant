@@ -386,7 +386,6 @@ VW_EUP_METRICS = {
         "unit": UnitOfPressure.KPA,
         "category": "vw_eup",
     },
-
     # SOH Module History Metrics (comma-separated values for 14 modules)
     "xvu.b.hist.soh.mod": {
         "name": "VW eUP! Module SOH",

@@ -1,4 +1,5 @@
 """Command handler for OVMS integration."""
+
 import asyncio
 import logging
 import time
@@ -20,6 +21,7 @@ from ..const import (
 from ..rate_limiter import CommandRateLimiter
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
 
 class CommandHandler:
     """Handler for OVMS commands."""
@@ -78,25 +80,19 @@ class CommandHandler:
                     # Check if command is older than 5 minutes
                     if current_time - command_data["timestamp"] > 300:
                         expired_commands.append(command_id)
-                        _LOGGER.debug(
-                            "Cleaning up expired command: %s", command_id
-                        )
+                        _LOGGER.debug("Cleaning up expired command: %s", command_id)
 
                 # Remove expired commands
                 for command_id in expired_commands:
                     future = self.pending_commands[command_id]["future"]
                     if not future.done():
                         future.set_exception(
-                            asyncio.TimeoutError(
-                                "Command expired during cleanup"
-                            )
+                            asyncio.TimeoutError("Command expired during cleanup")
                         )
                     if command_id in self.pending_commands:
                         del self.pending_commands[command_id]
 
-                _LOGGER.debug(
-                    "Cleaned up %d expired commands", len(expired_commands)
-                )
+                _LOGGER.debug("Cleaned up %d expired commands", len(expired_commands))
 
             except asyncio.CancelledError:
                 # Handle task cancellation correctly
@@ -119,7 +115,9 @@ class CommandHandler:
         # Get the MQTT client
         mqtt_client = None
         for entry_id, data in self.hass.data["ovms"].items():
-            if "mqtt_client" in data and hasattr(data["mqtt_client"], "connection_manager"):
+            if "mqtt_client" in data and hasattr(
+                data["mqtt_client"], "connection_manager"
+            ):
                 current_vehicle_id = vehicle_id or self.config.get(CONF_VEHICLE_ID)
                 if current_vehicle_id == self.config.get(CONF_VEHICLE_ID):
                     mqtt_client = data["mqtt_client"].connection_manager
@@ -177,9 +175,7 @@ class CommandHandler:
             }
 
             # Send the command
-            _LOGGER.debug(
-                "Publishing command to %s: %s", command_topic, payload
-            )
+            _LOGGER.debug("Publishing command to %s: %s", command_topic, payload)
             if not await mqtt_client.async_publish(
                 command_topic, payload, qos=self.config.get(CONF_QOS)
             ):
@@ -192,9 +188,7 @@ class CommandHandler:
                 }
 
             # Wait for the response with timeout
-            _LOGGER.debug(
-                "Waiting for response for command_id: %s", command_id
-            )
+            _LOGGER.debug("Waiting for response for command_id: %s", command_id)
             response_payload = await asyncio.wait_for(future, timeout)
 
             # Enhanced logging for responses
@@ -206,7 +200,11 @@ class CommandHandler:
                 command,
                 parameters,
                 command_id,
-                response_payload[:200] + "..." if isinstance(response_payload, str) and len(response_payload) > 200 else response_payload
+                (
+                    response_payload[:200] + "..."
+                    if isinstance(response_payload, str) and len(response_payload) > 200
+                    else response_payload
+                ),
             )
 
             # Try to parse the response as JSON
@@ -228,13 +226,16 @@ class CommandHandler:
 
         except asyncio.TimeoutError:
             _LOGGER.warning(
-                "Command '%s %s' (ID: %s) timed out after %d seconds. " 
+                "Command '%s %s' (ID: %s) timed out after %d seconds. "
                 "No response received from OVMS device. This could indicate: "
                 "1) OVMS firmware doesn't support MQTT commands, "
                 "2) OVMS device is not subscribed to command topics, "
                 "3) OVMS device configuration issue. "
                 "Try updating OVMS firmware or check OVMS MQTT configuration.",
-                command, parameters, command_id, timeout
+                command,
+                parameters,
+                command_id,
+                timeout,
             )
             # Clean up
             if command_id in self.pending_commands:
@@ -267,8 +268,10 @@ class CommandHandler:
         try:
             # Extract command ID from response topic
             command_id = topic.split("/")[-1]
-            
-            _LOGGER.debug("Processing command response for ID %s: %s", command_id, payload[:100])
+
+            _LOGGER.debug(
+                "Processing command response for ID %s: %s", command_id, payload[:100]
+            )
 
             # Look up pending command
             if command_id in self.pending_commands:
@@ -277,12 +280,16 @@ class CommandHandler:
                     future.set_result(payload)
                     _LOGGER.debug("Successfully completed command %s", command_id)
                 else:
-                    _LOGGER.warning("Received response for already completed command %s", command_id)
+                    _LOGGER.warning(
+                        "Received response for already completed command %s", command_id
+                    )
 
                 # Clean up
                 del self.pending_commands[command_id]
             else:
-                _LOGGER.warning("Received response for unknown command ID: %s", command_id)
+                _LOGGER.warning(
+                    "Received response for unknown command ID: %s", command_id
+                )
 
         except Exception as ex:
             _LOGGER.exception("Error processing command response: %s", ex)
@@ -295,7 +302,7 @@ class CommandHandler:
             await self.async_send_command(
                 command="stat",
                 command_id=command_id,
-                timeout=3  # Short timeout for discovery
+                timeout=3,  # Short timeout for discovery
             )
         except Exception as ex:
             _LOGGER.warning("Error sending discovery command: %s", ex)

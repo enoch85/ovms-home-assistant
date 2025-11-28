@@ -1,4 +1,5 @@
 """Duration formatting utilities for OVMS sensors."""
+
 import re
 from typing import Any, Optional
 from decimal import Decimal, ROUND_HALF_UP
@@ -8,6 +9,7 @@ from homeassistant.const import UnitOfTime
 # Extended time units
 MONTHS = "months"
 YEARS = "years"
+
 
 def format_duration(value, unit=UnitOfTime.SECONDS, use_full_names=False):
     """Format a duration value to a human-readable string based on its native unit.
@@ -69,7 +71,7 @@ def format_duration(value, unit=UnitOfTime.SECONDS, use_full_names=False):
         SECONDS_PER_MINUTE = 60
         MINUTES_PER_HOUR = 60
         HOURS_PER_DAY = 24
-        DAYS_PER_MONTH = Decimal('30.44')  # Average days per month (365.25/12)
+        DAYS_PER_MONTH = Decimal("30.44")  # Average days per month (365.25/12)
         MONTHS_PER_YEAR = 12
 
         # Format based on the native unit
@@ -172,7 +174,9 @@ def format_duration(value, unit=UnitOfTime.SECONDS, use_full_names=False):
 
             # Convert fraction of minute to seconds
             seconds = int(minute_fraction * SECONDS_PER_MINUTE)
-            if seconds > 0 and whole_hours == 0:  # Only show seconds if less than 1 hour
+            if (
+                seconds > 0 and whole_hours == 0
+            ):  # Only show seconds if less than 1 hour
                 if use_full_names:
                     second_label = " second" if seconds == 1 else " seconds"
                 parts.append(f"{seconds}{second_label}")
@@ -207,8 +211,12 @@ def format_duration(value, unit=UnitOfTime.SECONDS, use_full_names=False):
             # For seconds: extract years, months, days, hours, minutes, seconds
             total_seconds = raw_value
 
-            days = int(total_seconds // (SECONDS_PER_MINUTE * MINUTES_PER_HOUR * HOURS_PER_DAY))
-            remainder = total_seconds % (SECONDS_PER_MINUTE * MINUTES_PER_HOUR * HOURS_PER_DAY)
+            days = int(
+                total_seconds // (SECONDS_PER_MINUTE * MINUTES_PER_HOUR * HOURS_PER_DAY)
+            )
+            remainder = total_seconds % (
+                SECONDS_PER_MINUTE * MINUTES_PER_HOUR * HOURS_PER_DAY
+            )
 
             # If more than 60 days, convert to months and years
             if days >= 60:
@@ -226,7 +234,9 @@ def format_duration(value, unit=UnitOfTime.SECONDS, use_full_names=False):
 
                     if remaining_months > 0:
                         if use_full_names:
-                            month_label = " month" if remaining_months == 1 else " months"
+                            month_label = (
+                                " month" if remaining_months == 1 else " months"
+                            )
                         parts.append(f"{remaining_months}{month_label}")
                 else:
                     if use_full_names:
@@ -266,12 +276,18 @@ def format_duration(value, unit=UnitOfTime.SECONDS, use_full_names=False):
                 if (not parts) or (days == 0 and hours == 0):
                     # Format seconds with appropriate precision
                     if seconds < 10:
-                        seconds_rounded = float(seconds.quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))
+                        seconds_rounded = float(
+                            seconds.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+                        )
                         if use_full_names:
-                            second_label = " second" if seconds_rounded == 1 else " seconds"
+                            second_label = (
+                                " second" if seconds_rounded == 1 else " seconds"
+                            )
                         parts.append(f"{seconds_rounded}{second_label}")
                     else:
-                        seconds_int = int(seconds.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+                        seconds_int = int(
+                            seconds.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+                        )
                         if use_full_names:
                             second_label = " second" if seconds_int == 1 else " seconds"
                         parts.append(f"{seconds_int}{second_label}")
@@ -303,6 +319,7 @@ def format_duration(value, unit=UnitOfTime.SECONDS, use_full_names=False):
     except (ValueError, TypeError):
         # Return original value if it can't be parsed
         return str(value)
+
 
 def parse_duration(value: Any, target_unit=UnitOfTime.SECONDS) -> Optional[float]:
     """Parse duration value from formatted string to the target unit.
@@ -371,36 +388,49 @@ def parse_duration(value: Any, target_unit=UnitOfTime.SECONDS) -> Optional[float
             total_seconds = 0
 
             # Parse years
-            year_match = re.search(r'(\d+\.?\d*)\s*(y|years?)', value, re.IGNORECASE)
+            year_match = re.search(r"(\d+\.?\d*)\s*(y|years?)", value, re.IGNORECASE)
             if year_match:
                 total_seconds += float(year_match.group(1)) * 86400 * 365.25
 
             # Parse months
-            month_match = re.search(r'(\d+\.?\d*)\s*(mo|months?)', value, re.IGNORECASE)
+            month_match = re.search(r"(\d+\.?\d*)\s*(mo|months?)", value, re.IGNORECASE)
             if month_match:
                 total_seconds += float(month_match.group(1)) * 86400 * 30.44
 
             # Parse days
-            day_match = re.search(r'(\d+\.?\d*)\s*(d|days?)', value, re.IGNORECASE)
+            day_match = re.search(r"(\d+\.?\d*)\s*(d|days?)", value, re.IGNORECASE)
             if day_match:
                 total_seconds += float(day_match.group(1)) * 86400
 
             # Parse hours
-            hour_match = re.search(r'(\d+\.?\d*)\s*(h|hours?)', value, re.IGNORECASE)
+            hour_match = re.search(r"(\d+\.?\d*)\s*(h|hours?)", value, re.IGNORECASE)
             if hour_match:
                 total_seconds += float(hour_match.group(1)) * 3600
 
             # Parse minutes
-            minute_match = re.search(r'(\d+\.?\d*)\s*(m(?!o)|min|minutes?)', value, re.IGNORECASE)
+            minute_match = re.search(
+                r"(\d+\.?\d*)\s*(m(?!o)|min|minutes?)", value, re.IGNORECASE
+            )
             if minute_match:
                 total_seconds += float(minute_match.group(1)) * 60
 
             # Parse seconds
-            second_match = re.search(r'(\d+\.?\d*)\s*(s|seconds?)', value, re.IGNORECASE)
+            second_match = re.search(
+                r"(\d+\.?\d*)\s*(s|seconds?)", value, re.IGNORECASE
+            )
             if second_match:
                 total_seconds += float(second_match.group(1))
 
-            if total_seconds > 0 or any([year_match, month_match, day_match, hour_match, minute_match, second_match]):
+            if total_seconds > 0 or any(
+                [
+                    year_match,
+                    month_match,
+                    day_match,
+                    hour_match,
+                    minute_match,
+                    second_match,
+                ]
+            ):
                 # Convert to target unit
                 if target_unit == UnitOfTime.MINUTES:
                     return total_seconds / 60

@@ -15,7 +15,7 @@ TIRE_POSITIONS = {
     0: ("front_left", "FL"),
     1: ("front_right", "FR"),
     2: ("rear_left", "LR"),
-    3: ("rear_right", "RR")
+    3: ("rear_right", "RR"),
 }
 
 # Tire metrics

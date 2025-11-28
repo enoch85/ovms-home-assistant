@@ -1,4 +1,5 @@
 """MQTT connection manager for OVMS integration."""
+
 import asyncio
 import logging
 import random
@@ -39,7 +40,7 @@ MAX_RECONNECTION_ATTEMPTS = 10
 MQTT_REASON_CODES = {
     # MQTT v3.1.1 CONNACK return codes (Section 3.2.2.3)
     0: "Connection accepted",
-    1: "Connection refused - unacceptable protocol version", 
+    1: "Connection refused - unacceptable protocol version",
     2: "Connection refused - identifier rejected",
     3: "Connection refused - server unavailable",
     4: "Connection refused - bad username or password",
@@ -47,7 +48,7 @@ MQTT_REASON_CODES = {
     # MQTT v5.0 additional reason codes (backwards compatible)
     128: "Unspecified error",
     129: "Malformed packet",
-    130: "Protocol error", 
+    130: "Protocol error",
     131: "Implementation specific error",
     132: "Unsupported protocol version",
     133: "Client identifier not valid",
@@ -63,6 +64,7 @@ MQTT_REASON_CODES = {
     143: "Topic filter invalid",
     144: "Topic name invalid",
 }
+
 
 class MQTTConnectionManager:
     """Manages MQTT connection for OVMS integration."""
@@ -94,9 +96,7 @@ class MQTTConnectionManager:
     def _format_structure_prefix(self) -> str:
         """Format the topic structure prefix based on configuration."""
         try:
-            structure = self.config.get(
-                CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE
-            )
+            structure = self.config.get(CONF_TOPIC_STRUCTURE, DEFAULT_TOPIC_STRUCTURE)
             prefix = self.config.get(CONF_TOPIC_PREFIX)
             vehicle_id = self.config.get(CONF_VEHICLE_ID)
             mqtt_username = self.config.get(CONF_MQTT_USERNAME, "")
@@ -137,20 +137,30 @@ class MQTTConnectionManager:
         """Create and configure the MQTT client."""
         client_id = self.config.get(CONF_CLIENT_ID)
         _LOGGER.debug("MQTT Connection: client_id from config: %s", client_id)
-        
+
         # Fallback: generate stable client_id if missing (should not happen after migration)
         if not client_id:
             import hashlib
+
             host = self.config.get(CONF_HOST, "unknown")
             username = self.config.get(CONF_USERNAME, "unknown")
             vehicle_id = self.config.get(CONF_VEHICLE_ID, "unknown")
-            _LOGGER.debug("MQTT Connection: Fallback values - host=%s, username=%s, vehicle_id=%s", host, username, vehicle_id)
+            _LOGGER.debug(
+                "MQTT Connection: Fallback values - host=%s, username=%s, vehicle_id=%s",
+                host,
+                username,
+                vehicle_id,
+            )
             # Include username to prevent collisions when multiple users have same vehicle_id
             # Hash input combines unique identifiers while keeping username private in logs
             client_id_base = f"{host}_{username}_{vehicle_id}"
-            client_id = f"ha_ovms_{hashlib.sha256(client_id_base.encode()).hexdigest()[:12]}"
-            _LOGGER.warning("Client ID was missing, generated stable fallback: %s", client_id)
-        
+            client_id = (
+                f"ha_ovms_{hashlib.sha256(client_id_base.encode()).hexdigest()[:12]}"
+            )
+            _LOGGER.warning(
+                "Client ID was missing, generated stable fallback: %s", client_id
+            )
+
         protocol = mqtt.MQTTv5 if hasattr(mqtt, "MQTTv5") else mqtt.MQTTv311
 
         _LOGGER.debug("Creating MQTT client with ID: %s", client_id)
@@ -179,9 +189,7 @@ class MQTTConnectionManager:
             verify_ssl = self.config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
 
             # Use executor to avoid blocking the event loop
-            context = await self.hass.async_add_executor_job(
-                ssl.create_default_context
-            )
+            context = await self.hass.async_add_executor_job(ssl.create_default_context)
 
             if not verify_ssl:
                 # When verification is disabled, use compatible settings
@@ -190,7 +198,9 @@ class MQTTConnectionManager:
                 context.verify_mode = ssl.CERT_NONE
             else:
                 # When verification is enabled, use secure defaults
-                _LOGGER.debug("SSL certificate verification enabled, using secure TLS settings")
+                _LOGGER.debug(
+                    "SSL certificate verification enabled, using secure TLS settings"
+                )
                 context.minimum_version = ssl.TLSVersion.TLSv1_2
 
             client.tls_set_context(context)
@@ -201,9 +211,7 @@ class MQTTConnectionManager:
         will_qos = self.config.get(CONF_QOS, 1)
         will_retain = True
 
-        client.will_set(
-            self._status_topic, will_payload, will_qos, will_retain
-        )
+        client.will_set(self._status_topic, will_payload, will_qos, will_retain)
 
         # Add MQTT v5 properties when available
         if (
@@ -227,7 +235,7 @@ class MQTTConnectionManager:
 
     def _extract_reason_code(self, reason_code) -> int:
         """Extract numeric value from reason code (handles both int and ReasonCode objects)."""
-        return reason_code.value if hasattr(reason_code, 'value') else reason_code
+        return reason_code.value if hasattr(reason_code, "value") else reason_code
 
     def _get_reason_message(self, reason_code) -> str:
         """Get human-readable message for MQTT reason code."""
@@ -237,21 +245,21 @@ class MQTTConnectionManager:
     def _should_retry_connection(self, reason_code) -> bool:
         """Determine if connection should be retried based on reason code."""
         code = self._extract_reason_code(reason_code)
-        
+
         # Don't retry for these permanent failures
         permanent_failures = {
-            1,   # Unacceptable protocol version
-            2,   # Identifier rejected  
-            4,   # Bad username or password
-            5,   # Not authorized
-            129, # Malformed packet
-            130, # Protocol error
-            132, # Unsupported protocol version
-            133, # Client identifier not valid
-            134, # Bad username or password (v5)
-            135, # Not authorized (v5)
-            143, # Topic filter invalid
-            144, # Topic name invalid
+            1,  # Unacceptable protocol version
+            2,  # Identifier rejected
+            4,  # Bad username or password
+            5,  # Not authorized
+            129,  # Malformed packet
+            130,  # Protocol error
+            132,  # Unsupported protocol version
+            133,  # Client identifier not valid
+            134,  # Bad username or password (v5)
+            135,  # Not authorized (v5)
+            143,  # Topic filter invalid
+            144,  # Topic name invalid
         }
         return code not in permanent_failures
 
@@ -291,26 +299,30 @@ class MQTTConnectionManager:
             # Only increment reconnect count and log if not shutting down
             if not self._shutting_down:
                 self.reconnect_count += 1
-                
+
                 # Enhanced disconnect logging
                 rc = self._extract_reason_code(rc)
                 if rc == 0:
                     _LOGGER.info("Cleanly disconnected from MQTT broker")
                 else:
                     reason_message = self._get_reason_message(rc)
-                    _LOGGER.warning("Disconnected from MQTT broker (code %d): %s", rc, reason_message)
+                    _LOGGER.warning(
+                        "Disconnected from MQTT broker (code %d): %s",
+                        rc,
+                        reason_message,
+                    )
 
                 # Schedule reconnection if not intentional disconnect
                 if rc != 0:
-                    _LOGGER.info("Scheduling reconnection attempt with enhanced backoff")
+                    _LOGGER.info(
+                        "Scheduling reconnection attempt with enhanced backoff"
+                    )
                     asyncio.run_coroutine_threadsafe(
                         self._async_reconnect(rc),
                         self.hass.loop,
                     )
             else:
-                _LOGGER.debug(
-                    "Disconnected during shutdown, not attempting reconnect"
-                )
+                _LOGGER.debug("Disconnected during shutdown, not attempting reconnect")
 
         def on_message(client, userdata, msg):
             """Handle incoming messages."""
@@ -340,10 +352,10 @@ class MQTTConnectionManager:
         try:
             # Get human-readable reason message
             reason_message = self._get_reason_message(rc)
-            
+
             # Extract numeric value for comparison
             rc = self._extract_reason_code(rc)
-            
+
             if rc == 0:
                 self.connected = True
                 _LOGGER.info("Connected to MQTT broker: %s", reason_message)
@@ -377,15 +389,23 @@ class MQTTConnectionManager:
                     self.connection_callback(False)
 
                 # Enhanced error logging with reason code details
-                _LOGGER.error("Failed to connect to MQTT broker (code %d): %s", rc, reason_message)
-                
+                _LOGGER.error(
+                    "Failed to connect to MQTT broker (code %d): %s", rc, reason_message
+                )
+
                 # Log additional guidance for common errors
                 if rc in [4, 134]:  # Bad username or password
-                    _LOGGER.error("Check your MQTT username and password in the configuration")
+                    _LOGGER.error(
+                        "Check your MQTT username and password in the configuration"
+                    )
                 elif rc in [5, 135]:  # Not authorized
-                    _LOGGER.error("MQTT user is not authorized - check broker ACL settings")
+                    _LOGGER.error(
+                        "MQTT user is not authorized - check broker ACL settings"
+                    )
                 elif rc in [3, 136]:  # Server unavailable
-                    _LOGGER.error("MQTT broker is unavailable - check if broker is running and accessible")
+                    _LOGGER.error(
+                        "MQTT broker is unavailable - check if broker is running and accessible"
+                    )
                 elif rc == 137:  # Server busy
                     _LOGGER.warning("MQTT broker is busy - will retry with backoff")
         except Exception as ex:
@@ -442,19 +462,22 @@ class MQTTConnectionManager:
         if reason_code is not None and not self._should_retry_connection(reason_code):
             reason_message = self._get_reason_message(reason_code)
             _LOGGER.error(
-                "Not retrying connection due to permanent failure (code %d): %s", 
-                reason_code, reason_message
+                "Not retrying connection due to permanent failure (code %d): %s",
+                reason_code,
+                reason_message,
             )
             return
 
         # Calculate backoff time with jitter
         backoff = self._get_retry_delay(self.reconnect_count)
-        reconnect_msg = f"Reconnecting in {backoff:.1f} seconds (attempt #{self.reconnect_count})"
-        
+        reconnect_msg = (
+            f"Reconnecting in {backoff:.1f} seconds (attempt #{self.reconnect_count})"
+        )
+
         if reason_code is not None:
             reason_message = self._get_reason_message(reason_code)
             reconnect_msg += f" - Previous failure: {reason_message}"
-        
+
         _LOGGER.info(reconnect_msg)
 
         try:
@@ -468,7 +491,7 @@ class MQTTConnectionManager:
             if hasattr(mqtt, "MQTTv5"):
                 try:
                     # For MQTT v5, set clean_start parameter directly on client
-                    original_clean_start = getattr(self.client, 'clean_start', None)
+                    original_clean_start = getattr(self.client, "clean_start", None)
                     self.client.clean_start = False
                     await self.hass.async_add_executor_job(self.client.reconnect)
                     # Restore original setting if it existed
@@ -485,11 +508,11 @@ class MQTTConnectionManager:
                     "SSL/TLS error during MQTT reconnection: %s. "
                     "This may be due to broker issues or network connectivity problems. "
                     "Try rebooting your OVMS module if issue persists.",
-                    ex
+                    ex,
                 )
             else:
                 _LOGGER.exception("Failed to reconnect to MQTT broker: %s", ex)
-            
+
             # Schedule another reconnect attempt (no reason code available from exception)
             if not self._shutting_down:
                 asyncio.create_task(self._async_reconnect())
@@ -505,14 +528,10 @@ class MQTTConnectionManager:
             qos = self.config.get(CONF_QOS)
 
             # Subscribe to all topics under the structure prefix
-            topic = TOPIC_TEMPLATE.format(
-                structure_prefix=self.structure_prefix
-            )
+            topic = TOPIC_TEMPLATE.format(structure_prefix=self.structure_prefix)
 
             _LOGGER.info("Subscribing to OVMS topic: %s", topic)
-            await self.hass.async_add_executor_job(
-                self.client.subscribe, topic, qos
-            )
+            await self.hass.async_add_executor_job(self.client.subscribe, topic, qos)
 
             # Add a subscription with vehicle ID but without username
             # Handle the case where topics might use different username patterns
@@ -530,7 +549,9 @@ class MQTTConnectionManager:
         except Exception as ex:
             _LOGGER.exception("Error subscribing to topics: %s", ex)
 
-    async def async_publish(self, topic: str, payload: str, qos: Optional[int] = None, retain: bool = False) -> bool:
+    async def async_publish(
+        self, topic: str, payload: str, qos: Optional[int] = None, retain: bool = False
+    ) -> bool:
         """Publish a message to the MQTT broker."""
         if not self.connected:
             _LOGGER.warning("Cannot publish message, not connected")
@@ -566,7 +587,7 @@ class MQTTConnectionManager:
                         self._status_topic,
                         "offline",
                         self.config.get(CONF_QOS, 1),
-                        True  # Retain
+                        True,  # Retain
                     )
 
                 # Stop the loop and disconnect

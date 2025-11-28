@@ -1,4 +1,5 @@
 """Attribute manager for OVMS integration."""
+
 import json
 import logging
 from typing import Dict, Any, Optional, List
@@ -11,6 +12,7 @@ from .metrics import get_metric_by_path, get_metric_by_pattern
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
+
 class AttributeManager:
     """Manager for entity attributes."""
 
@@ -18,8 +20,13 @@ class AttributeManager:
         """Initialize the attribute manager."""
         self.config = config
 
-    def prepare_attributes(self, topic: str, category: str, parts: List[str],
-                          metric_info: Optional[Dict] = None) -> Dict[str, Any]:
+    def prepare_attributes(
+        self,
+        topic: str,
+        category: str,
+        parts: List[str],
+        metric_info: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
         """Prepare entity attributes."""
         try:
             attributes = {
@@ -46,15 +53,19 @@ class AttributeManager:
             _LOGGER.exception("Error preparing attributes: %s", ex)
             return {"topic": topic, "category": category}
 
-    def process_json_payload(self, payload: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
+    def process_json_payload(
+        self, payload: str, attributes: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Process JSON payload to extract additional attributes."""
         try:
             json_data = json.loads(payload)
             if isinstance(json_data, dict):
                 # Add useful attributes from the data
                 for key, value in json_data.items():
-                    if (key not in ["value", "state", "status"] and
-                            key not in attributes):
+                    if (
+                        key not in ["value", "state", "status"]
+                        and key not in attributes
+                    ):
                         attributes[key] = value
 
                 # If there's a timestamp in the JSON, use it

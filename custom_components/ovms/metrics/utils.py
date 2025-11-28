@@ -4,6 +4,7 @@ from .patterns import TOPIC_PATTERNS
 
 # Note: Category constants are imported directly in functions to avoid circular import issues
 
+
 def get_metric_by_path(metric_path):
     """Get metric definition by exact path match."""
     # Import only when needed to avoid circular imports
@@ -14,90 +15,90 @@ def get_metric_by_path(metric_path):
         return METRIC_DEFINITIONS[metric_path]
 
     # For VW eUP metrics, try removing 'metric.' prefix if it's present
-    if metric_path.startswith('metric.xvu.'):
+    if metric_path.startswith("metric.xvu."):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
         # Also try removing numeric suffixes from the alt_path
-        parts = alt_path.split('.')
+        parts = alt_path.split(".")
         if len(parts) > 1 and parts[-1].isdigit():
-            base_path = '.'.join(parts[:-1])
+            base_path = ".".join(parts[:-1])
             if base_path in METRIC_DEFINITIONS:
                 return METRIC_DEFINITIONS[base_path]
 
     # Try removing numeric suffixes for module-specific metrics
     # For paths like "xvu.b.hist.soh.mod.01", try "xvu.b.hist.soh.mod"
     if metric_path:
-        parts = metric_path.split('.')
+        parts = metric_path.split(".")
         if len(parts) > 1 and parts[-1].isdigit():
             # Remove the numeric suffix and try again
-            base_path = '.'.join(parts[:-1])
+            base_path = ".".join(parts[:-1])
             if base_path in METRIC_DEFINITIONS:
                 return METRIC_DEFINITIONS[base_path]
 
     # Try with just 'xvu.' if it exists in the path
-    if 'xvu.' in metric_path and not metric_path.startswith('xvu.'):
-        xvu_index = metric_path.find('xvu.')
+    if "xvu." in metric_path and not metric_path.startswith("xvu."):
+        xvu_index = metric_path.find("xvu.")
         alt_path = metric_path[xvu_index:]
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
     # For MG ZS-EV metrics, try removing 'metric.' prefix if it's present
-    if metric_path.startswith('metric.xmg.'):
+    if metric_path.startswith("metric.xmg."):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
         # Also try removing numeric suffixes from the alt_path
-        parts = alt_path.split('.')
+        parts = alt_path.split(".")
         if len(parts) > 1 and parts[-1].isdigit():
-            base_path = '.'.join(parts[:-1])
+            base_path = ".".join(parts[:-1])
             if base_path in METRIC_DEFINITIONS:
                 return METRIC_DEFINITIONS[base_path]
 
     # For Smart ForTwo metrics, try removing 'metric.' prefix if it's present
-    if metric_path.startswith('metric.xsq.'):
+    if metric_path.startswith("metric.xsq."):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
         # Also try removing numeric suffixes from the alt_path
-        parts = alt_path.split('.')
+        parts = alt_path.split(".")
         if len(parts) > 1 and parts[-1].isdigit():
-            base_path = '.'.join(parts[:-1])
+            base_path = ".".join(parts[:-1])
             if base_path in METRIC_DEFINITIONS:
                 return METRIC_DEFINITIONS[base_path]
 
     # For Nissan Leaf metrics, try removing 'metric.' prefix if it's present
-    if metric_path.startswith('metric.xnl.'):
+    if metric_path.startswith("metric.xnl."):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
         # Also try removing numeric suffixes from the alt_path
-        parts = alt_path.split('.')
+        parts = alt_path.split(".")
         if len(parts) > 1 and parts[-1].isdigit():
-            base_path = '.'.join(parts[:-1])
+            base_path = ".".join(parts[:-1])
             if base_path in METRIC_DEFINITIONS:
                 return METRIC_DEFINITIONS[base_path]
 
     # For Renault Twizy metrics, try removing 'metric.' prefix if it's present
-    if metric_path.startswith('metric.xrt.'):
+    if metric_path.startswith("metric.xrt."):
         alt_path = metric_path[7:]  # Remove 'metric.'
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
         # Also try removing numeric suffixes from the alt_path
-        parts = alt_path.split('.')
+        parts = alt_path.split(".")
         if len(parts) > 1 and parts[-1].isdigit():
-            base_path = '.'.join(parts[:-1])
+            base_path = ".".join(parts[:-1])
             if base_path in METRIC_DEFINITIONS:
                 return METRIC_DEFINITIONS[base_path]
 
     # Try with just 'xrt.' if it exists in the path
-    if 'xrt.' in metric_path and not metric_path.startswith('xrt.'):
-        xrt_index = metric_path.find('xrt.')
+    if "xrt." in metric_path and not metric_path.startswith("xrt."):
+        xrt_index = metric_path.find("xrt.")
         alt_path = metric_path[xrt_index:]
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
@@ -136,8 +137,12 @@ def get_metric_by_pattern(topic_parts):
                 # Try several variations to handle different path formats
                 variations = [
                     metric_key,
-                    f"xvu.{metric_key.split('xvu.', 1)[1]}" if 'xvu.' in metric_key else None,
-                    ".".join(topic_parts[topic_parts.index("xvu"):])
+                    (
+                        f"xvu.{metric_key.split('xvu.', 1)[1]}"
+                        if "xvu." in metric_key
+                        else None
+                    ),
+                    ".".join(topic_parts[topic_parts.index("xvu") :]),
                 ]
 
                 for variation in variations:
@@ -154,8 +159,12 @@ def get_metric_by_pattern(topic_parts):
                 # Try several variations to handle different path formats
                 variations = [
                     metric_key,
-                    f"xmg.{metric_key.split('xmg.', 1)[1]}" if 'xmg.' in metric_key else None,
-                    ".".join(topic_parts[topic_parts.index("xmg"):])
+                    (
+                        f"xmg.{metric_key.split('xmg.', 1)[1]}"
+                        if "xmg." in metric_key
+                        else None
+                    ),
+                    ".".join(topic_parts[topic_parts.index("xmg") :]),
                 ]
 
                 for variation in variations:
@@ -172,8 +181,12 @@ def get_metric_by_pattern(topic_parts):
                 # Try several variations to handle different path formats
                 variations = [
                     metric_key,
-                    f"xsq.{metric_key.split('xsq.', 1)[1]}" if 'xsq.' in metric_key else None,
-                    ".".join(topic_parts[topic_parts.index("xsq"):])
+                    (
+                        f"xsq.{metric_key.split('xsq.', 1)[1]}"
+                        if "xsq." in metric_key
+                        else None
+                    ),
+                    ".".join(topic_parts[topic_parts.index("xsq") :]),
                 ]
 
                 for variation in variations:
@@ -190,8 +203,12 @@ def get_metric_by_pattern(topic_parts):
                 # Try several variations to handle different path formats
                 variations = [
                     metric_key,
-                    f"xrt.{metric_key.split('xrt.', 1)[1]}" if 'xrt.' in metric_key else None,
-                    ".".join(topic_parts[topic_parts.index("xrt"):])
+                    (
+                        f"xrt.{metric_key.split('xrt.', 1)[1]}"
+                        if "xrt." in metric_key
+                        else None
+                    ),
+                    ".".join(topic_parts[topic_parts.index("xrt") :]),
                 ]
 
                 for variation in variations:
@@ -208,8 +225,12 @@ def get_metric_by_pattern(topic_parts):
                 # Try several variations to handle different path formats
                 variations = [
                     metric_key,
-                    f"xnl.{metric_key.split('xnl.', 1)[1]}" if 'xnl.' in metric_key else None,
-                    ".".join(topic_parts[topic_parts.index("xnl"):])
+                    (
+                        f"xnl.{metric_key.split('xnl.', 1)[1]}"
+                        if "xnl." in metric_key
+                        else None
+                    ),
+                    ".".join(topic_parts[topic_parts.index("xnl") :]),
                 ]
 
                 for variation in variations:
@@ -229,16 +250,30 @@ def determine_category_from_topic(topic_parts):
     """Determine the most likely category from topic parts."""
     # Import constants from const.py to maintain single source of truth
     from ..const import (
-        CATEGORY_BATTERY, CATEGORY_CHARGING, CATEGORY_CLIMATE, CATEGORY_DOOR,
-        CATEGORY_LOCATION, CATEGORY_MOTOR, CATEGORY_TRIP, CATEGORY_DIAGNOSTIC,
-        CATEGORY_POWER, CATEGORY_NETWORK, CATEGORY_SYSTEM, CATEGORY_TIRE,
-        CATEGORY_VW_EUP, CATEGORY_SMART_FORTWO, CATEGORY_MG_ZS_EV, CATEGORY_NISSAN_LEAF,
-        CATEGORY_RENAULT_TWIZY
+        CATEGORY_BATTERY,
+        CATEGORY_CHARGING,
+        CATEGORY_CLIMATE,
+        CATEGORY_DOOR,
+        CATEGORY_LOCATION,
+        CATEGORY_MOTOR,
+        CATEGORY_TRIP,
+        CATEGORY_DIAGNOSTIC,
+        CATEGORY_POWER,
+        CATEGORY_NETWORK,
+        CATEGORY_SYSTEM,
+        CATEGORY_TIRE,
+        CATEGORY_VW_EUP,
+        CATEGORY_SMART_FORTWO,
+        CATEGORY_MG_ZS_EV,
+        CATEGORY_NISSAN_LEAF,
+        CATEGORY_RENAULT_TWIZY,
     )
+
     # Import PREFIX_CATEGORIES from current module (still defined here)
     from . import PREFIX_CATEGORIES
 
     import logging
+
     logger = logging.getLogger(__name__)
 
     # Special handling for vehicle-specific topics
@@ -273,31 +308,26 @@ def determine_category_from_topic(topic_parts):
         "v.p.location": CATEGORY_LOCATION,
         "v.p.valet.latitude": CATEGORY_LOCATION,
         "v.p.valet.longitude": CATEGORY_LOCATION,
-
         # Trip metrics from v.p namespace
         "v.p.acceleration": CATEGORY_TRIP,
         "v.p.deceleration": CATEGORY_TRIP,
         "v.p.odometer": CATEGORY_TRIP,
         "v.p.speed": CATEGORY_TRIP,
         "v.p.trip": CATEGORY_TRIP,
-
         # Climate-specific environment metrics
         "v.e.heating": CATEGORY_CLIMATE,
         "v.e.cooling": CATEGORY_CLIMATE,
         "v.e.hvac": CATEGORY_CLIMATE,
         "v.e.cabin.temp": CATEGORY_CLIMATE,
         "v.e.cabin.fan": CATEGORY_CLIMATE,
-
         # Motor-specific inverter metrics
         "v.i.temp": CATEGORY_MOTOR,
         "v.i.rpm": CATEGORY_MOTOR,
         "v.i.pwr": CATEGORY_MOTOR,
-
         # Network-specific metrics
         "m.net.provider": CATEGORY_NETWORK,
         "m.net.sq": CATEGORY_NETWORK,
         "m.net.type": CATEGORY_NETWORK,
-
         # System-specific metrics
         "m.freeram": CATEGORY_SYSTEM,
         "m.hardware": CATEGORY_SYSTEM,
@@ -308,7 +338,9 @@ def determine_category_from_topic(topic_parts):
     # Check for specific categorization first
     if full_path in specific_categorizations:
         category = specific_categorizations[full_path]
-        logger.debug(f"Specific categorization detected - Parts: {topic_parts}, Full Path: {full_path}, Category: {category}")
+        logger.debug(
+            f"Specific categorization detected - Parts: {topic_parts}, Full Path: {full_path}, Category: {category}"
+        )
         return category
 
     # Try matching by prefix FIRST (this is the primary categorization method)
