@@ -6,6 +6,7 @@ from homeassistant.const import (  # noqa: W0611
     CONF_PORT,
     CONF_USERNAME,
     CONF_PROTOCOL,
+    EntityCategory,
 )
 
 DOMAIN = "ovms"
@@ -37,6 +38,48 @@ DEFAULT_UNIT_SYSTEM = "metric"
 DEFAULT_TOPIC_STRUCTURE = "{prefix}/{mqtt_username}/{vehicle_id}"
 DEFAULT_VERIFY_SSL = True
 DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by default
+
+# A mapping of switch types, commands, and metrics
+SWITCH_TYPES = {
+    "v.e.hvac": {
+        "type": "climate",
+        "metric": "v.e.hvac",
+        "icon": "mdi:thermometer",
+        "category": None,
+        "on_command": "climatecontrol on",
+        "off_command": "climatecontrol off",
+    },
+    "v.c.charging": {
+        "type": "charge",
+        "metric": "v.c.charging", 
+        "icon": "mdi:battery-charging",
+        "category": None,
+        "on_command": "charge start",
+        "off_command": "charge stop",
+    },
+    "v.e.locked": {
+        "type": "lock",
+        "metric": "v.e.locked",
+        "icon": "mdi:lock",
+        "category": None,
+        "on_command": "lock",
+        "off_command": "unlock",
+    },
+    "v.e.valet": {
+        "type": "valet",
+        "metric": "v.e.valet",
+        "icon": "mdi:key",
+        "category": None,
+        "on_command": "valet",
+        "off_command": "unvalet",
+    },
+    "debug": {
+        "icon": "mdi:bug",
+        "category": EntityCategory.DIAGNOSTIC,
+        "on_command": "debugon",
+        "off_command": "debugoff",
+    },
+}
 
 # System topic blacklist patterns - these are always applied and cannot be modified by users
 SYSTEM_TOPIC_BLACKLIST = [
