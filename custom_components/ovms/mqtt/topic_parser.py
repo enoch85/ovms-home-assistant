@@ -8,6 +8,7 @@ from .. import metrics
 from ..const import (
     LOGGER_NAME,
     CONF_TOPIC_BLACKLIST,
+    SWITCH_TYPES,
     SYSTEM_TOPIC_BLACKLIST,
     LEGACY_TOPIC_BLACKLIST,
     COMBINED_TOPIC_BLACKLIST,
@@ -190,6 +191,68 @@ class TopicParser:
         except Exception as ex:
             _LOGGER.exception("Error parsing topic: %s", ex)
             return None
+
+    def get_related_entities(
+        self, primary_entity: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Get additional entities that should be created alongside the primary entity.
+
+        For controllable metrics (like v.e.hvac, v.c.charging), this creates switch
+        entities that allow the user to control the feature via Home Assistant.
+
+        Args:
+            primary_entity: The primary entity data from parse_topic()
+
+        Returns:
+            List of related entity configurations (may be empty)
+        """
+        related_entities = []
+
+        try:
+            metric_path = primary_entity.get("metric_path")
+            if not metric_path:
+                return related_entities
+
+            # Check if this metric has an associated switch control
+            if metric_path in SWITCH_TYPES:
+                _LOGGER.info("Creating switch entity for metric %s", metric_path)
+
+                switch_config = SWITCH_TYPES[metric_path]
+
+                # Create switch entity name based on primary entity
+                base_name = primary_entity.get("name", "")
+                raw_name = primary_entity.get("raw_name", "")
+
+                # Add _switch suffix to clearly indicate it's a switch entity
+                switch_name = f"{base_name}_switch"
+                switch_raw_name = f"{raw_name}_switch"
+
+                # Build the switch entity configuration
+                switch_entity = {
+                    "entity_type": "switch",
+                    "name": switch_name,
+                    "raw_name": switch_raw_name,
+                    "parts": primary_entity.get("parts", []),
+                    "metric_path": metric_path,
+                    "metric_info": primary_entity.get("metric_info"),
+                    "attributes": primary_entity.get("attributes", {}).copy(),
+                    "priority": primary_entity.get("priority", 0),
+                    # Switch-specific configuration for command handling
+                    "switch_config": {
+                        "on_command": switch_config.get("on_command"),
+                        "off_command": switch_config.get("off_command"),
+                        "icon": switch_config.get("icon"),
+                        "type": switch_config.get("type"),
+                        "state_metric": metric_path,
+                    },
+                }
+
+                related_entities.append(switch_entity)
+
+        except Exception as ex:
+            _LOGGER.exception("Error getting related entities: %s", ex)
+
+        return related_entities
 
     def _convert_to_metric_path(self, parts: List[str]) -> str:
         """Convert topic parts to metric path."""

@@ -128,6 +128,10 @@ class EntityFactory:
                 "attributes": attributes,
             }
 
+            # Add switch-specific config if this is a switch entity
+            if entity_type == "switch" and "switch_config" in entity_data:
+                dispatcher_data["switch_config"] = entity_data["switch_config"]
+
             # Check if this is a coordinate entity to track for the device tracker
             is_coordinate = self._is_coordinate_entity(topic, entity_data)
             if is_coordinate:
@@ -297,18 +301,25 @@ class EntityFactory:
     def _generate_unique_ids(
         self, topic: str, entity_data: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Generate unique IDs for entities."""
+        """Generate unique IDs for entities.
+
+        For switch entities, appends '_switch' suffix to ensure uniqueness
+        when both a sensor and switch exist for the same metric.
+        """
         vehicle_id = self.config.get("vehicle_id", "unknown").lower()
         topic_hash = hashlib.md5(topic.encode()).hexdigest()[:6]
+
+        # Add _switch suffix for switch entities to avoid unique_id collision
+        suffix = "_switch" if entity_data.get("entity_type") == "switch" else ""
 
         # Extract metric path from topic (everything after vehicle ID)
         topic_parts = topic.split("/")
         if len(topic_parts) >= 4:
             metric_path = "_".join(topic_parts[3:])
             metric_path = re.sub(r"[^a-zA-Z0-9_]", "_", metric_path.lower())
-            unique_id = f"ovms_{vehicle_id}_{metric_path}_{topic_hash}"
+            unique_id = f"ovms_{vehicle_id}_{metric_path}_{topic_hash}{suffix}"
         else:
-            unique_id = f"ovms_{vehicle_id}_{topic_hash}"
+            unique_id = f"ovms_{vehicle_id}_{topic_hash}{suffix}"
 
         entity_data["unique_id"] = unique_id
         return entity_data

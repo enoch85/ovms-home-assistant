@@ -43,6 +43,43 @@ DEFAULT_TOPIC_STRUCTURE = "{prefix}/{mqtt_username}/{vehicle_id}"
 DEFAULT_VERIFY_SSL = True
 DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by default
 
+# Switch types configuration - maps metrics to their control commands
+# These metrics will automatically create switch entities alongside their sensors
+# The dictionary key is the metric path (e.g., "v.e.hvac")
+# Source: OVMS command documentation for controllable vehicle features
+SWITCH_TYPES = {
+    "v.e.hvac": {
+        "type": "climate",
+        "icon": "mdi:thermometer",
+        "category": None,
+        "on_command": "climatecontrol on",
+        "off_command": "climatecontrol off",
+    },
+    "v.c.charging": {
+        "type": "charge",
+        "icon": "mdi:battery-charging",
+        "category": None,
+        "on_command": "charge start",
+        "off_command": "charge stop",
+    },
+    "v.e.locked": {
+        "type": "lock",
+        "icon": "mdi:lock",
+        "category": None,
+        # WARNING: Lock/unlock commands may require a PIN for security.
+        # The PIN is not included here - users must configure vehicle-side PIN settings.
+        "on_command": "lock",
+        "off_command": "unlock",
+    },
+    "v.e.valet": {
+        "type": "valet",
+        "icon": "mdi:key",
+        "category": None,
+        "on_command": "valet",
+        "off_command": "unvalet",
+    },
+}
+
 # System topic blacklist patterns - these are always applied and cannot be modified by users
 SYSTEM_TOPIC_BLACKLIST = [
     "log",

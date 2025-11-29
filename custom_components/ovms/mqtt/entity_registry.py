@@ -9,65 +9,70 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 
 
 class EntityRegistry:
-    """Registry for tracking OVMS entities and their relationships."""
+    """Registry for tracking OVMS entities and their relationships.
+
+    Supports multiple entities per topic (e.g., a sensor and a switch for the same metric).
+    """
 
     def __init__(self):
         """Initialize the entity registry."""
-        self.topics = {}  # Maps topic -> entity_id
+        # Maps topic -> list of entity_ids (supports multiple entities per topic)
+        self.topics: Dict[str, List[str]] = {}
         self.entities = {}  # Maps entity_id -> entity_info
         self.relationships = {}  # Maps entity_id -> list of related entity_ids
         self.relationship_types = (
             {}
         )  # Maps (entity_id, related_id) -> relationship_type
-        self.priorities = {}  # Maps topic -> priority
+        # Maps (topic, entity_id) -> priority for multi-entity support
+        self.priorities: Dict[tuple, int] = {}
         self.entity_types = {}  # Maps entity_id -> entity_type
         self.reverse_lookup = {}  # Maps entity_id -> topic
 
     def register_entity(
         self, topic: str, entity_id: str, entity_type: str, priority: int = 0
     ) -> bool:
-        """Register an entity for a topic with specified priority."""
+        """Register an entity for a topic with specified priority.
+
+        Supports multiple entities per topic (e.g., sensor + switch for same metric).
+
+        Args:
+            topic: The MQTT topic this entity is associated with
+            entity_id: Unique identifier for this entity
+            entity_type: Type of entity (sensor, switch, binary_sensor, etc.)
+            priority: Priority for updates (higher = more important)
+
+        Returns:
+            True if registration succeeded, False if entity already registered
+        """
         try:
-            # Check if the topic already has a registered entity
-            if topic in self.topics:
-                existing_priority = self.priorities.get(topic, 0)
+            # Initialize topic list if needed
+            if topic not in self.topics:
+                self.topics[topic] = []
 
-                # If the new entity has lower priority, don't register it
-                if existing_priority >= priority:
-                    _LOGGER.debug(
-                        "Skipping registration for %s, existing entity has higher priority (%d vs %d)",
-                        topic,
-                        existing_priority,
-                        priority,
-                    )
-                    return False
-
-                # Otherwise, unregister the old entity
-                old_entity_id = self.topics[topic]
+            # Check if this entity is already registered for this topic
+            if entity_id in self.topics[topic]:
                 _LOGGER.debug(
-                    "Replacing entity %s with %s for topic %s (priority %d vs %d)",
-                    old_entity_id,
-                    entity_id,
-                    topic,
-                    existing_priority,
-                    priority,
+                    "Entity %s already registered for topic %s", entity_id, topic
                 )
+                return False
 
-                # Remove from reverse lookup
-                if old_entity_id in self.reverse_lookup:
-                    if self.reverse_lookup[old_entity_id] == topic:
-                        self.reverse_lookup.pop(old_entity_id)
-
-            # Register the entity
-            self.topics[topic] = entity_id
+            # Add entity to the topic's list
+            self.topics[topic].append(entity_id)
             self.entity_types[entity_id] = entity_type
-            self.priorities[topic] = priority
+            self.priorities[(topic, entity_id)] = priority
             self.reverse_lookup[entity_id] = topic
 
             # Initialize relationships
             if entity_id not in self.relationships:
                 self.relationships[entity_id] = set()
 
+            _LOGGER.debug(
+                "Registered %s (%s) for topic %s (priority %d)",
+                entity_id,
+                entity_type,
+                topic,
+                priority,
+            )
             return True
 
         except Exception as ex:
@@ -105,8 +110,29 @@ class EntityRegistry:
             _LOGGER.exception("Error registering relationship: %s", ex)
 
     def get_entity_for_topic(self, topic: str) -> Optional[str]:
-        """Get the entity ID associated with a topic."""
-        return self.topics.get(topic)
+        """Get the primary entity ID associated with a topic.
+
+        Returns the first entity if multiple are registered (for backward compatibility).
+
+        Args:
+            topic: The MQTT topic to look up
+
+        Returns:
+            The primary entity ID, or None if no entity registered for this topic
+        """
+        entities = self.topics.get(topic, [])
+        return entities[0] if entities else None
+
+    def get_entities_for_topic(self, topic: str) -> List[str]:
+        """Get all entity IDs associated with a topic.
+
+        Args:
+            topic: The MQTT topic to look up
+
+        Returns:
+            List of entity IDs registered for this topic (may be empty)
+        """
+        return self.topics.get(topic, [])
 
     def get_topic_for_entity(self, entity_id: str) -> Optional[str]:
         """Get the topic associated with an entity ID."""
