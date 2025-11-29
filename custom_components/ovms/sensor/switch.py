@@ -18,6 +18,7 @@ from homeassistant.util import dt as dt_util
 from ..const import (
     DOMAIN,
     LOGGER_NAME,
+    SWITCH_TYPES,
     SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY,
     truncate_state_value,
@@ -26,35 +27,6 @@ from ..const import (
 from ..metrics import get_metric_by_path, get_metric_by_pattern
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
-
-# A mapping of switch types
-SWITCH_TYPES = {
-    "climate": {
-        "icon": "mdi:thermometer",
-        "category": None,
-        "command": "climate",
-    },
-    "charge": {
-        "icon": "mdi:battery-charging",
-        "category": None,
-        "command": "charge",
-    },
-    "lock": {
-        "icon": "mdi:lock",
-        "category": None,
-        "command": "lock",
-    },
-    "valet": {
-        "icon": "mdi:key",
-        "category": None,
-        "command": "valet",
-    },
-    "debug": {
-        "icon": "mdi:bug",
-        "category": EntityCategory.DIAGNOSTIC,
-        "command": "debug",
-    },
-}
 
 
 async def async_setup_entry(
@@ -73,6 +45,9 @@ async def async_setup_entry(
         # Get the MQTT client for publishing commands
         mqtt_client = hass.data[DOMAIN][entry.entry_id]["mqtt_client"]
 
+        # Extract switch_config if present (for controllable metrics)
+        switch_config = data.get("switch_config", {})
+
         # Use kwargs to reduce positional arguments
         switch = OVMSSwitch(
             unique_id=data["unique_id"],
@@ -84,6 +59,7 @@ async def async_setup_entry(
             command_function=mqtt_client.async_send_command,
             hass=hass,
             friendly_name=data.get("friendly_name"),
+            switch_config=switch_config,
         )
 
         async_add_entities([switch])
@@ -109,8 +85,22 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         command_function: Callable,
         hass: Optional[HomeAssistant] = None,
         friendly_name: Optional[str] = None,
+        switch_config: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Initialize the switch."""
+        """Initialize the switch.
+
+        Args:
+            unique_id: Unique identifier for the entity
+            name: Internal name for the entity
+            topic: MQTT topic this switch is associated with
+            initial_state: Initial state value from MQTT
+            device_info: Device info for Home Assistant
+            attributes: Extra state attributes
+            command_function: Async function to send commands
+            hass: Home Assistant instance
+            friendly_name: User-friendly display name
+            switch_config: Configuration for controllable metrics (on/off commands)
+        """
         self._attr_unique_id = unique_id
         # Use the entity_id compatible name for internal use
         self._internal_name = name
@@ -129,6 +119,8 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             "last_updated": dt_util.utcnow().isoformat(),
         }
         self._command_function = command_function
+        # Store switch configuration for controllable metrics
+        self._switch_config = switch_config or {}
 
         # Explicitly set entity_id - this ensures consistent naming
         if hass:
@@ -144,9 +136,6 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
 
         # Try to extract additional attributes if it's JSON
         self._process_json_payload(initial_state)
-
-        # Derive the command to use for this switch
-        self._command = self._derive_command()
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -243,9 +232,22 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             return False
 
     def _determine_switch_type(self) -> None:
-        """Determine the switch type and set icon and category."""
+        """Determine the switch type and set icon and category.
+
+        Prioritizes switch_config (from SWITCH_TYPES) over metric/pattern matching.
+        """
         self._attr_icon = None
         self._attr_entity_category = None
+
+        # First priority: Use switch_config if provided (from SWITCH_TYPES)
+        if self._switch_config:
+            if "icon" in self._switch_config:
+                self._attr_icon = self._switch_config["icon"]
+            if "category" in self._switch_config:
+                self._attr_entity_category = self._switch_config.get("category")
+            # If switch_config provided icon or category, we're done
+            if "icon" in self._switch_config or "category" in self._switch_config:
+                return
 
         # Check if attributes specify a category
         if "category" in self._attr_extra_state_attributes:
@@ -294,15 +296,23 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
                 self._attr_entity_category = metric_info["entity_category"]
             return
 
-        # If no metric info found, use original method as fallback
-        for key, switch_type in SWITCH_TYPES.items():
-            if key in self._internal_name.lower() or key in self._topic.lower():
+        # Fallback: Check SWITCH_TYPES by keyword matching
+        for metric_path, switch_type in SWITCH_TYPES.items():
+            switch_type_name = switch_type.get("type", "")
+            if (
+                switch_type_name in self._internal_name.lower()
+                or switch_type_name in self._topic.lower()
+            ):
                 self._attr_icon = switch_type.get("icon")
                 self._attr_entity_category = switch_type.get("category")
                 break
 
     def _derive_command(self) -> str:
-        """Derive the command to use for this switch."""
+        """Derive the command to use for this switch (legacy fallback).
+
+        This is used when switch_config is not provided. For configured switches,
+        use the on_command/off_command from switch_config directly.
+        """
         # First check if the topic gives us the command directly
         parts = self._topic.split("/")
         if "command" in parts and len(parts) > parts.index("command") + 1:
@@ -310,11 +320,12 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             if command_idx + 1 < len(parts):
                 return parts[command_idx + 1]
 
-        # Otherwise try to determine from the name
-        for key, switch_type in SWITCH_TYPES.items():
-            if key in self._internal_name.lower():
-                if "command" in switch_type:
-                    return switch_type["command"]
+        # Check SWITCH_TYPES by type name matching
+        for metric_path, switch_type in SWITCH_TYPES.items():
+            switch_type_name = switch_type.get("type", "")
+            if switch_type_name in self._internal_name.lower():
+                # Return the type name as the base command
+                return switch_type_name
 
         # Extract command from attribute if available
         if "command" in self._attr_extra_state_attributes:
@@ -356,15 +367,28 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
-        _LOGGER.debug(
-            "Turning on switch: %s using command: %s", self.name, self._command
-        )
-
-        # Use the command function to send the command
-        result = await self._command_function(
-            command=self._command,
-            parameters="on",
-        )
+        # Use command from switch_config if available, otherwise derive it
+        if self._switch_config and "on_command" in self._switch_config:
+            command = self._switch_config["on_command"]
+            _LOGGER.debug(
+                "Turning on switch: %s using configured command: %s",
+                self.name,
+                command,
+            )
+            # Configured commands are complete (e.g., "charge start")
+            result = await self._command_function(command=command)
+        else:
+            # Fallback to legacy behavior with derived command + "on" parameter
+            command = self._derive_command()
+            _LOGGER.debug(
+                "Turning on switch: %s using derived command: %s on",
+                self.name,
+                command,
+            )
+            result = await self._command_function(
+                command=command,
+                parameters="on",
+            )
 
         if result["success"]:
             self._attr_is_on = True
@@ -376,15 +400,28 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
-        _LOGGER.debug(
-            "Turning off switch: %s using command: %s", self.name, self._command
-        )
-
-        # Use the command function to send the command
-        result = await self._command_function(
-            command=self._command,
-            parameters="off",
-        )
+        # Use command from switch_config if available, otherwise derive it
+        if self._switch_config and "off_command" in self._switch_config:
+            command = self._switch_config["off_command"]
+            _LOGGER.debug(
+                "Turning off switch: %s using configured command: %s",
+                self.name,
+                command,
+            )
+            # Configured commands are complete (e.g., "charge stop")
+            result = await self._command_function(command=command)
+        else:
+            # Fallback to legacy behavior with derived command + "off" parameter
+            command = self._derive_command()
+            _LOGGER.debug(
+                "Turning off switch: %s using derived command: %s off",
+                self.name,
+                command,
+            )
+            result = await self._command_function(
+                command=command,
+                parameters="off",
+            )
 
         if result["success"]:
             self._attr_is_on = False

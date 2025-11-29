@@ -32,49 +32,61 @@ class UpdateDispatcher:
         self.location_values = {}  # Store current location values
 
     def dispatch_update(self, topic: str, payload: Any) -> None:
-        """Dispatch update to entities subscribed to a topic."""
+        """Dispatch update to entities subscribed to a topic.
+
+        Supports multiple entities per topic (e.g., sensor + switch for same metric).
+        """
         try:
-            # Get the primary entity for this topic
-            entity_id = self.entity_registry.get_entity_for_topic(topic)
-            if not entity_id:
-                _LOGGER.debug("No entity registered for topic: %s", topic)
+            # Get ALL entities for this topic (supports multiple entities per topic)
+            entity_ids = self.entity_registry.get_entities_for_topic(topic)
+            if not entity_ids:
+                _LOGGER.debug("No entities registered for topic: %s", topic)
                 return
 
-            # Get the entity type
-            entity_type = self.entity_registry.get_entity_type(entity_id)
+            # Track if we've handled special topics to avoid duplicate processing
+            handled_location = False
+            handled_version = False
+            handled_gps_quality = False
 
-            # Update the primary entity
-            self._update_entity(entity_id, payload)
+            # Update all entities registered for this topic
+            for entity_id in entity_ids:
+                # Update the entity
+                self._update_entity(entity_id, payload)
 
-            # Special handling for location topics
-            if self._is_coordinate_topic(topic):
-                self._handle_location_update(topic, entity_id, payload)
+                # Special handling for location topics (only process once per update)
+                if not handled_location and self._is_coordinate_topic(topic):
+                    self._handle_location_update(topic, entity_id, payload)
+                    handled_location = True
 
-            # Special handling for version topics
-            if "version" in topic.lower() or "m.version" in topic.lower():
-                self._handle_version_update(topic, entity_id, payload)
+                # Special handling for version topics (only process once per update)
+                if not handled_version and (
+                    "version" in topic.lower() or "m.version" in topic.lower()
+                ):
+                    self._handle_version_update(topic, entity_id, payload)
+                    handled_version = True
 
-            # Special handling for GPS quality topics
-            if self._is_gps_quality_topic(topic):
-                self._handle_gps_quality_update(topic, payload)
+                # Special handling for GPS quality topics (only process once per update)
+                if not handled_gps_quality and self._is_gps_quality_topic(topic):
+                    self._handle_gps_quality_update(topic, payload)
+                    handled_gps_quality = True
 
-            # Update related entities
-            related_entities = self.entity_registry.get_related_entities(entity_id)
-            for related_id in related_entities:
-                # Get relationship type to determine how to handle the update
-                relationship_type = self.entity_registry.relationship_types.get(
-                    (entity_id, related_id)
-                )
+                # Update related entities
+                related_entities = self.entity_registry.get_related_entities(entity_id)
+                for related_id in related_entities:
+                    # Get relationship type to determine how to handle the update
+                    relationship_type = self.entity_registry.relationship_types.get(
+                        (entity_id, related_id)
+                    )
 
-                if relationship_type == "location_sensor":
-                    # Direct pass-through for location sensor pairs
-                    self._update_entity(related_id, payload)
-                elif relationship_type == "combined_tracker":
-                    # For combined trackers, we need to update with all location data
-                    self._update_combined_tracker(related_id)
-                else:
-                    # Default behavior for other relationships
-                    self._update_entity(related_id, payload)
+                    if relationship_type == "location_sensor":
+                        # Direct pass-through for location sensor pairs
+                        self._update_entity(related_id, payload)
+                    elif relationship_type == "combined_tracker":
+                        # For combined trackers, we need to update with all location data
+                        self._update_combined_tracker(related_id)
+                    else:
+                        # Default behavior for other relationships
+                        self._update_entity(related_id, payload)
 
         except Exception as ex:
             _LOGGER.exception("Error dispatching update: %s", ex)
@@ -265,11 +277,8 @@ class UpdateDispatcher:
                             "No OVMS device found in registry to update version"
                         )
 
-                # Ensure version topics have higher priority
-                current_priority = self.entity_registry.priorities.get(topic, 0)
-                if current_priority < 15:
-                    self.entity_registry.priorities[topic] = 15
-                    _LOGGER.debug("Increased priority for version topic: %s", topic)
+                # Note: Priority updates are per-entity now with (topic, entity_id) keys
+                # Version topics are already handled with priority in entity creation
 
         except Exception as ex:
             _LOGGER.exception("Error handling version update: %s", ex)
