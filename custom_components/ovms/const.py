@@ -1,5 +1,7 @@
 """Constants for the OVMS integration."""
 
+from homeassistant.helpers.entity import EntityCategory
+
 # Re-exported constants from Home Assistant for convenience
 from homeassistant.const import (  # noqa: W0611
     CONF_HOST,
@@ -77,6 +79,14 @@ SWITCH_TYPES = {
         "category": None,
         "on_command": "valet on",
         "off_command": "valet off",
+    },
+    # Debug switch for development/troubleshooting - uses keyword matching fallback
+    "debug": {
+        "type": "debug",
+        "icon": "mdi:bug",
+        "category": EntityCategory.DIAGNOSTIC,
+        "on_command": "debug on",
+        "off_command": "debug off",
     },
 }
 
