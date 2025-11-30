@@ -215,9 +215,19 @@ class TopicParser:
 
             # Check if this metric has an associated switch control
             if metric_path in SWITCH_TYPES:
-                _LOGGER.info("Creating switch entity for metric %s", metric_path)
-
                 switch_config = SWITCH_TYPES[metric_path]
+
+                # Validate required configuration keys
+                if not switch_config.get("on_command") or not switch_config.get(
+                    "off_command"
+                ):
+                    _LOGGER.warning(
+                        "Switch configuration for %s is missing required commands (on_command/off_command), skipping switch creation",
+                        metric_path,
+                    )
+                    return related_entities
+
+                _LOGGER.info("Creating switch entity for metric %s", metric_path)
 
                 # Create switch entity name based on primary entity
                 base_name = primary_entity.get("name", "")

@@ -34,12 +34,21 @@ class EntityRegistry:
         """Register an entity for a topic with specified priority.
 
         Supports multiple entities per topic (e.g., sensor + switch for same metric).
+        Each entity maintains its own priority independently via (topic, entity_id) tuple.
+
+        Key architectural change: Previously, topics had a single entity and priority
+        was stored per-topic. Now, multiple entities can share a topic, with priority
+        tracked per (topic, entity_id) pair. This enables controllable metrics to have
+        both a sensor (for reading state) and a switch (for controlling) on the same
+        MQTT topic.
 
         Args:
             topic: The MQTT topic this entity is associated with
             entity_id: Unique identifier for this entity
             entity_type: Type of entity (sensor, switch, binary_sensor, etc.)
-            priority: Priority for updates (higher = more important)
+            priority: Priority for updates (higher = more important). Note: Priority
+                      is now per-entity, not per-topic, allowing different priorities
+                      for entities sharing the same topic.
 
         Returns:
             True if registration succeeded, False if entity already registered

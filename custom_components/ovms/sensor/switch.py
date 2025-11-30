@@ -298,10 +298,10 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
 
         # Fallback: Check SWITCH_TYPES by keyword matching
         for metric_path, switch_type in SWITCH_TYPES.items():
-            switch_type_name = switch_type.get("type", "")
+            type_identifier = switch_type.get("type", "")
             if (
-                switch_type_name in self._internal_name.lower()
-                or switch_type_name in self._topic.lower()
+                type_identifier in self._internal_name.lower()
+                or type_identifier in self._topic.lower()
             ):
                 self._attr_icon = switch_type.get("icon")
                 self._attr_entity_category = switch_type.get("category")
@@ -320,12 +320,12 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             if command_idx + 1 < len(parts):
                 return parts[command_idx + 1]
 
-        # Check SWITCH_TYPES by type name matching
+        # Check SWITCH_TYPES by type identifier matching
         for metric_path, switch_type in SWITCH_TYPES.items():
-            switch_type_name = switch_type.get("type", "")
-            if switch_type_name in self._internal_name.lower():
-                # Return the type name as the base command
-                return switch_type_name
+            type_identifier = switch_type.get("type", "")
+            if type_identifier in self._internal_name.lower():
+                # Return the type identifier as the base command
+                return type_identifier
 
         # Extract command from attribute if available
         if "command" in self._attr_extra_state_attributes:
@@ -365,68 +365,54 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             # Not JSON, that's fine
             pass
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn the switch on."""
-        # Use command from switch_config if available, otherwise derive it
-        if self._switch_config and "on_command" in self._switch_config:
-            command = self._switch_config["on_command"]
+    async def _execute_command(self, command_type: str) -> None:
+        """Execute a switch command (on or off).
+
+        Args:
+            command_type: Either "on" or "off"
+        """
+        command_key = f"{command_type}_command"
+
+        if self._switch_config.get(command_key):
+            command = self._switch_config[command_key]
             _LOGGER.debug(
-                "Turning on switch: %s using configured command: %s",
+                "Turning %s switch: %s using configured command: %s",
+                command_type,
                 self.name,
                 command,
             )
             # Configured commands are complete (e.g., "charge start")
             result = await self._command_function(command=command)
         else:
-            # Fallback to legacy behavior with derived command + "on" parameter
+            # Fallback to legacy behavior with derived command + parameter
             command = self._derive_command()
             _LOGGER.debug(
-                "Turning on switch: %s using derived command: %s on",
+                "Turning %s switch: %s using derived command: %s %s",
+                command_type,
                 self.name,
                 command,
+                command_type,
             )
             result = await self._command_function(
                 command=command,
-                parameters="on",
+                parameters=command_type,
             )
 
         if result["success"]:
-            self._attr_is_on = True
+            self._attr_is_on = command_type == "on"
             self.async_write_ha_state()
         else:
             _LOGGER.error(
-                "Failed to turn on switch %s: %s", self.name, result.get("error")
+                "Failed to turn %s switch %s: %s",
+                command_type,
+                self.name,
+                result.get("error"),
             )
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn the switch on."""
+        await self._execute_command("on")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
-        # Use command from switch_config if available, otherwise derive it
-        if self._switch_config and "off_command" in self._switch_config:
-            command = self._switch_config["off_command"]
-            _LOGGER.debug(
-                "Turning off switch: %s using configured command: %s",
-                self.name,
-                command,
-            )
-            # Configured commands are complete (e.g., "charge stop")
-            result = await self._command_function(command=command)
-        else:
-            # Fallback to legacy behavior with derived command + "off" parameter
-            command = self._derive_command()
-            _LOGGER.debug(
-                "Turning off switch: %s using derived command: %s off",
-                self.name,
-                command,
-            )
-            result = await self._command_function(
-                command=command,
-                parameters="off",
-            )
-
-        if result["success"]:
-            self._attr_is_on = False
-            self.async_write_ha_state()
-        else:
-            _LOGGER.error(
-                "Failed to turn off switch %s: %s", self.name, result.get("error")
-            )
+        await self._execute_command("off")

@@ -35,6 +35,10 @@ class UpdateDispatcher:
         """Dispatch update to entities subscribed to a topic.
 
         Supports multiple entities per topic (e.g., sensor + switch for same metric).
+        Processes updates in three phases:
+        1. Update all primary entities
+        2. Handle special topics once (location, version, GPS)
+        3. Update related entities
         """
         try:
             # Get ALL entities for this topic (supports multiple entities per topic)
@@ -43,34 +47,24 @@ class UpdateDispatcher:
                 _LOGGER.debug("No entities registered for topic: %s", topic)
                 return
 
-            # Track if we've handled special topics to avoid duplicate processing
-            handled_location = False
-            handled_version = False
-            handled_gps_quality = False
-
-            # Update all entities registered for this topic
+            # Phase 1: Update all primary entities
             for entity_id in entity_ids:
-                # Update the entity
                 self._update_entity(entity_id, payload)
 
-                # Special handling for location topics (only process once per update)
-                if not handled_location and self._is_coordinate_topic(topic):
-                    self._handle_location_update(topic, entity_id, payload)
-                    handled_location = True
+            # Phase 2: Special topic handling (only once per topic, not per entity)
+            if self._is_coordinate_topic(topic):
+                # Use first entity_id for location handling
+                self._handle_location_update(topic, entity_ids[0], payload)
 
-                # Special handling for version topics (only process once per update)
-                if not handled_version and (
-                    "version" in topic.lower() or "m.version" in topic.lower()
-                ):
-                    self._handle_version_update(topic, entity_id, payload)
-                    handled_version = True
+            if "version" in topic.lower() or "m.version" in topic.lower():
+                # Use first entity_id for version handling
+                self._handle_version_update(topic, entity_ids[0], payload)
 
-                # Special handling for GPS quality topics (only process once per update)
-                if not handled_gps_quality and self._is_gps_quality_topic(topic):
-                    self._handle_gps_quality_update(topic, payload)
-                    handled_gps_quality = True
+            if self._is_gps_quality_topic(topic):
+                self._handle_gps_quality_update(topic, payload)
 
-                # Update related entities
+            # Phase 3: Update related entities
+            for entity_id in entity_ids:
                 related_entities = self.entity_registry.get_related_entities(entity_id)
                 for related_id in related_entities:
                     # Get relationship type to determine how to handle the update

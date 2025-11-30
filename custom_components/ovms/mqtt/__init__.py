@@ -157,9 +157,18 @@ class OVMSMQTTClient:
                 # Create any related entities (e.g., switches for controllable metrics)
                 related_entities = self.topic_parser.get_related_entities(parsed_data)
                 for related_entity in related_entities:
-                    await self.entity_factory.async_create_entities(
-                        topic, payload, related_entity
-                    )
+                    try:
+                        await self.entity_factory.async_create_entities(
+                            topic, payload, related_entity
+                        )
+                    except Exception as ex:
+                        _LOGGER.error(
+                            "Failed to create related entity for topic %s (%s): %s",
+                            topic,
+                            related_entity.get("entity_type", "unknown"),
+                            ex,
+                            exc_info=True,
+                        )
         else:
             # Existing topic, update entity
             self.update_dispatcher.dispatch_update(topic, payload)
