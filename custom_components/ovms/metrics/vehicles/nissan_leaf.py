@@ -9,8 +9,6 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.const import (
     PERCENTAGE,
-    UnitOfElectricCurrent,
-    UnitOfElectricPotential,
     UnitOfEnergy,
     UnitOfLength,
     UnitOfPower,
