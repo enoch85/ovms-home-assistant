@@ -18,6 +18,9 @@ from ..const import (
     CONF_CLIENT_ID,
     CONF_QOS,
     ACTIVE_DISCOVERY_TIMEOUT,
+    GPS_ACCURACY_MIN_METERS,
+    GPS_ACCURACY_MAX_METERS,
+    GPS_HDOP_METERS_MULTIPLIER,
 )
 
 from .connection import MQTTConnectionManager
@@ -292,7 +295,24 @@ class OVMSMQTTClient:
         await self.connection_manager.async_shutdown()
 
     def get_gps_accuracy(self, vehicle_id: Optional[str] = None) -> Optional[float]:
-        """Get GPS accuracy from stored GPS quality data."""
+        """Get GPS accuracy in meters from stored GPS quality data.
+
+        Calculates positional accuracy based on available GPS quality metrics.
+        Prefers v.p.gpssq (signal quality) when available as it's the standardized
+        metric in OVMS firmware 3.3.005+. Falls back to HDOP-based calculation
+        for older firmware or when signal quality is not available.
+
+        Args:
+            vehicle_id: Optional vehicle ID. Uses configured vehicle_id if not provided.
+
+        Returns:
+            GPS accuracy in meters, or None if no GPS quality data is available.
+            Lower values indicate better accuracy.
+
+        Note:
+            v.p.gpssq: 0-100% where <30 is unusable, >50 is good, >80 is excellent
+            HDOP: Lower is better, each unit represents ~5 meters of accuracy
+        """
         if not vehicle_id:
             vehicle_id = self.config.get("vehicle_id", "")
 
@@ -301,17 +321,18 @@ class OVMSMQTTClient:
 
         gps_data = self.gps_quality_topics[vehicle_id]
 
-        # Calculate accuracy based on available data
+        # Prefer signal_quality (v.p.gpssq) - standardized in OVMS 3.3.005+
         if "signal_quality" in gps_data:
             sq = gps_data["signal_quality"]["value"]
-            # Simple formula that translates signal quality (0-100) to meters accuracy
-            # Higher signal quality = better accuracy (lower value)
-            return max(5, 100 - sq)  # Minimum 5m accuracy
+            # Signal quality 0-100% maps inversely to accuracy in meters
+            # 100% quality = minimum accuracy (best), 0% = maximum accuracy (worst)
+            return max(GPS_ACCURACY_MIN_METERS, GPS_ACCURACY_MAX_METERS - sq)
 
+        # Fallback to HDOP-based calculation for older firmware
         if "hdop" in gps_data:
             hdop = gps_data["hdop"]["value"]
             # HDOP directly relates to positional accuracy
             # Lower HDOP = better accuracy
-            return max(5, hdop * 5)  # Each HDOP unit is ~5m of accuracy
+            return max(GPS_ACCURACY_MIN_METERS, hdop * GPS_HDOP_METERS_MULTIPLIER)
 
         return None

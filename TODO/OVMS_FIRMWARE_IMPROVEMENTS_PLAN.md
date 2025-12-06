@@ -69,62 +69,50 @@ LEGACY_DISCOVERY_TIMEOUT = 60  # fallback for older firmware
 
 ---
 
-## Phase 2: Add Missing Standard Metrics (MEDIUM PRIORITY)
+## Phase 2: Add Missing Standard Metrics (COMPLETED ✓)
 
-### Firmware Feature
-Recent OVMS versions added standardized metrics that should be in our definitions.
+### Status
+**ALREADY IMPLEMENTED**: All metrics from this phase were found to already exist in the codebase:
+- `v.b.capacity` ✓ in `battery.py`
+- `v.b.range.speed` ✓ in `battery.py`
+- `v.c.timestamp` ✓ in `charging.py`
+- `v.c.kwh.grid` ✓ in `charging.py`
+- `v.c.kwh.grid.total` ✓ in `charging.py`
+- `v.p.gpssq` ✓ in `location.py`
+- `v.p.gpstime` ✓ in `location.py`
+- `v.p.location` ✓ in `location.py`
+- `v.g.*` generator metrics ✓ in `power.py`
+- `v.t.alert` ✓ in `tire.py`
+- `v.t.health` ✓ in `tire.py`
 
-### Implementation Tasks
-
-#### 2.1 Update Battery Metrics (`metrics/common/battery.py`)
-- [ ] Add `v.b.capacity` - Main battery usable capacity [kWh]
-- [ ] Add `v.b.range.speed` - Momentary ideal range gain/loss speed [kph]
-
-#### 2.2 Update Charging Metrics (`metrics/common/charging.py`)
-- [ ] Add `v.c.timestamp` - Date & time of last charge end
-- [ ] Add `v.c.kwh.grid` - Energy drawn from grid during session
-- [ ] Add `v.c.kwh.grid.total` - Energy drawn from grid total (lifetime)
-
-#### 2.3 Update Location Metrics (`metrics/common/location.py`)
-- [ ] Add `v.p.gpssq` - GPS signal quality [%] (0-100, <30 unusable, >50 good, >80 excellent)
-- [ ] Add `v.p.gpstime` - Time (UTC) of GPS coordinates [Seconds]
-- [ ] Add `v.p.location` - Name of current location if defined
-
-#### 2.4 Add Generator Metrics (NEW: `metrics/common/generator.py`)
-For V2G (Vehicle-to-Grid) support:
-- [ ] Add `v.g.generating` - True = currently delivering power
-- [ ] Add `v.g.power` - Momentary generator output power
-- [ ] Add `v.g.kwh` - Energy sum generated in the running session
-- [ ] Add `v.g.kwh.grid` - Energy sent to grid during running session
-- [ ] Add `v.g.kwh.grid.total` - Energy sent to grid total
-- [ ] Add `v.g.timestamp` - Date & time of last generation end
-
-#### 2.5 Update TPMS Metrics (`metrics/common/tire.py`)
-- [ ] Add `v.t.alert` - TPMS tyre alert levels [0=normal, 1=warning, 2=alert]
-- [ ] Add `v.t.health` - TPMS tyre health states
-- [ ] Update `v.t.pressure` - Now a vector (fl,fr,rl,rr)
-- [ ] Update `v.t.temp` - Now a vector
+No changes required - skipping to Phase 3.
 
 ---
 
-## Phase 3: Simplify GPS Accuracy Handling (MEDIUM PRIORITY)
+## Phase 3: Simplify GPS Accuracy Handling (COMPLETED ✓)
 
-### Problem
-Current code in `mqtt/__init__.py` has custom GPS accuracy calculations based on signal quality and HDOP.
+### Status
+**IMPLEMENTED**: GPS accuracy handling improved with standardized constants and v.p.gpssq preference.
 
-### Firmware Feature
-`v.p.gpssq` provides normalized GPS signal quality (0-100%) directly.
+### Changes Made
+1. Fixed `v.p.gpssq` metric in `location.py`:
+   - Changed unit from `dBm` to `PERCENTAGE` (correct per OVMS firmware)
+   - Updated description with quality thresholds (<30 unusable, >50 good, >80 excellent)
+   - Removed incorrect `SensorDeviceClass.SIGNAL_STRENGTH`
 
-### Implementation Tasks
+2. Added GPS accuracy constants to `const.py`:
+   - `GPS_ACCURACY_MIN_METERS = 5` - Minimum accuracy floor
+   - `GPS_ACCURACY_MAX_METERS = 100` - Maximum accuracy (poorest quality)
+   - `GPS_HDOP_METERS_MULTIPLIER = 5` - HDOP to meters conversion factor
 
-#### 3.1 Update GPS Quality Tracking (`mqtt/__init__.py`)
-- [ ] Prefer `v.p.gpssq` when available (standardized 0-100%)
-- [ ] Keep HDOP-based calculation as fallback
-- [ ] Simplify `get_gps_accuracy()` method
+3. Updated `mqtt/__init__.py::get_gps_accuracy()`:
+   - Uses constants instead of hardcoded values
+   - Improved docstring with firmware notes
+   - Prefers v.p.gpssq (OVMS 3.3.005+) with HDOP fallback
 
-#### 3.2 Update Device Tracker (`device_tracker.py`)
-- [ ] Use `v.p.gpssq` for GPS accuracy attribute when available
-- [ ] Document the accuracy mapping in comments
+4. Updated `attribute_manager.py::get_gps_attributes()`:
+   - Uses constants instead of hardcoded values
+   - Improved docstring
 
 ---
 
