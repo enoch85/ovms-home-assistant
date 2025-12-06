@@ -7,9 +7,11 @@
 
 ## Overview
 
-The OVMS firmware (especially edge/3.3.005+) has significantly improved MQTT support. This plan outlines how to leverage these improvements to simplify the integration, improve reliability, and reduce maintenance burden.
+The OVMS firmware (especially edge/unreleased) has significantly improved MQTT support. This plan outlines how to leverage these improvements to simplify the integration, improve reliability, and reduce maintenance burden.
 
 **Key Contributor**: @zorgms (author of the MQTT firmware improvements)
+
+**Note**: Features marked as "edge firmware" are not yet in stable 3.3.005 release.
 
 ---
 
@@ -30,7 +32,7 @@ Each matching metric is published immediately on its normal topic.
 
 #### 1.1 Add New Constants (`const.py`)
 ```python
-# On-demand metric request topic (OVMS 3.3.005+)
+# On-demand metric request topic (OVMS edge firmware)
 # Allows requesting specific metrics or all metrics with wildcard
 # Source: OVMS firmware changes.txt - MQTT client on-demand requests
 METRIC_REQUEST_TOPIC_TEMPLATE = "{structure_prefix}/client/{client_id}/request/metric"
@@ -92,7 +94,7 @@ No changes required - skipping to Phase 3.
 ## Phase 3: Simplify GPS Accuracy Handling (COMPLETED ✓)
 
 ### Status
-**IMPLEMENTED**: GPS accuracy handling improved with standardized constants and v.p.gpssq preference.
+**IMPLEMENTED**: GPS accuracy handling simplified to use only v.p.gpssq (edge firmware).
 
 ### Changes Made
 1. Fixed `v.p.gpssq` metric in `location.py`:
@@ -103,16 +105,15 @@ No changes required - skipping to Phase 3.
 2. Added GPS accuracy constants to `const.py`:
    - `GPS_ACCURACY_MIN_METERS = 5` - Minimum accuracy floor
    - `GPS_ACCURACY_MAX_METERS = 100` - Maximum accuracy (poorest quality)
-   - `GPS_HDOP_METERS_MULTIPLIER = 5` - HDOP to meters conversion factor
 
 3. Updated `mqtt/__init__.py::get_gps_accuracy()`:
    - Uses constants instead of hardcoded values
    - Improved docstring with firmware notes
-   - Prefers v.p.gpssq (OVMS 3.3.005+) with HDOP fallback
+   - Uses only v.p.gpssq (OVMS edge firmware)
 
 4. Updated `attribute_manager.py::get_gps_attributes()`:
    - Uses constants instead of hardcoded values
-   - Improved docstring
+   - Simplified to only handle v.p.gpssq (removed HDOP fallback)
 
 ---
 
@@ -123,9 +124,9 @@ No changes required - skipping to Phase 3.
 
 ### Changes Made
 1. Updated `README.md`:
-   - Added firmware version table (3.3.001, 3.3.004, 3.3.005 features)
+   - Added firmware version table (3.3.001, 3.3.004, 3.3.005, edge features)
    - Added OVMS-side metric filtering examples (metrics.include/exclude)
-   - Updated recommended version to 3.3.005+
+   - Updated to show edge firmware for new features
 
 2. Created `docs/FIRMWARE_COMPATIBILITY.md`:
    - Detailed feature-to-version mapping

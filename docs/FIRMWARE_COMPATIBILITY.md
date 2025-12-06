@@ -6,7 +6,8 @@ This document describes firmware version requirements for integration features.
 
 - **3.3.001**: Basic MQTT publishing and command support
 - **3.3.004**: Improved MQTT stability and reliability  
-- **3.3.005**: On-demand metric requests, GPS signal quality metric
+- **3.3.005**: Current stable release
+- **Edge**: On-demand metric requests, GPS signal quality metric (v.p.gpssq)
 
 ## Feature Compatibility
 
@@ -14,17 +15,17 @@ This document describes firmware version requirements for integration features.
 |---------|-------------|-------|
 | Basic sensors | 3.3.001 | All standard vehicle metrics |
 | Commands | 3.3.001 | `ovms.send_command` service |
-| Fast discovery | 3.3.005 | 10s vs 60s setup time |
-| GPS accuracy (v.p.gpssq) | 3.3.005 | 0-100% quality metric |
+| Fast discovery | Edge | 10s vs 60s setup time |
+| GPS accuracy (v.p.gpssq) | Edge | 0-100% quality metric |
 | Climate scheduling | 3.3.003 | `climatecontrol schedule` commands |
 
 ## Fallback Behavior
 
 The integration automatically detects firmware capabilities:
 
-1. **Discovery**: Tries on-demand metric request first (3.3.005+), falls back to passive discovery
-2. **GPS accuracy**: Uses `v.p.gpssq` when available, falls back to HDOP calculation
-3. **All features**: Gracefully degrade on older firmware - no errors, just reduced functionality
+1. **Discovery**: Tries on-demand metric request first (edge firmware), falls back to passive discovery
+2. **GPS accuracy**: Uses `v.p.gpssq` when available
+3. **All features**: Gracefully degrade on stable firmware - no errors, just reduced functionality
 
 ## Checking Your Firmware Version
 

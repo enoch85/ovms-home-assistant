@@ -1,8 +1,8 @@
-"""Tests for on-demand metric request feature (OVMS firmware 3.3.005+).
+"""Tests for on-demand metric request feature (OVMS edge firmware).
 
 This module tests the hybrid discovery mechanism that uses on-demand metric
-requests for faster discovery on newer firmware while falling back to passive
-discovery on older firmware.
+requests for faster discovery on edge/newer firmware while falling back to passive
+discovery on stable firmware.
 """
 
 import pytest
@@ -191,22 +191,22 @@ class TestRequestAllMetrics:
         assert result is False
 
 
-class TestCommandHandlerDeprecation:
-    """Test that async_send_discovery_command is properly deprecated."""
+class TestCommandHandlerRemoval:
+    """Test that async_send_discovery_command was removed (replaced by metric request)."""
 
-    def test_discovery_command_exists(self):
-        """Test that the deprecated method still exists for backwards compatibility."""
+    def test_discovery_command_removed(self):
+        """Test that the deprecated method was removed in favor of metric requests."""
         from ovms.mqtt.command_handler import CommandHandler
 
-        # Verify the method exists
-        assert hasattr(CommandHandler, "async_send_discovery_command")
+        # Verify the method has been removed - it's replaced by on-demand metric requests
+        assert not hasattr(CommandHandler, "async_send_discovery_command")
 
-    def test_discovery_command_docstring_mentions_deprecation(self):
-        """Test that the docstring mentions deprecation."""
+    def test_command_handler_has_send_command(self):
+        """Test that the primary send_command method still exists."""
         from ovms.mqtt.command_handler import CommandHandler
 
-        docstring = CommandHandler.async_send_discovery_command.__doc__
-        assert "DEPRECATED" in docstring or "deprecated" in docstring.lower()
+        # Verify the main method exists
+        assert hasattr(CommandHandler, "async_send_command")
 
 
 if __name__ == "__main__":

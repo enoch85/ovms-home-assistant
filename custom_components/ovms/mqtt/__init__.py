@@ -112,7 +112,7 @@ class OVMSMQTTClient:
         # Try to discover by subscribing again (in case initial subscription failed)
         await self.connection_manager.async_subscribe_topics()
 
-        # Request all metrics using on-demand feature (OVMS 3.3.005+)
+        # Request all metrics using on-demand feature (OVMS edge firmware)
         # This replaces the old async_send_discovery_command() workaround
         if not self.discovered_topics and self.connected:
             _LOGGER.info(
@@ -223,7 +223,7 @@ class OVMSMQTTClient:
     async def async_request_metrics(self, pattern: str = "*") -> bool:
         """Request metrics from the OVMS module using on-demand feature.
 
-        This uses the on-demand metric request feature in OVMS firmware 3.3.005+.
+        This uses the on-demand metric request feature in OVMS edge firmware.
         Publishing a pattern to the metric request topic causes OVMS to immediately
         publish all matching metrics to their normal topics.
 
@@ -235,7 +235,7 @@ class OVMSMQTTClient:
             True if the request was sent successfully, False otherwise.
 
         Note:
-            This feature requires OVMS firmware 3.3.005 or later.
+            This feature requires OVMS edge firmware (post-3.3.005).
             Older firmware will simply not respond to the request.
         """
         if not self.connected or not self.connection_manager.connected:

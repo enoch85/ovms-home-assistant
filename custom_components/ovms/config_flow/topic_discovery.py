@@ -74,7 +74,7 @@ def format_structure_prefix(config):
 def format_metric_request_topic(config, client_id: str) -> str:
     """Format the metric request topic for on-demand metric requests.
 
-    This topic is used with OVMS firmware 3.3.005+ to request all metrics
+    This topic is used with OVMS edge firmware to request all metrics
     immediately rather than waiting for passive discovery.
 
     Args:
@@ -94,7 +94,7 @@ def format_metric_request_topic(config, client_id: str) -> str:
 def request_all_metrics(mqttc, config, client_id: str, qos: int = 1) -> bool:
     """Publish a request for all metrics to the OVMS module.
 
-    This uses the on-demand metric request feature in OVMS firmware 3.3.005+.
+    This uses the on-demand metric request feature in OVMS edge firmware.
     Publishing "*" to the metric request topic causes OVMS to immediately
     publish all valid metrics to their normal topics.
 
@@ -363,16 +363,16 @@ async def discover_topics(hass: HomeAssistant, config):
             }
 
         # Hybrid discovery strategy:
-        # 1. First try active metric request (OVMS 3.3.005+) with short timeout
+        # 1. First try active metric request (OVMS edge firmware) with short timeout
         # 2. If no/few topics found, fall back to legacy passive discovery
 
         # Track whether active discovery succeeded
         active_discovery_succeeded = False
         topics_before_active = len(discovered_topics)
 
-        # Phase 1: Try active metric request (OVMS firmware 3.3.005+)
+        # Phase 1: Try active metric request (OVMS edge firmware)
         _LOGGER.debug(
-            "%s - Attempting active metric request (OVMS 3.3.005+)", log_prefix
+            "%s - Attempting active metric request (OVMS edge firmware)", log_prefix
         )
         try:
             if request_all_metrics(mqttc, config, client_id, config.get(CONF_QOS, 1)):

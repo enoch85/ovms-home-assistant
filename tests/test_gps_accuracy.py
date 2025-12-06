@@ -1,7 +1,10 @@
-"""Tests for GPS accuracy calculation improvements (Phase 3).
+"""Tests for GPS accuracy calculation improvements.
 
 This module tests the GPS accuracy handling using standardized constants
-and the preference for v.p.gpssq over HDOP when available.
+and the v.p.gpssq (GPS Signal Quality) metric as the primary accuracy source.
+
+After firmware 3.3.005+, we simplify to use only v.p.gpssq for GPS accuracy
+calculations without HDOP fallback.
 """
 
 import pytest
@@ -15,7 +18,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "custom_components"))
 from ovms.const import (
     GPS_ACCURACY_MIN_METERS,
     GPS_ACCURACY_MAX_METERS,
-    GPS_HDOP_METERS_MULTIPLIER,
 )
 
 
@@ -31,11 +33,6 @@ class TestGPSAccuracyConstants:
         """Test that maximum accuracy is greater than minimum."""
         assert GPS_ACCURACY_MAX_METERS > GPS_ACCURACY_MIN_METERS
         assert GPS_ACCURACY_MAX_METERS == 100
-
-    def test_hdop_multiplier_is_positive(self):
-        """Test that HDOP multiplier is positive."""
-        assert GPS_HDOP_METERS_MULTIPLIER > 0
-        assert GPS_HDOP_METERS_MULTIPLIER == 5
 
 
 class TestGPSSQMetricDefinition:
@@ -78,21 +75,7 @@ class TestGPSSQMetricDefinition:
 
 
 class TestAttributeManagerGPSAccuracy:
-    """Test the AttributeManager GPS accuracy calculations."""
-
-    def test_get_gps_attributes_with_hdop(self):
-        """Test GPS accuracy calculation from HDOP."""
-        from ovms.attribute_manager import AttributeManager
-
-        manager = AttributeManager({})
-        attrs = manager.get_gps_attributes("ovms/user/vehicle/v/p/gpshdop", "2.5")
-
-        assert "gps_hdop" in attrs
-        assert attrs["gps_hdop"] == 2.5
-        assert "gps_accuracy" in attrs
-        # 2.5 * 5 = 12.5 meters
-        assert attrs["gps_accuracy"] == 12.5
-        assert attrs["gps_accuracy_unit"] == "m"
+    """Test the AttributeManager GPS accuracy calculations using v.p.gpssq."""
 
     def test_get_gps_attributes_with_gpssq(self):
         """Test GPS accuracy calculation from signal quality."""
@@ -138,10 +121,6 @@ class TestAttributeManagerGPSAccuracy:
         attrs = manager.get_gps_attributes("ovms/user/vehicle/v/p/gpssq", "100")
         assert attrs["gps_accuracy"] == GPS_ACCURACY_MIN_METERS
 
-        # With very low HDOP, accuracy should also be clamped
-        attrs = manager.get_gps_attributes("ovms/user/vehicle/v/p/gpshdop", "0.5")
-        assert attrs["gps_accuracy"] == GPS_ACCURACY_MIN_METERS
-
     def test_get_gps_attributes_with_invalid_payload(self):
         """Test handling of invalid GPS payload."""
         from ovms.attribute_manager import AttributeManager
@@ -164,10 +143,10 @@ class TestAttributeManagerGPSAccuracy:
 
 
 class TestMQTTClientGPSAccuracy:
-    """Test the OVMSMQTTClient GPS accuracy method."""
+    """Test the OVMSMQTTClient GPS accuracy method using v.p.gpssq only."""
 
-    def test_get_gps_accuracy_prefers_signal_quality(self):
-        """Test that get_gps_accuracy prefers gpssq over hdop."""
+    def test_get_gps_accuracy_with_signal_quality(self):
+        """Test that get_gps_accuracy calculates from gpssq."""
         from ovms.mqtt import OVMSMQTTClient
 
         # Create a minimal mock hass
@@ -182,34 +161,13 @@ class TestMQTTClientGPSAccuracy:
             client.gps_quality_topics = {
                 "testvehicle": {
                     "signal_quality": {"topic": "v/p/gpssq", "value": 75},
-                    "hdop": {"topic": "v/p/gpshdop", "value": 3.0},
                 }
             }
 
             accuracy = client.get_gps_accuracy()
 
-            # Should use signal_quality (100 - 75 = 25), not HDOP (3.0 * 5 = 15)
+            # 100 - 75 = 25 meters
             assert accuracy == 25
-
-    def test_get_gps_accuracy_falls_back_to_hdop(self):
-        """Test that get_gps_accuracy falls back to HDOP when gpssq unavailable."""
-        from ovms.mqtt import OVMSMQTTClient
-
-        config = {"vehicle_id": "testvehicle"}
-
-        with patch.object(OVMSMQTTClient, "__init__", lambda x, y, z: None):
-            client = OVMSMQTTClient.__new__(OVMSMQTTClient)
-            client.config = config
-            client.gps_quality_topics = {
-                "testvehicle": {
-                    "hdop": {"topic": "v/p/gpshdop", "value": 4.0},
-                }
-            }
-
-            accuracy = client.get_gps_accuracy()
-
-            # Should use HDOP: 4.0 * 5 = 20
-            assert accuracy == 20
 
     def test_get_gps_accuracy_returns_none_when_no_data(self):
         """Test that get_gps_accuracy returns None when no GPS data."""
@@ -244,6 +202,26 @@ class TestMQTTClientGPSAccuracy:
             # Should return accuracy for the specified vehicle
             accuracy = client.get_gps_accuracy("other_vehicle")
             assert accuracy == 40  # 100 - 60
+
+    def test_get_gps_accuracy_respects_minimum(self):
+        """Test that get_gps_accuracy respects minimum accuracy floor."""
+        from ovms.mqtt import OVMSMQTTClient
+
+        config = {"vehicle_id": "testvehicle"}
+
+        with patch.object(OVMSMQTTClient, "__init__", lambda x, y, z: None):
+            client = OVMSMQTTClient.__new__(OVMSMQTTClient)
+            client.config = config
+            client.gps_quality_topics = {
+                "testvehicle": {
+                    "signal_quality": {"topic": "v/p/gpssq", "value": 100},
+                }
+            }
+
+            accuracy = client.get_gps_accuracy()
+
+            # 100% quality should be clamped to minimum accuracy
+            assert accuracy == GPS_ACCURACY_MIN_METERS
 
 
 if __name__ == "__main__":
