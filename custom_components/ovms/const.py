@@ -155,6 +155,23 @@ DISCOVERY_TOPIC = "{prefix}/#"
 COMMAND_TOPIC_TEMPLATE = "{structure_prefix}/client/rr/command/{command_id}"
 RESPONSE_TOPIC_TEMPLATE = "{structure_prefix}/client/rr/response/{command_id}"
 
+# On-demand metric request topics (OVMS edge firmware)
+# These allow requesting specific metrics or all metrics with wildcard patterns
+# Source: OVMS firmware changes.txt - MQTT client on-demand requests
+# Example: Publishing "*" to the metric request topic returns all valid metrics
+# Example: Publishing "v.b.*" returns all metrics starting with "v.b."
+METRIC_REQUEST_TOPIC_TEMPLATE = "{structure_prefix}/client/{client_id}/request/metric"
+CONFIG_REQUEST_TOPIC_TEMPLATE = "{structure_prefix}/client/{client_id}/request/config"
+CONFIG_RESPONSE_TOPIC_TEMPLATE = (
+    "{structure_prefix}/client/{client_id}/config/{param}/{instance}"
+)
+
+# Discovery timing constants
+# Active discovery uses on-demand metric requests (OVMS edge firmware) for faster setup
+# Legacy discovery passively waits for OVMS to publish metrics (older firmware)
+ACTIVE_DISCOVERY_TIMEOUT = 10  # seconds to wait after requesting metrics
+LEGACY_DISCOVERY_TIMEOUT = 60  # fallback timeout for older firmware
+
 # Logger
 LOGGER_NAME = "custom_components.ovms"
 
@@ -201,6 +218,13 @@ DEFAULT_COMMAND_RATE_PERIOD = 60.0  # seconds
 
 # Maximum length for state values in Home Assistant
 MAX_STATE_LENGTH = 255
+
+# GPS accuracy calculation constants
+# Used to convert GPS signal quality (v.p.gpssq) to meters accuracy
+# Source: OVMS firmware v.p.gpssq is 0-100% where <30 unusable, >50 good, >80 excellent
+# See OVMS firmware changes.txt for metric details
+GPS_ACCURACY_MIN_METERS = 5  # Minimum accuracy floor in meters
+GPS_ACCURACY_MAX_METERS = 100  # Maximum accuracy value (poorest quality)
 
 
 def truncate_state_value(value, max_length=MAX_STATE_LENGTH):

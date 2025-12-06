@@ -293,16 +293,3 @@ class CommandHandler:
 
         except Exception as ex:
             _LOGGER.exception("Error processing command response: %s", ex)
-
-    async def async_send_discovery_command(self) -> None:
-        """Send a discovery command to find OVMS modules."""
-        try:
-            command_id = uuid.uuid4().hex[:8]
-            # Use a generic discovery command
-            await self.async_send_command(
-                command="stat",
-                command_id=command_id,
-                timeout=3,  # Short timeout for discovery
-            )
-        except Exception as ex:
-            _LOGGER.warning("Error sending discovery command: %s", ex)

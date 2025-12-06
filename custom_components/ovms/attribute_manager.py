@@ -7,7 +7,11 @@ from typing import Dict, Any, Optional, List
 from homeassistant.const import EntityCategory
 from homeassistant.util import dt as dt_util
 
-from .const import LOGGER_NAME
+from .const import (
+    LOGGER_NAME,
+    GPS_ACCURACY_MIN_METERS,
+    GPS_ACCURACY_MAX_METERS,
+)
 from .metrics import get_metric_by_path, get_metric_by_pattern
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -88,37 +92,42 @@ class AttributeManager:
         return None
 
     def get_gps_attributes(self, topic: str, payload: Any) -> Dict[str, Any]:
-        """Extract and prepare GPS-related attributes."""
+        """Extract and prepare GPS-related attributes.
+
+        Handles GPS quality metrics and calculates accuracy in meters.
+        Uses v.p.gpssq (signal quality 0-100%) as the primary GPS quality metric.
+
+        Args:
+            topic: The MQTT topic containing the GPS data
+            payload: The payload value from the topic
+
+        Returns:
+            Dictionary of GPS-related attributes including accuracy when calculable
+
+        Note:
+            v.p.gpssq: 0-100% where <30 is unusable, >50 is good, >80 is excellent
+            See OVMS firmware changes.txt for metric details.
+        """
         attributes = {}
 
         try:
-            # Handle GPS-specific attributes
-            if "gpshdop" in topic.lower():
-                try:
-                    value = float(payload) if payload else None
-                    attributes["gps_hdop"] = value
-                    # If we have HDOP, we can estimate accuracy (meters)
-                    if value is not None:
-                        # HDOP to meters accuracy - typical formula
-                        # Each HDOP unit is roughly 5 meters of accuracy
-                        accuracy = max(5, value * 5)  # Minimum 5m
-                        attributes["gps_accuracy"] = accuracy
-                        attributes["gps_accuracy_unit"] = "m"
-                except (ValueError, TypeError):
-                    pass
-            elif "gpssq" in topic.lower():
+            # Handle GPS Signal Quality (v.p.gpssq)
+            # 0-100% where <30 unusable, >50 good, >80 excellent
+            if "gpssq" in topic.lower():
                 try:
                     value = float(payload) if payload else None
                     attributes["gps_signal_quality"] = value
-                    # Update accuracy based on signal quality
+                    # Signal quality 0-100% maps inversely to accuracy in meters
                     if value is not None:
-                        # Simple formula that translates signal quality to meters accuracy
-                        # Higher signal quality = better accuracy (lower value)
-                        accuracy = max(5, 100 - value)  # Clamp minimum accuracy to 5m
+                        accuracy = max(
+                            GPS_ACCURACY_MIN_METERS,
+                            GPS_ACCURACY_MAX_METERS - value,
+                        )
                         attributes["gps_accuracy"] = accuracy
                         attributes["gps_accuracy_unit"] = "m"
                 except (ValueError, TypeError):
                     pass
+
             elif "gpsspeed" in topic.lower():
                 try:
                     value = float(payload) if payload else None
