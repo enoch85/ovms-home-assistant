@@ -116,23 +116,22 @@ No changes required - skipping to Phase 3.
 
 ---
 
-## Phase 4: Documentation Updates (MEDIUM PRIORITY)
+## Phase 4: Documentation Updates (COMPLETED ✓)
 
-### Implementation Tasks
+### Status
+**IMPLEMENTED**: Added firmware requirements and compatibility documentation.
 
-#### 4.1 Update README.md
-- [ ] Add section on OVMS firmware requirements
-- [ ] Document recommended firmware version (3.3.005+)
-- [ ] Explain OVMS-side metric filtering options:
-  ```
-  [server.v3] metrics.include   -- Reduce MQTT traffic at source
-  [server.v3] metrics.exclude   -- Exclude unwanted metrics
-  ```
+### Changes Made
+1. Updated `README.md`:
+   - Added firmware version table (3.3.001, 3.3.004, 3.3.005 features)
+   - Added OVMS-side metric filtering examples (metrics.include/exclude)
+   - Updated recommended version to 3.3.005+
 
-#### 4.2 Add Firmware Compatibility Notes
-- [ ] Create `docs/FIRMWARE_COMPATIBILITY.md`
-- [ ] Document which features require which firmware version
-- [ ] Explain fallback behavior for older firmware
+2. Created `docs/FIRMWARE_COMPATIBILITY.md`:
+   - Detailed feature-to-version mapping
+   - Fallback behavior documentation
+   - Configuration recommendations
+   - Link to OVMS changelog
 
 ---
 
