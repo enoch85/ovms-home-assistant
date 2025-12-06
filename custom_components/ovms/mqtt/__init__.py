@@ -143,13 +143,32 @@ class OVMSMQTTClient:
             self._track_gps_quality_topic(topic, payload)
 
         # Process message and create/update entities
-        if topic not in self.entity_registry.topics:
+        # Use get_entities_for_topic to support multiple entities per topic
+        entities_for_topic = self.entity_registry.get_entities_for_topic(topic)
+        if not entities_for_topic:
             # New topic, create entity
             parsed_data = self.topic_parser.parse_topic(topic, payload)
             if parsed_data:
+                # Create the primary entity
                 await self.entity_factory.async_create_entities(
                     topic, payload, parsed_data
                 )
+
+                # Create any related entities (e.g., switches for controllable metrics)
+                related_entities = self.topic_parser.get_related_entities(parsed_data)
+                for related_entity in related_entities:
+                    try:
+                        await self.entity_factory.async_create_entities(
+                            topic, payload, related_entity
+                        )
+                    except Exception as ex:
+                        _LOGGER.error(
+                            "Failed to create related entity for topic %s (%s): %s",
+                            topic,
+                            related_entity.get("entity_type", "unknown"),
+                            ex,
+                            exc_info=True,
+                        )
         else:
             # Existing topic, update entity
             self.update_dispatcher.dispatch_update(topic, payload)
