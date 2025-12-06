@@ -11,7 +11,6 @@ from .const import (
     LOGGER_NAME,
     GPS_ACCURACY_MIN_METERS,
     GPS_ACCURACY_MAX_METERS,
-    GPS_HDOP_METERS_MULTIPLIER,
 )
 from .metrics import get_metric_by_path, get_metric_by_pattern
 
@@ -96,7 +95,7 @@ class AttributeManager:
         """Extract and prepare GPS-related attributes.
 
         Handles GPS quality metrics and calculates accuracy in meters.
-        Supports both v.p.gpssq (signal quality 0-100%) and v.p.gpshdop (HDOP).
+        Uses v.p.gpssq (signal quality 0-100%) as the primary GPS quality metric.
 
         Args:
             topic: The MQTT topic containing the GPS data
@@ -104,29 +103,17 @@ class AttributeManager:
 
         Returns:
             Dictionary of GPS-related attributes including accuracy when calculable
+
+        Note:
+            v.p.gpssq: 0-100% where <30 is unusable, >50 is good, >80 is excellent
+            See OVMS firmware changes.txt for metric details.
         """
         attributes = {}
 
         try:
-            # Handle HDOP (Horizontal Dilution of Precision)
-            if "gpshdop" in topic.lower():
-                try:
-                    value = float(payload) if payload else None
-                    attributes["gps_hdop"] = value
-                    # HDOP to meters accuracy - each unit is ~5 meters
-                    if value is not None:
-                        accuracy = max(
-                            GPS_ACCURACY_MIN_METERS,
-                            value * GPS_HDOP_METERS_MULTIPLIER,
-                        )
-                        attributes["gps_accuracy"] = accuracy
-                        attributes["gps_accuracy_unit"] = "m"
-                except (ValueError, TypeError):
-                    pass
-
-            # Handle GPS Signal Quality (v.p.gpssq - OVMS 3.3.005+)
+            # Handle GPS Signal Quality (v.p.gpssq)
             # 0-100% where <30 unusable, >50 good, >80 excellent
-            elif "gpssq" in topic.lower():
+            if "gpssq" in topic.lower():
                 try:
                     value = float(payload) if payload else None
                     attributes["gps_signal_quality"] = value

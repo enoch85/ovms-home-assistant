@@ -220,11 +220,11 @@ DEFAULT_COMMAND_RATE_PERIOD = 60.0  # seconds
 MAX_STATE_LENGTH = 255
 
 # GPS accuracy calculation constants
-# Used to convert GPS signal quality and HDOP to meters accuracy
+# Used to convert GPS signal quality (v.p.gpssq) to meters accuracy
 # Source: OVMS firmware v.p.gpssq is 0-100% where <30 unusable, >50 good, >80 excellent
+# See OVMS firmware changes.txt for metric details
 GPS_ACCURACY_MIN_METERS = 5  # Minimum accuracy floor in meters
 GPS_ACCURACY_MAX_METERS = 100  # Maximum accuracy value (poorest quality)
-GPS_HDOP_METERS_MULTIPLIER = 5  # Each HDOP unit represents ~5 meters of accuracy
 
 
 def truncate_state_value(value, max_length=MAX_STATE_LENGTH):

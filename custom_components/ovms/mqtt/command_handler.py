@@ -293,29 +293,3 @@ class CommandHandler:
 
         except Exception as ex:
             _LOGGER.exception("Error processing command response: %s", ex)
-
-    async def async_send_discovery_command(self) -> None:
-        """Send a discovery command to find OVMS modules.
-
-        DEPRECATED: This method is deprecated in favor of the on-demand metric
-        request feature in OVMS firmware 3.3.005+. Use OVMSMQTTClient.async_request_metrics()
-        instead, which publishes to the metric request topic for faster and more
-        reliable discovery.
-
-        This method is kept for backwards compatibility with older firmware that
-        doesn't support the on-demand metric request feature.
-        """
-        _LOGGER.debug(
-            "async_send_discovery_command is deprecated, consider using "
-            "async_request_metrics() for OVMS firmware 3.3.005+"
-        )
-        try:
-            command_id = uuid.uuid4().hex[:8]
-            # Use a generic discovery command
-            await self.async_send_command(
-                command="stat",
-                command_id=command_id,
-                timeout=3,  # Short timeout for discovery
-            )
-        except Exception as ex:
-            _LOGGER.warning("Error sending discovery command: %s", ex)

@@ -20,7 +20,6 @@ from ..const import (
     ACTIVE_DISCOVERY_TIMEOUT,
     GPS_ACCURACY_MIN_METERS,
     GPS_ACCURACY_MAX_METERS,
-    GPS_HDOP_METERS_MULTIPLIER,
 )
 
 from .connection import MQTTConnectionManager
@@ -297,10 +296,7 @@ class OVMSMQTTClient:
     def get_gps_accuracy(self, vehicle_id: Optional[str] = None) -> Optional[float]:
         """Get GPS accuracy in meters from stored GPS quality data.
 
-        Calculates positional accuracy based on available GPS quality metrics.
-        Prefers v.p.gpssq (signal quality) when available as it's the standardized
-        metric in OVMS firmware 3.3.005+. Falls back to HDOP-based calculation
-        for older firmware or when signal quality is not available.
+        Calculates positional accuracy based on GPS signal quality metric v.p.gpssq.
 
         Args:
             vehicle_id: Optional vehicle ID. Uses configured vehicle_id if not provided.
@@ -311,7 +307,7 @@ class OVMSMQTTClient:
 
         Note:
             v.p.gpssq: 0-100% where <30 is unusable, >50 is good, >80 is excellent
-            HDOP: Lower is better, each unit represents ~5 meters of accuracy
+            See OVMS firmware changes.txt for metric details.
         """
         if not vehicle_id:
             vehicle_id = self.config.get("vehicle_id", "")
@@ -321,18 +317,11 @@ class OVMSMQTTClient:
 
         gps_data = self.gps_quality_topics[vehicle_id]
 
-        # Prefer signal_quality (v.p.gpssq) - standardized in OVMS 3.3.005+
+        # Use signal_quality (v.p.gpssq) - standard OVMS metric
         if "signal_quality" in gps_data:
             sq = gps_data["signal_quality"]["value"]
             # Signal quality 0-100% maps inversely to accuracy in meters
             # 100% quality = minimum accuracy (best), 0% = maximum accuracy (worst)
             return max(GPS_ACCURACY_MIN_METERS, GPS_ACCURACY_MAX_METERS - sq)
-
-        # Fallback to HDOP-based calculation for older firmware
-        if "hdop" in gps_data:
-            hdop = gps_data["hdop"]["value"]
-            # HDOP directly relates to positional accuracy
-            # Lower HDOP = better accuracy
-            return max(GPS_ACCURACY_MIN_METERS, hdop * GPS_HDOP_METERS_MULTIPLIER)
 
         return None
