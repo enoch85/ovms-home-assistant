@@ -36,6 +36,9 @@ from ..const import (
     TOPIC_TEMPLATE as CONST_TOPIC_TEMPLATE,
     COMMAND_TOPIC_TEMPLATE as CONST_COMMAND_TOPIC_TEMPLATE,
     RESPONSE_TOPIC_TEMPLATE as CONST_RESPONSE_TOPIC_TEMPLATE,
+    METRIC_REQUEST_TOPIC_TEMPLATE,
+    ACTIVE_DISCOVERY_TIMEOUT,
+    LEGACY_DISCOVERY_TIMEOUT,
     LOGGER_NAME,
     ERROR_CANNOT_CONNECT,
     ERROR_TIMEOUT,
@@ -66,6 +69,61 @@ def format_structure_prefix(config):
         prefix = config.get(CONF_TOPIC_PREFIX, "ovms")
         vehicle_id = config.get(CONF_VEHICLE_ID, "")
         return f"{prefix}/{vehicle_id}"
+
+
+def format_metric_request_topic(config, client_id: str) -> str:
+    """Format the metric request topic for on-demand metric requests.
+
+    This topic is used with OVMS firmware 3.3.005+ to request all metrics
+    immediately rather than waiting for passive discovery.
+
+    Args:
+        config: Configuration dictionary with topic structure settings
+        client_id: The MQTT client ID making the request
+
+    Returns:
+        Formatted metric request topic string
+    """
+    structure_prefix = format_structure_prefix(config)
+    return METRIC_REQUEST_TOPIC_TEMPLATE.format(
+        structure_prefix=structure_prefix,
+        client_id=client_id,
+    )
+
+
+def request_all_metrics(mqttc, config, client_id: str, qos: int = 1) -> bool:
+    """Publish a request for all metrics to the OVMS module.
+
+    This uses the on-demand metric request feature in OVMS firmware 3.3.005+.
+    Publishing "*" to the metric request topic causes OVMS to immediately
+    publish all valid metrics to their normal topics.
+
+    Args:
+        mqttc: The MQTT client instance
+        config: Configuration dictionary
+        client_id: The MQTT client ID
+        qos: Quality of Service level (default: 1)
+
+    Returns:
+        True if the publish was successful, False otherwise
+    """
+    try:
+        metric_request_topic = format_metric_request_topic(config, client_id)
+        _LOGGER.debug(
+            "Requesting all metrics via topic: %s with payload '*'",
+            metric_request_topic,
+        )
+        result = mqttc.publish(metric_request_topic, "*", qos=qos)
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            _LOGGER.info(
+                "Successfully published metric request to %s", metric_request_topic
+            )
+            return True
+        _LOGGER.warning("Failed to publish metric request, rc=%s", result.rc)
+        return False
+    except Exception as ex:
+        _LOGGER.warning("Error requesting metrics: %s", ex)
+        return False
 
 
 def extract_vehicle_ids(topics, config):
@@ -304,46 +362,99 @@ async def discover_topics(hass: HomeAssistant, config):
                 "message": f"Failed to connect to MQTT broker (rc={rc})",
             }
 
-        # Wait for messages to arrive
-        _LOGGER.debug("%s - Waiting for messages", log_prefix)
-        await asyncio.sleep(3)  # Wait for up to 3 seconds
+        # Hybrid discovery strategy:
+        # 1. First try active metric request (OVMS 3.3.005+) with short timeout
+        # 2. If no/few topics found, fall back to legacy passive discovery
 
-        # Try to publish a message to stimulate response
+        # Track whether active discovery succeeded
+        active_discovery_succeeded = False
+        topics_before_active = len(discovered_topics)
+
+        # Phase 1: Try active metric request (OVMS firmware 3.3.005+)
+        _LOGGER.debug(
+            "%s - Attempting active metric request (OVMS 3.3.005+)", log_prefix
+        )
         try:
-            _LOGGER.debug(
-                "%s - Publishing test message to stimulate responses", log_prefix
-            )
-            command_id = uuid.uuid4().hex[:8]
-            # Use a generic discovery command - this will be ignored if the structure is wrong
-            # but might trigger responses from OVMS modules
-            test_topic = f"{topic_prefix}/client/rr/command/{command_id}"
-            test_payload = "stat"
-
-            mqttc.publish(test_topic, test_payload, qos=config.get(CONF_QOS, 1))
-            _LOGGER.debug("%s - Test message published to %s", log_prefix, test_topic)
-
-            # Also try a more generic topic to catch any responding devices
-            vehicle_id = config.get(CONF_VEHICLE_ID, "")
-            if vehicle_id:
-                alt_test_topic = (
-                    f"{topic_prefix}/+/{vehicle_id}/client/rr/command/{command_id}"
-                )
-                mqttc.publish(alt_test_topic, test_payload, qos=config.get(CONF_QOS, 1))
+            if request_all_metrics(mqttc, config, client_id, config.get(CONF_QOS, 1)):
+                # Wait for active discovery timeout
                 _LOGGER.debug(
-                    "%s - Also testing alternative topic: %s",
+                    "%s - Waiting %d seconds for active discovery response",
                     log_prefix,
-                    alt_test_topic,
+                    ACTIVE_DISCOVERY_TIMEOUT,
+                )
+                await asyncio.sleep(ACTIVE_DISCOVERY_TIMEOUT)
+
+                topics_after_active = len(discovered_topics)
+                new_topics = topics_after_active - topics_before_active
+
+                if new_topics > 0:
+                    _LOGGER.info(
+                        "%s - Active discovery succeeded: received %d new topics",
+                        log_prefix,
+                        new_topics,
+                    )
+                    active_discovery_succeeded = True
+                    debug_info["discovery_method"] = "active"
+                    debug_info["active_discovery_topics"] = new_topics
+                else:
+                    _LOGGER.debug(
+                        "%s - No response to active request, firmware may be older",
+                        log_prefix,
+                    )
+        except Exception as ex:  # pylint: disable=broad-except
+            _LOGGER.debug("%s - Active metric request failed: %s", log_prefix, ex)
+
+        # Phase 2: Legacy discovery (wait for passive messages or send stat command)
+        if not active_discovery_succeeded:
+            _LOGGER.debug("%s - Falling back to legacy passive discovery", log_prefix)
+            debug_info["discovery_method"] = "legacy"
+
+            # Wait for messages to arrive (shorter wait since we already waited)
+            _LOGGER.debug("%s - Waiting for passive messages", log_prefix)
+            await asyncio.sleep(3)  # Wait for up to 3 seconds
+
+            # Try to publish a message to stimulate response
+            try:
+                _LOGGER.debug(
+                    "%s - Publishing test message to stimulate responses", log_prefix
+                )
+                command_id = uuid.uuid4().hex[:8]
+                # Use a generic discovery command - this will be ignored if structure wrong
+                # but might trigger responses from OVMS modules
+                test_topic = f"{topic_prefix}/client/rr/command/{command_id}"
+                test_payload = "stat"
+
+                mqttc.publish(test_topic, test_payload, qos=config.get(CONF_QOS, 1))
+                _LOGGER.debug(
+                    "%s - Test message published to %s", log_prefix, test_topic
                 )
 
-            # Wait a bit longer for responses
-            await asyncio.sleep(2)
-        except Exception as ex:  # pylint: disable=broad-except
-            _LOGGER.warning("%s - Error publishing test message: %s", log_prefix, ex)
-            _LOGGER.debug(
-                "%s - Test message error details: %s",
-                log_prefix,
-                traceback.format_exc(),
-            )
+                # Also try a more generic topic to catch any responding devices
+                vehicle_id = config.get(CONF_VEHICLE_ID, "")
+                if vehicle_id:
+                    alt_test_topic = (
+                        f"{topic_prefix}/+/{vehicle_id}/client/rr/command/{command_id}"
+                    )
+                    mqttc.publish(
+                        alt_test_topic, test_payload, qos=config.get(CONF_QOS, 1)
+                    )
+                    _LOGGER.debug(
+                        "%s - Also testing alternative topic: %s",
+                        log_prefix,
+                        alt_test_topic,
+                    )
+
+                # Wait a bit longer for responses
+                await asyncio.sleep(2)
+            except Exception as ex:  # pylint: disable=broad-except
+                _LOGGER.warning(
+                    "%s - Error publishing test message: %s", log_prefix, ex
+                )
+                _LOGGER.debug(
+                    "%s - Test message error details: %s",
+                    log_prefix,
+                    traceback.format_exc(),
+                )
 
         # Clean up
         mqttc.loop_stop()

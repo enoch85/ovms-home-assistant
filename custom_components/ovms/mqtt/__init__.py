@@ -14,6 +14,10 @@ from ..const import (
     DOMAIN,
     LOGGER_NAME,
     SIGNAL_PLATFORMS_LOADED,
+    METRIC_REQUEST_TOPIC_TEMPLATE,
+    CONF_CLIENT_ID,
+    CONF_QOS,
+    ACTIVE_DISCOVERY_TIMEOUT,
 )
 
 from .connection import MQTTConnectionManager
@@ -106,12 +110,13 @@ class OVMSMQTTClient:
         # Try to discover by subscribing again (in case initial subscription failed)
         await self.connection_manager.async_subscribe_topics()
 
-        # Try to discover by sending a test command if no topics found
+        # Request all metrics using on-demand feature (OVMS 3.3.005+)
+        # This replaces the old async_send_discovery_command() workaround
         if not self.discovered_topics and self.connected:
             _LOGGER.info(
-                "No topics discovered yet, trying to discover by sending a test command"
+                "No topics discovered yet, requesting metrics via on-demand feature"
             )
-            await self.command_handler.async_send_discovery_command()
+            await self.async_request_metrics()
 
     async def _on_message_received(self, topic: str, payload: str) -> None:
         """Handle message received from MQTT broker."""
@@ -212,6 +217,65 @@ class OVMSMQTTClient:
     async def async_send_command(self, **kwargs) -> Dict[str, Any]:
         """Send a command to the OVMS module."""
         return await self.command_handler.async_send_command(**kwargs)
+
+    async def async_request_metrics(self, pattern: str = "*") -> bool:
+        """Request metrics from the OVMS module using on-demand feature.
+
+        This uses the on-demand metric request feature in OVMS firmware 3.3.005+.
+        Publishing a pattern to the metric request topic causes OVMS to immediately
+        publish all matching metrics to their normal topics.
+
+        Args:
+            pattern: Metric pattern to request. Defaults to "*" for all metrics.
+                     Examples: "*" (all), "v.b.*" (battery), "v.p.*" (position)
+
+        Returns:
+            True if the request was sent successfully, False otherwise.
+
+        Note:
+            This feature requires OVMS firmware 3.3.005 or later.
+            Older firmware will simply not respond to the request.
+        """
+        if not self.connected or not self.connection_manager.connected:
+            _LOGGER.warning("Cannot request metrics: not connected to MQTT broker")
+            return False
+
+        try:
+            client_id = self.config.get(CONF_CLIENT_ID, "")
+            if not client_id:
+                _LOGGER.warning("Cannot request metrics: no client_id configured")
+                return False
+
+            # Format the metric request topic
+            metric_request_topic = METRIC_REQUEST_TOPIC_TEMPLATE.format(
+                structure_prefix=self.structure_prefix,
+                client_id=client_id,
+            )
+
+            _LOGGER.debug(
+                "Requesting metrics with pattern '%s' via topic: %s",
+                pattern,
+                metric_request_topic,
+            )
+
+            # Publish the request
+            qos = self.config.get(CONF_QOS, 1)
+            success = await self.connection_manager.async_publish(
+                metric_request_topic, pattern, qos=qos
+            )
+
+            if success:
+                _LOGGER.info(
+                    "Successfully published metric request with pattern '%s'", pattern
+                )
+            else:
+                _LOGGER.warning("Failed to publish metric request")
+
+            return success
+
+        except Exception as ex:
+            _LOGGER.warning("Error requesting metrics: %s", ex)
+            return False
 
     async def async_shutdown(self) -> None:
         """Shutdown the MQTT client."""

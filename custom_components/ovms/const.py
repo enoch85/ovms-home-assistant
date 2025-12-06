@@ -155,6 +155,23 @@ DISCOVERY_TOPIC = "{prefix}/#"
 COMMAND_TOPIC_TEMPLATE = "{structure_prefix}/client/rr/command/{command_id}"
 RESPONSE_TOPIC_TEMPLATE = "{structure_prefix}/client/rr/response/{command_id}"
 
+# On-demand metric request topics (OVMS 3.3.005+)
+# These allow requesting specific metrics or all metrics with wildcard patterns
+# Source: OVMS firmware changes.txt - MQTT client on-demand requests
+# Example: Publishing "*" to the metric request topic returns all valid metrics
+# Example: Publishing "v.b.*" returns all metrics starting with "v.b."
+METRIC_REQUEST_TOPIC_TEMPLATE = "{structure_prefix}/client/{client_id}/request/metric"
+CONFIG_REQUEST_TOPIC_TEMPLATE = "{structure_prefix}/client/{client_id}/request/config"
+CONFIG_RESPONSE_TOPIC_TEMPLATE = (
+    "{structure_prefix}/client/{client_id}/config/{param}/{instance}"
+)
+
+# Discovery timing constants
+# Active discovery uses on-demand metric requests (OVMS 3.3.005+) for faster setup
+# Legacy discovery passively waits for OVMS to publish metrics (older firmware)
+ACTIVE_DISCOVERY_TIMEOUT = 10  # seconds to wait after requesting metrics
+LEGACY_DISCOVERY_TIMEOUT = 60  # fallback timeout for older firmware
+
 # Logger
 LOGGER_NAME = "custom_components.ovms"
 
