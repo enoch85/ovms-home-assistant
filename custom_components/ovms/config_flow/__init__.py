@@ -319,16 +319,27 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.discovered_topics = discovery_result.get("discovered_topics", set())
 
             topics_count = len(self.discovered_topics or [])
+            metric_count = discovery_result.get("metric_count", topics_count)
+            discovery_quality = discovery_result.get("discovery_quality", "unknown")
+
+            # Filter to show only metric topics in sample
+            metric_topics = [t for t in self.discovered_topics if "/metric/" in t]
             topics_sample = (
-                list(self.discovered_topics)[:5]
-                if topics_count > 5
-                else list(self.discovered_topics)
+                list(metric_topics)[:5]
+                if len(metric_topics) > 5
+                else list(metric_topics)
             )
 
             # Fill sample topics, ensure we have 5 placeholders even if fewer topics
             sample_topics = topics_sample + [""] * (5 - len(topics_sample))
 
-            _LOGGER.debug("Discovered %d topics: %s", topics_count, topics_sample)
+            _LOGGER.debug(
+                "Discovered %d topics (%d metrics, quality: %s): %s",
+                topics_count,
+                metric_count,
+                discovery_quality,
+                topics_sample,
+            )
 
             # Extract potential vehicle IDs from discovered topics
             potential_vehicle_ids = extract_vehicle_ids(
@@ -343,10 +354,28 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             self.debug_info["potential_vehicle_ids"] = list(potential_vehicle_ids)
+            self.debug_info["discovery_quality"] = discovery_quality
             _LOGGER.debug("Potential vehicle IDs: %s", potential_vehicle_ids)
+
+            # Generate quality message for user feedback
+            quality_messages = {
+                "excellent": "✅ Excellent - Your OVMS module is responding well with full metrics.",
+                "good": "✅ Good - Discovery completed successfully.",
+                "partial": "⚠️ Partial - Some metrics received. Additional entities may appear when module publishes more data.",
+                "minimal": "⚠️ Minimal - Very few metrics found. Ensure your OVMS module is online and publishing.",
+                "none": "❌ No metrics found. Check that your OVMS module is connected and configured for MQTT.",
+                "unknown": "Discovery completed.",
+            }
+            quality_message = quality_messages.get(
+                discovery_quality, quality_messages["unknown"]
+            )
 
             # Create a schema without the confirmation checkbox
             data_schema = vol.Schema({})
+
+            # Show warning if few topics found
+            if discovery_result.get("warning") == "few_topics":
+                errors["base"] = "few_topics_warning"
 
             return self.async_show_form(
                 step_id="topic_discovery",
@@ -354,6 +383,9 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors=errors,
                 description_placeholders={
                     "topic_count": str(topics_count),
+                    "metric_count": str(metric_count),
+                    "discovery_quality": discovery_quality,
+                    "quality_message": quality_message,
                     "sample_topic1": sample_topics[0],
                     "sample_topic2": sample_topics[1],
                     "sample_topic3": sample_topics[2],

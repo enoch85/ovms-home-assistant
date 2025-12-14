@@ -39,6 +39,9 @@ from ..const import (
     METRIC_REQUEST_TOPIC_TEMPLATE,
     ACTIVE_DISCOVERY_TIMEOUT,
     LEGACY_DISCOVERY_TIMEOUT,
+    MINIMUM_DISCOVERY_TOPICS,
+    GOOD_DISCOVERY_TOPICS,
+    EXCELLENT_DISCOVERY_TOPICS,
     LOGGER_NAME,
     ERROR_CANNOT_CONNECT,
     ERROR_TIMEOUT,
@@ -366,9 +369,15 @@ async def discover_topics(hass: HomeAssistant, config):
         # 1. First try active metric request (OVMS edge firmware) with short timeout
         # 2. If no/few topics found, fall back to legacy passive discovery
 
+        # Helper to count only metric topics (excludes /client/ command/response topics)
+        def count_metric_topics(topics):
+            """Count topics that are actual metrics, not command/response echoes."""
+            return sum(1 for t in topics if "/metric/" in t)
+
         # Track whether active discovery succeeded
         active_discovery_succeeded = False
-        topics_before_active = len(discovered_topics)
+        # Count only metric topics, not /client/ echoes (Issue 1 fix)
+        metric_topics_before = count_metric_topics(discovered_topics)
 
         # Phase 1: Try active metric request (OVMS edge firmware)
         _LOGGER.debug(
@@ -384,22 +393,24 @@ async def discover_topics(hass: HomeAssistant, config):
                 )
                 await asyncio.sleep(ACTIVE_DISCOVERY_TIMEOUT)
 
-                topics_after_active = len(discovered_topics)
-                new_topics = topics_after_active - topics_before_active
+                # Count only metric topics to avoid false success from echoed requests
+                metric_topics_after = count_metric_topics(discovered_topics)
+                new_metric_topics = metric_topics_after - metric_topics_before
 
-                if new_topics > 0:
+                if new_metric_topics > 0:
                     _LOGGER.info(
-                        "%s - Active discovery succeeded: received %d new topics",
+                        "%s - Active discovery succeeded: received %d new metric topics",
                         log_prefix,
-                        new_topics,
+                        new_metric_topics,
                     )
                     active_discovery_succeeded = True
                     debug_info["discovery_method"] = "active"
-                    debug_info["active_discovery_topics"] = new_topics
+                    debug_info["active_discovery_topics"] = new_metric_topics
                 else:
                     _LOGGER.debug(
-                        "%s - No response to active request, firmware may be older",
+                        "%s - No metric topics from active request (got %d total topics, may be echoes), firmware may be older",
                         log_prefix,
+                        len(discovered_topics) - metric_topics_before,
                     )
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.debug("%s - Active metric request failed: %s", log_prefix, ex)
@@ -475,10 +486,26 @@ async def discover_topics(hass: HomeAssistant, config):
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.debug("%s - Error disconnecting: %s", log_prefix, ex)
 
-        # Return the results
+        # Return the results with quality assessment (Issue 2 & 3 fix)
         topics_count = len(discovered_topics)
+        metric_topics = [t for t in discovered_topics if "/metric/" in t]
+        metric_count = len(metric_topics)
+
+        # Determine discovery quality for user feedback
+        if metric_count >= EXCELLENT_DISCOVERY_TOPICS:
+            discovery_quality = "excellent"
+        elif metric_count >= GOOD_DISCOVERY_TOPICS:
+            discovery_quality = "good"
+        elif metric_count >= MINIMUM_DISCOVERY_TOPICS:
+            discovery_quality = "partial"
+        elif metric_count > 0:
+            discovery_quality = "minimal"
+        else:
+            discovery_quality = "none"
 
         debug_info["topics_count"] = topics_count
+        debug_info["metric_count"] = metric_count
+        debug_info["discovery_quality"] = discovery_quality
         debug_info["discovered_topics"] = (
             list(discovered_topics)
             if len(discovered_topics) < 50
@@ -486,18 +513,35 @@ async def discover_topics(hass: HomeAssistant, config):
         )
 
         _LOGGER.debug(
-            "%s - Discovery complete. Found %d topics: %s",
+            "%s - Discovery complete. Found %d topics (%d metric topics, quality: %s): %s",
             log_prefix,
             topics_count,
-            list(discovered_topics)[:10],
+            metric_count,
+            discovery_quality,
+            list(metric_topics)[:10],
         )
 
-        return {
+        # Add warning if few metric topics found
+        result = {
             "success": True,
             "discovered_topics": discovered_topics,
             "topic_count": topics_count,
+            "metric_count": metric_count,
+            "discovery_quality": discovery_quality,
             "debug_info": debug_info,
         }
+
+        if metric_count < MINIMUM_DISCOVERY_TOPICS:
+            result["warning"] = "few_topics"
+            _LOGGER.warning(
+                "%s - Only %d metric topics found (minimum recommended: %d). "
+                "Check that your OVMS module is online and publishing metrics.",
+                log_prefix,
+                metric_count,
+                MINIMUM_DISCOVERY_TOPICS,
+            )
+
+        return result
 
     except socket.timeout:
         _LOGGER.error("%s - Connection timeout", log_prefix)
