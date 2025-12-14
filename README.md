@@ -498,6 +498,48 @@ The integration provides comprehensive location tracking:
 
 *Example of the combined device tracker with accuracy information*
 
+### Using OVMS Locations in Automations
+
+OVMS supports geofenced locations defined in your vehicle module (e.g., "home", "work"). When your vehicle enters or leaves a defined location, the `v.p.location` sensor updates to show the current location name.
+
+#### Location-Based Automations
+
+Use [state triggers](https://www.home-assistant.io/docs/automation/trigger/#state-trigger) on the `v.p.location` sensor:
+
+```yaml
+automation:
+  - alias: "Car arrived home"
+    triggers:
+      - trigger: state
+        entity_id: sensor.ovms_v_p_location
+        to: "home"
+    actions:
+      - action: light.turn_on
+        target:
+          entity_id: light.garage
+
+  - alias: "Car left home"
+    triggers:
+      - trigger: state
+        entity_id: sensor.ovms_v_p_location
+        from: "home"
+    actions:
+      - action: notify.mobile_app
+        data:
+          message: "Your car has left home"
+```
+
+#### Defining Locations in OVMS
+
+In the OVMS web UI, go to **Config → Locations** and add locations with name, coordinates, and radius. Or use the shell command:
+```
+location set home 51.5074,-0.1278 100
+```
+
+#### Using Home Assistant Zones (Optional)
+
+If you want to use HA's [zone triggers](https://www.home-assistant.io/docs/automation/trigger/#zone-trigger) with the device tracker (instead of state triggers on the sensor), create matching [zones](https://www.home-assistant.io/integrations/zone/) in Home Assistant at **Settings → Areas & Zones → Zones** with the same coordinates as your OVMS locations.
+
 ### State Preservation for Notification Topics in Home Assistant
 
 Notification topics in Home Assistant are inherently transient, representing momentary events rather than persistent states. As a result, the associated sensors typically remain active for a limited period before transitioning to an `unavailable` status—this behavior is by design.
