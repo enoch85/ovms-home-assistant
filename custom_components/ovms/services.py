@@ -6,7 +6,7 @@ from typing import Dict, Any
 
 import voluptuous as vol
 
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import config_validation as cv
 from homeassistant.exceptions import HomeAssistantError
 
@@ -533,12 +533,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.exception("Error in aux_monitor service: %s", ex)
             raise HomeAssistantError(f"Failed to manage 12V aux monitor: {ex}") from ex
 
-    # Register the services
+    # Register the services with response support for data-returning services
     hass.services.async_register(
         DOMAIN,
         SERVICE_SEND_COMMAND,
         async_send_command,
         schema=SEND_COMMAND_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
     hass.services.async_register(
@@ -546,6 +547,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_SET_FEATURE,
         async_set_feature,
         schema=SET_FEATURE_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
     hass.services.async_register(
@@ -553,6 +555,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_CONTROL_CLIMATE,
         async_control_climate,
         schema=CONTROL_CLIMATE_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
     hass.services.async_register(
@@ -560,6 +563,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_CONTROL_CHARGING,
         async_control_charging,
         schema=CONTROL_CHARGING_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
     hass.services.async_register(
@@ -567,6 +571,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_HOMELINK,
         async_homelink,
         schema=HOMELINK_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
     hass.services.async_register(
@@ -574,6 +579,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_CLIMATE_SCHEDULE,
         async_climate_schedule,
         schema=CLIMATE_SCHEDULE_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
     hass.services.async_register(
@@ -581,6 +587,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_TPMS_MAP,
         async_tpms_map,
         schema=TPMS_MAP_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
     hass.services.async_register(
@@ -588,6 +595,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_AUX_MONITOR,
         async_aux_monitor,
         schema=AUX_MONITOR_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
 

@@ -287,8 +287,11 @@ class CommandHandler:
                 # Clean up
                 del self.pending_commands[command_id]
             else:
-                _LOGGER.warning(
-                    "Received response for unknown command ID: %s", command_id
+                # This can happen with QoS 1 message redelivery or retained messages
+                _LOGGER.debug(
+                    "Received response for command ID not in pending list: %s "
+                    "(may be duplicate delivery or from another client)",
+                    command_id,
                 )
 
         except Exception as ex:

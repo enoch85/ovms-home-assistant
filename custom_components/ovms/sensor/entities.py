@@ -276,7 +276,8 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
 
             # Restore attributes if available, but clean up inconsistent ones
             if state.attributes:
-                # Don't overwrite entity attributes like unit, etc.
+                # Exclude entity attributes that should come from metric definitions,
+                # not from restored state (prevents stale cached values)
                 saved_attributes = {
                     k: v
                     for k, v in state.attributes.items()
@@ -614,7 +615,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
             # Restore attributes if available, but clean up inconsistent ones
             if state.attributes:
-                # Don't overwrite entity attributes like unit, etc.
+                # Exclude entity attributes that should come from metric definitions,
+                # not from restored state (prevents stale cached values)
                 saved_attributes = {
                     k: v
                     for k, v in state.attributes.items()
