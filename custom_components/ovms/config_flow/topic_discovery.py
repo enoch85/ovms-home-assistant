@@ -366,8 +366,9 @@ async def discover_topics(hass: HomeAssistant, config):
             }
 
         # Hybrid discovery strategy:
-        # 1. First try active metric request (OVMS edge firmware) with short timeout
-        # 2. If no/few topics found, fall back to legacy passive discovery
+        # 1. If retained messages already provided enough metrics, skip active/legacy
+        # 2. Otherwise try active metric request (OVMS edge firmware) with short timeout
+        # 3. If no/few topics found, fall back to legacy passive discovery
 
         # Helper to count only metric topics (excludes /client/ command/response topics)
         def count_metric_topics(topics):
@@ -379,41 +380,55 @@ async def discover_topics(hass: HomeAssistant, config):
         # Count only metric topics, not /client/ echoes (Issue 1 fix)
         metric_topics_before = count_metric_topics(discovered_topics)
 
-        # Phase 1: Try active metric request (OVMS edge firmware)
-        _LOGGER.debug(
-            "%s - Attempting active metric request (OVMS edge firmware)", log_prefix
-        )
-        try:
-            if request_all_metrics(mqttc, config, client_id, config.get(CONF_QOS, 1)):
-                # Wait for active discovery timeout
-                _LOGGER.debug(
-                    "%s - Waiting %d seconds for active discovery response",
-                    log_prefix,
-                    ACTIVE_DISCOVERY_TIMEOUT,
-                )
-                await asyncio.sleep(ACTIVE_DISCOVERY_TIMEOUT)
-
-                # Count only metric topics to avoid false success from echoed requests
-                metric_topics_after = count_metric_topics(discovered_topics)
-                new_metric_topics = metric_topics_after - metric_topics_before
-
-                if new_metric_topics > 0:
-                    _LOGGER.info(
-                        "%s - Active discovery succeeded: received %d new metric topics",
-                        log_prefix,
-                        new_metric_topics,
-                    )
-                    active_discovery_succeeded = True
-                    debug_info["discovery_method"] = "active"
-                    debug_info["active_discovery_topics"] = new_metric_topics
-                else:
+        # Check if retained messages already gave us enough metrics
+        # This happens when broker has retained messages from a running OVMS module
+        if metric_topics_before >= GOOD_DISCOVERY_TOPICS:
+            _LOGGER.info(
+                "%s - Already received %d metric topics from retained messages, skipping active discovery",
+                log_prefix,
+                metric_topics_before,
+            )
+            active_discovery_succeeded = True
+            debug_info["discovery_method"] = "retained"
+            debug_info["retained_metric_topics"] = metric_topics_before
+        else:
+            # Phase 1: Try active metric request (OVMS edge firmware)
+            _LOGGER.debug(
+                "%s - Attempting active metric request (OVMS edge firmware)", log_prefix
+            )
+            try:
+                if request_all_metrics(
+                    mqttc, config, client_id, config.get(CONF_QOS, 1)
+                ):
+                    # Wait for active discovery timeout
                     _LOGGER.debug(
-                        "%s - No metric topics from active request (got %d total topics, may be echoes), firmware may be older",
+                        "%s - Waiting %d seconds for active discovery response",
                         log_prefix,
-                        len(discovered_topics) - metric_topics_before,
+                        ACTIVE_DISCOVERY_TIMEOUT,
                     )
-        except Exception as ex:  # pylint: disable=broad-except
-            _LOGGER.debug("%s - Active metric request failed: %s", log_prefix, ex)
+                    await asyncio.sleep(ACTIVE_DISCOVERY_TIMEOUT)
+
+                    # Count only metric topics to avoid false success from echoed requests
+                    metric_topics_after = count_metric_topics(discovered_topics)
+                    new_metric_topics = metric_topics_after - metric_topics_before
+
+                    if new_metric_topics > 0:
+                        _LOGGER.info(
+                            "%s - Active discovery succeeded: received %d new metric topics",
+                            log_prefix,
+                            new_metric_topics,
+                        )
+                        active_discovery_succeeded = True
+                        debug_info["discovery_method"] = "active"
+                        debug_info["active_discovery_topics"] = new_metric_topics
+                    else:
+                        _LOGGER.debug(
+                            "%s - No metric topics from active request (got %d total topics, may be echoes), firmware may be older",
+                            log_prefix,
+                            len(discovered_topics) - metric_topics_before,
+                        )
+            except Exception as ex:  # pylint: disable=broad-except
+                _LOGGER.debug("%s - Active metric request failed: %s", log_prefix, ex)
 
         # Phase 2: Legacy discovery (wait for passive messages or send stat command)
         if not active_discovery_succeeded:
