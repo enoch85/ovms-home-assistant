@@ -110,6 +110,8 @@ def determine_sensor_type(
             result["state_class"] = metric_info["state_class"]
         if "unit" in metric_info:
             result["native_unit_of_measurement"] = metric_info["unit"]
+        if "suggested_unit" in metric_info:
+            result["suggested_unit_of_measurement"] = metric_info["suggested_unit"]
         if "entity_category" in metric_info:
             result["entity_category"] = metric_info["entity_category"]
         if "icon" in metric_info:

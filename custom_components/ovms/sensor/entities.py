@@ -128,9 +128,14 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         # Initialize device class and other attributes
         self._attr_device_class = attributes.get("device_class")
         self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_unit_of_measurement = attributes.get(
-            "unit_of_measurement"
-        ) or attributes.get("unit")
+        self._attr_native_unit_of_measurement = (
+            attributes.get("native_unit_of_measurement")
+            or attributes.get("unit_of_measurement")
+            or attributes.get("unit")
+        )
+        self._attr_suggested_unit_of_measurement = attributes.get(
+            "suggested_unit_of_measurement"
+        )
         self._attr_icon = attributes.get("icon")
         self._attr_suggested_display_precision = attributes.get(
             "suggested_display_precision"

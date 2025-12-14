@@ -17,11 +17,12 @@ from homeassistant.const import EntityCategory
 SYSTEM_METRICS = {
     "m.freeram": {
         "name": "Free RAM",
-        "description": "Total amount of free RAM in bytes",
+        "description": "Free RAM on OVMS module (ESP32)",
         "icon": "mdi:memory",
         "device_class": SensorDeviceClass.DATA_SIZE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfInformation.BYTES,
+        "suggested_unit": UnitOfInformation.KIBIBYTES,
         "category": "system",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
