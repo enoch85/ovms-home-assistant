@@ -34,7 +34,7 @@
       },
       "topic_discovery": {
         "title": "Descubrimiento de temas",
-        "description": "Se encontraron {topic_count} temas.\n\nEjemplos de temas:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nIDs de vehículos potenciales:\n• {potential_vehicle_ids}\n\nNota: Su broker MQTT puede retener temas de configuraciones anteriores.\nEl sistema selecciona automáticamente el ID de vehículo más probable basado en la estructura de temas - por favor verifique que las sugerencias sean correctas.\n\nPara restablecer los IDs de vehículos potenciales, elimine los temas no utilizados de su broker MQTT.",
+        "description": "Se encontraron {topic_count} temas ({metric_count} métricas).\n\n{quality_message}\n\nTemas de métricas de ejemplo:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nIDs de vehículos potenciales:\n• {potential_vehicle_ids}\n\nNota: Su broker MQTT puede retener temas de configuraciones anteriores.\nEl sistema selecciona automáticamente el ID de vehículo más probable basado en la estructura de temas - por favor verifique que las sugerencias sean correctas.\n\nPara restablecer los IDs de vehículos potenciales, elimine los temas no utilizados de su broker MQTT.",
         "data": {
           "retry_discovery": "Reintentar descubrimiento"
         }
@@ -53,6 +53,7 @@
       "timeout": "Tiempo de conexión agotado",
       "invalid_response": "Respuesta inválida del broker",
       "no_topics": "No se encontraron temas OVMS",
+      "few_topics_warning": "Se encontraron pocos temas de métricas. Su módulo OVMS puede estar desconectado o no está publicando. Puede continuar, pero algunas entidades pueden faltar.",
       "topic_access_denied": "Acceso denegado a los temas OVMS",
       "tls_error": "Error de configuración TLS/SSL",
       "unknown": "Error inesperado",
