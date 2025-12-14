@@ -316,10 +316,63 @@ The integration automatically detects your OVMS module's firmware version and di
 
 ### Services
 
-The integration provides several services to interact with your vehicle:
+The integration provides several services to interact with your vehicle. **All services now return responses** that can be viewed in the Home Assistant UI or used in automations.
 
-#### `ovms.send_command`
-Send any command to the OVMS module.
+#### Service Response Feature
+
+Starting with v1.5.1, all OVMS services return responses from your vehicle. This means you can:
+
+- **See responses in Developer Tools**: When testing services, responses appear directly in the UI
+- **Use responses in automations**: Capture command results using `response_variable`
+- **Debug commands easily**: Immediately see if a command succeeded or failed
+
+![Service Response](/assets/screenshot-service-response.png)
+
+*Example: The `send_command` service with `metrics list` showing the response panel*
+
+![Service Response Detail](/assets/screenshot-service-response-detail.png)
+
+*Example: Detailed response showing all available metrics from the vehicle*
+
+**Example automation using service response:**
+```yaml
+automation:
+  - alias: "Check 12V battery status"
+    triggers:
+      - trigger: time
+        at: "08:00:00"
+    actions:
+      - action: ovms.aux_monitor
+        data:
+          vehicle_id: your_vehicle_id
+          action: status
+        response_variable: aux_status
+      - action: notify.mobile_app
+        data:
+          message: "12V Status: {{ aux_status }}"
+```
+
+---
+
+## Services Reference
+
+The integration provides **8 services** for vehicle control and monitoring:
+
+| Service | Description | Returns Response |
+|---------|-------------|------------------|
+| `ovms.send_command` | Send any OVMS command | ✅ Yes |
+| `ovms.set_feature` | Set OVMS configuration | ✅ Yes |
+| `ovms.control_climate` | Control climate system | ✅ Yes |
+| `ovms.control_charging` | Control charging | ✅ Yes |
+| `ovms.homelink` | Trigger homelink buttons | ✅ Yes |
+| `ovms.climate_schedule` | Manage climate schedules | ✅ Yes |
+| `ovms.tpms_map` | TPMS sensor mapping | ✅ Yes |
+| `ovms.aux_monitor` | 12V battery monitoring | ✅ Yes |
+
+---
+
+### `ovms.send_command`
+Send any command to the OVMS module. This is the most flexible service - you can send any command your vehicle supports.
 
 ```yaml
 service: ovms.send_command
@@ -327,7 +380,7 @@ data:
   vehicle_id: your_vehicle_id
   command: stat
   parameters: range
-  timeout: 10  # Optional timeout in seconds
+  timeout: 10  # Optional timeout in seconds (default: 10, max: 60)
 ```
 
 Could be done as a button in HA:
@@ -356,7 +409,7 @@ name: "REG123: update all"
 
 #### Common OVMS Commands
 
-Here are some useful OVMS commands you can send through the service:
+Here are some useful OVMS commands you can send through the `send_command` service:
 
 | Command | Description | Example Parameters |
 |---------|-------------|-------------------|
@@ -374,7 +427,9 @@ Here are some useful OVMS commands you can send through the service:
 
 Commands are rate limited to 5 per minute by default to prevent overwhelming the vehicle. The integration implements exponential backoff for reconnection attempts when connectivity is lost.
 
-#### `ovms.set_feature`
+---
+
+### `ovms.set_feature`
 Set an OVMS configuration feature.
 
 ```yaml
@@ -385,7 +440,9 @@ data:
   value: feature_value
 ```
 
-#### `ovms.control_climate`
+---
+
+### `ovms.control_climate`
 Control the vehicle's climate system.
 
 ```yaml
@@ -393,11 +450,21 @@ service: ovms.control_climate
 data:
   vehicle_id: your_vehicle_id
   temperature: 21.5
-  hvac_mode: heat  # Options: off, heat, cool, auto
-  duration: 30  # Duration in minutes
+  hvac_mode: heat  # Options: on, off, heat, cool, auto
+  duration: 30  # Duration in minutes (1-60)
 ```
 
-#### `ovms.control_charging`
+**Parameters:**
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `vehicle_id` | Yes | Your vehicle ID |
+| `temperature` | No | Target temperature (15-30°C) |
+| `hvac_mode` | No | Mode: `on`, `off`, `heat`, `cool`, `auto` |
+| `duration` | No | Duration in minutes (1-60) |
+
+---
+
+### `ovms.control_charging`
 Control the vehicle's charging functions.
 
 ```yaml
@@ -409,12 +476,31 @@ data:
   limit: 80  # Percentage limit for charging
 ```
 
-### Homelink Control
+**Parameters:**
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `vehicle_id` | Yes | Your vehicle ID |
+| `action` | Yes | Action: `start`, `stop`, `status` |
+| `mode` | No | Mode: `standard`, `storage`, `range`, `performance` |
+| `limit` | No | Charge limit percentage (1-100%) |
 
-The integration provides a Homelink service that can trigger vehicle functions associated with Homelink buttons:
+---
 
-#### `ovms.homelink`
-Activate a Homelink button on the OVMS module. 
+### `ovms.homelink`
+Activate a Homelink button on the OVMS module.
+Control the vehicle's charging functions.
+
+```yaml
+service: ovms.control_charging
+data:
+  vehicle_id: your_vehicle_id
+  action: start  # Options: start, stop, status
+  mode: range  # Options: standard, storage, range, performance
+  limit: 80  # Percentage limit for charging
+```
+
+### `ovms.homelink`
+Activate a Homelink button on the OVMS module.
 
 ```yaml
 service: ovms.homelink
@@ -443,6 +529,122 @@ tap_action:
   service_data:
     vehicle_id: your_vehicle_id
     button: 1
+```
+
+---
+
+### `ovms.climate_schedule`
+Manage scheduled precondition times for the vehicle's climate system. Supports multiple times per day with individual durations.
+
+```yaml
+# Set a schedule
+service: ovms.climate_schedule
+data:
+  vehicle_id: your_vehicle_id
+  action: set
+  day: mon
+  times: "07:30/10,17:45/15"  # Format: HH:MM/duration_minutes
+
+# List all schedules
+service: ovms.climate_schedule
+data:
+  vehicle_id: your_vehicle_id
+  action: list
+
+# Copy schedule to other days
+service: ovms.climate_schedule
+data:
+  vehicle_id: your_vehicle_id
+  action: copy
+  day: mon
+  target_days: "tue-fri"  # Supports ranges and lists
+```
+
+**Parameters:**
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `vehicle_id` | Yes | Your vehicle ID |
+| `action` | Yes | Action: `set`, `list`, `clear`, `copy`, `enable`, `disable`, `status` |
+| `day` | For set/clear/copy | Day: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`, `all` |
+| `times` | For set | Times: `HH:MM/duration` format, comma-separated |
+| `target_days` | For copy | Target days: ranges like `tue-fri` or lists like `sat,sun` |
+
+---
+
+### `ovms.tpms_map`
+Manage TPMS sensor-to-wheel mapping for wheel rotation/swap scenarios.
+
+```yaml
+# Show current mapping
+service: ovms.tpms_map
+data:
+  vehicle_id: your_vehicle_id
+  action: status
+
+# Set new mapping after wheel rotation
+service: ovms.tpms_map
+data:
+  vehicle_id: your_vehicle_id
+  action: set
+  mapping: "fl=rr fr=fl rl=fr rr=rl"
+
+# Reset to default
+service: ovms.tpms_map
+data:
+  vehicle_id: your_vehicle_id
+  action: reset
+```
+
+**Parameters:**
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `vehicle_id` | Yes | Your vehicle ID |
+| `action` | Yes | Action: `status`, `get`, `set`, `reset` |
+| `mapping` | For set | Mapping using wheel positions: `fl`, `fr`, `rl`, `rr` |
+
+---
+
+### `ovms.aux_monitor`
+Control the 12V auxiliary battery monitor for automatic shutdown/reboot based on voltage levels.
+
+```yaml
+# Check status
+service: ovms.aux_monitor
+data:
+  vehicle_id: your_vehicle_id
+  action: status
+
+# Enable with custom thresholds
+service: ovms.aux_monitor
+data:
+  vehicle_id: your_vehicle_id
+  action: enable
+  low_threshold: 11.5
+  charging_threshold: 14.0
+
+# Disable monitoring
+service: ovms.aux_monitor
+data:
+  vehicle_id: your_vehicle_id
+  action: disable
+```
+
+**Parameters:**
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `vehicle_id` | Yes | Your vehicle ID |
+| `action` | Yes | Action: `status`, `enable`, `disable` |
+| `low_threshold` | No | Low voltage threshold (10.0-14.0V) |
+| `charging_threshold` | No | Charging voltage threshold (12.0-15.0V) |
+
+**Example response from `status` action:**
+```
+low thresh=11.50
+charge thresh=14.00
+8s avg=15.58v
+2s avg=15.59v
+diff=0.01v
+state=charging
 ```
 
 ## Communication Flow
