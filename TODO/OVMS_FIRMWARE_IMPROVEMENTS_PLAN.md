@@ -136,9 +136,15 @@ No changes required - skipping to Phase 3.
 
 ---
 
-## Phase 5: Climate Scheduling Service (LOWER PRIORITY)
+## Phase 5: Climate Scheduling Service (IMPLEMENTED ✓)
 
-### Firmware Feature
+### Status
+**IMPLEMENTED**: Climate schedule service added, but requires OVMS edge firmware.
+
+### Firmware Feature (EDGE FIRMWARE ONLY)
+**Important**: These commands are NOT available in 3.3.005 stable release.
+They require OVMS edge (unreleased) firmware.
+
 ```
 climatecontrol schedule set <day> <times>   -- Set schedule (format: HH:MM[/duration][,HH:MM...])
 climatecontrol schedule list                -- List all configured schedules
@@ -147,16 +153,18 @@ climatecontrol schedule enable/disable      -- Global switch
 climatecontrol schedule copy <src> <target> -- Copy schedules between days
 ```
 
-### Implementation Tasks
+### Changes Made
+1. Added `ovms.climate_schedule` service with all actions
+2. Added `ovms.tpms_map` service for TPMS sensor mapping (also edge-only)
+3. Added `ovms.aux_monitor` service for 12V battery monitoring (works on 3.3.005)
+4. Added firmware error detection to provide clear error messages when commands fail
 
-#### 5.1 Add Climate Schedule Service (`services.py`)
-- [ ] Add `ovms.set_climate_schedule` service
-- [ ] Add `ovms.get_climate_schedule` service
-- [ ] Add `ovms.clear_climate_schedule` service
-
-#### 5.2 Update Service Definitions (`services.yaml`)
-- [ ] Add schema for climate schedule services
-- [ ] Add translations
+### Implementation Tasks (COMPLETED)
+- [x] Add `ovms.climate_schedule` service
+- [x] Add `ovms.tpms_map` service  
+- [x] Add `ovms.aux_monitor` service
+- [x] Update service definitions in `services.yaml`
+- [x] Add firmware error detection for edge-only features
 
 ---
 
@@ -178,11 +186,20 @@ Response topic: <prefix>/client/<clientid>/config/<param>/<instance>
 ## Testing Checklist
 
 ### Per-Phase Testing
-- [ ] **Phase 1**: Test discovery with 3.3.005+ firmware AND older firmware
+- [ ] **Phase 1**: Test discovery with edge firmware AND 3.3.005 stable firmware
 - [ ] **Phase 2**: Verify new metrics appear correctly with proper units/icons
-- [ ] **Phase 3**: Confirm GPS accuracy displays correctly in device tracker
+- [ ] **Phase 3**: Confirm GPS accuracy displays correctly in device tracker (3.3.003+)
 - [ ] **Phase 4**: Review documentation for accuracy
-- [ ] **Phase 5**: Test climate scheduling with various vehicle types
+- [ ] **Phase 5**: Test climate/TPMS services - verify graceful error on 3.3.005
+
+### Firmware Version Matrix
+| Feature | 3.3.003 | 3.3.005 | Edge |
+|---------|---------|---------|------|
+| v.p.gpssq metric | ✅ | ✅ | ✅ |
+| aux_monitor service | ❌ | ✅ | ✅ |
+| climate_schedule service | ❌ | ❌ | ✅ |
+| tpms_map service | ❌ | ❌ | ✅ |
+| On-demand metric request | ❌ | ❌ | ✅ |
 
 ### Regression Testing
 - [ ] All existing sensors still work

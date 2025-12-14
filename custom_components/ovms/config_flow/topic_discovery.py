@@ -409,9 +409,15 @@ async def discover_topics(hass: HomeAssistant, config):
             _LOGGER.debug("%s - Falling back to legacy passive discovery", log_prefix)
             debug_info["discovery_method"] = "legacy"
 
-            # Wait for messages to arrive (shorter wait since we already waited)
-            _LOGGER.debug("%s - Waiting for passive messages", log_prefix)
-            await asyncio.sleep(3)  # Wait for up to 3 seconds
+            # Calculate remaining wait time for legacy discovery
+            # We already waited ACTIVE_DISCOVERY_TIMEOUT, so wait the difference
+            remaining_wait = max(0, LEGACY_DISCOVERY_TIMEOUT - ACTIVE_DISCOVERY_TIMEOUT)
+            _LOGGER.debug(
+                "%s - Legacy discovery: waiting %d seconds (total %d seconds)",
+                log_prefix,
+                remaining_wait,
+                LEGACY_DISCOVERY_TIMEOUT,
+            )
 
             # Try to publish a message to stimulate response
             try:
@@ -443,13 +449,19 @@ async def discover_topics(hass: HomeAssistant, config):
                         log_prefix,
                         alt_test_topic,
                     )
-
-                # Wait a bit longer for responses
-                await asyncio.sleep(2)
             except Exception as ex:  # pylint: disable=broad-except
                 _LOGGER.warning(
                     "%s - Error publishing test message: %s", log_prefix, ex
                 )
+
+            # Wait the remaining time for legacy discovery
+            if remaining_wait > 0:
+                _LOGGER.debug(
+                    "%s - Waiting %d seconds for passive discovery",
+                    log_prefix,
+                    remaining_wait,
+                )
+                await asyncio.sleep(remaining_wait)
                 _LOGGER.debug(
                     "%s - Test message error details: %s",
                     log_prefix,

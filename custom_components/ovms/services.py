@@ -15,6 +15,48 @@ from .utils import get_merged_config
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
+# Error message patterns that indicate firmware doesn't support a command
+FIRMWARE_UNSUPPORTED_PATTERNS = [
+    "Unrecognised command",
+    "unrecognised command",
+    "Unknown command",
+    "unknown command",
+    "Invalid command",
+    "invalid command",
+]
+
+# Minimum firmware versions for edge-only features
+EDGE_FIRMWARE_FEATURES = {
+    "climate_schedule": "climatecontrol schedule commands require OVMS edge firmware (not in 3.3.005)",
+    "tpms_map": "tpms map commands require OVMS edge firmware (not in 3.3.005)",
+}
+
+
+def _check_firmware_error(result: Dict[str, Any], feature_name: str) -> None:
+    """Check if a command result indicates firmware doesn't support the command.
+
+    Args:
+        result: The result dictionary from async_send_command
+        feature_name: The feature name for error messages (e.g., 'climate_schedule')
+
+    Raises:
+        HomeAssistantError: If the firmware doesn't support the command
+    """
+    if not result:
+        return
+
+    # Check for error responses
+    response = result.get("response", "")
+    if isinstance(response, str):
+        for pattern in FIRMWARE_UNSUPPORTED_PATTERNS:
+            if pattern in response:
+                hint = EDGE_FIRMWARE_FEATURES.get(feature_name, "")
+                error_msg = f"Command not supported by OVMS firmware: {response}"
+                if hint:
+                    error_msg += f". {hint}"
+                raise HomeAssistantError(error_msg)
+
+
 # Service name constants
 SERVICE_SEND_COMMAND = "send_command"
 SERVICE_SET_FEATURE = "set_feature"
@@ -320,6 +362,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
         Supports multiple times per day with individual durations.
         See OVMS firmware changes.txt for command details.
+
+        Note: This service requires OVMS edge firmware (not available in 3.3.005).
         """
         vehicle_id = call.data.get("vehicle_id")
         action = call.data.get("action")
@@ -373,6 +417,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             result = await mqtt_client.async_send_command(
                 command=command, parameters=parameters
             )
+
+            # Check for firmware-related errors
+            _check_firmware_error(result, "climate_schedule")
+
             return result
 
         except HomeAssistantError:
@@ -386,6 +434,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
         Used for wheel rotation/swap scenarios.
         See OVMS firmware changes.txt for command details.
+
+        Note: This service requires OVMS edge firmware (not available in 3.3.005).
         """
         vehicle_id = call.data.get("vehicle_id")
         action = call.data.get("action")
@@ -421,6 +471,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             result = await mqtt_client.async_send_command(
                 command=command, parameters=parameters
             )
+
+            # Check for firmware-related errors
+            _check_firmware_error(result, "tpms_map")
+
             return result
 
         except HomeAssistantError:
