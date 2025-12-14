@@ -3,6 +3,28 @@
 
 The [Open Vehicle Monitoring System (OVMS)](https://www.openvehicles.com/) integration for Home Assistant. Connect your electric vehicle with Home Assistant via MQTT, automatically creating sensors for all vehicle metrics.
 
+## Table of Contents
+
+| Section | Description |
+|---------|-------------|
+| [Overview](#overview) | What this integration does |
+| [Features](#features) | Full feature list |
+| [Requirements](#requirements) | Prerequisites and firmware versions |
+| [Screenshots](#screenshots) | Visual examples |
+| [Installation](#installation) | HACS and manual install |
+| [MQTT Broker Configuration](#mqtt-broker-configuration) | MQTT broker setup and ACL |
+| [OVMS Configuration](#ovms-configuration) | OVMS module setup |
+| [Home Assistant Configuration](#home-assistant-configuration) | Integration setup in HA |
+| [Using the Integration](#using-the-integration) | Entities and data formatting |
+| [Services Reference](#services-reference) | All 8 available services with examples |
+| [Communication Flow](#communication-flow) | How data moves |
+| [Location Tracking & GPS](#location-tracking--gps) | GPS and geofencing |
+| [Technical Details](#technical-details) | MQTT topics, entity classification |
+| [Troubleshooting](#troubleshooting) | Common issues and solutions |
+| [FAQ](#faq) | Frequently asked questions |
+
+---
+
 ## Overview
 
 [![ovms-home-assistant_downloads](https://img.shields.io/github/downloads/enoch85/ovms-home-assistant/total)](https://github.com/enoch85/ovms-home-assistant)
@@ -26,7 +48,7 @@ The [OVMS integration](https://docs.openvehicles.com/en/latest/userguide/homeass
 - **Command Interface**: Send commands to your vehicle through services with proper rate limiting
 - **Vehicle Status**: Track online/offline status of your vehicle automatically
 - **Secure Communication**: Supports TLS/SSL connections to MQTT brokers with certificate verification
-- **Vehicle-Specific Metrics**: Special support for VW e-UP!, Smart ForTwo, Nissan Leaf, Reanult Twizy, and MG ZS-EV - with additional vehicle models planned
+- **Vehicle-Specific Metrics**: Special support for VW e-UP!, Smart ForTwo, Nissan Leaf, Renault Twizy, and MG ZS-EV - with additional vehicle models planned
 - **Diagnostics Support**: Provides detailed diagnostics for troubleshooting
 - **Flexible Topic Structure**: Supports various MQTT topic structures including custom formats
 - **Multi-language Support**: Includes translations for English, French, German, Spanish, and Swedish
@@ -38,18 +60,6 @@ The [OVMS integration](https://docs.openvehicles.com/en/latest/userguide/homeass
 - **Dynamic Topic Discovery**: Sophisticated topic detection even with non-standard username patterns
 - **Combined Location Tracking**: Automatically creates unified device tracker from separate latitude/longitude entities
 - **Tire Pressure**: Keep track of your TPMS values
-
-## Technical Quality
-
-- **Code Structure**: Well-organized codebase with proper separation of concerns
-- **Error Handling**: Comprehensive error handling with detailed logging
-- **Type Hints**: Full Python type hinting for better code maintainability
-- **Security**: SSL/TLS support, credential protection, and input validation
-- **Standards Compliance**: Follows Home Assistant development guidelines
-- **Performance**: Efficient MQTT message processing with minimal overhead
-- **Reliability**: Connection recovery mechanisms with exponential backoff strategy
-- **Testing**: Automated validations via HACS and Hassfest
-- **Maintenance**: Structured release process with version control
 
 ## Requirements
 
@@ -65,9 +75,10 @@ The [OVMS integration](https://docs.openvehicles.com/en/latest/userguide/homeass
 | Version | Features |
 |---------|----------|
 | 3.3.001+ | Basic MQTT support |
+| 3.3.003+ | GPS signal quality metric (`v.p.gpssq`) |
 | 3.3.004+ | Improved stability |
 | 3.3.005 | Current stable release |
-| Edge | On-demand metric requests (faster setup), GPS signal quality (v.p.gpssq) |
+| Edge | On-demand metric requests (faster setup) |
 
 ### Reducing MQTT Traffic (Optional)
 
@@ -259,28 +270,7 @@ For testing purposes, you can:
 
 3. Check the Home Assistant logs for detailed information about discovered topics and created entities
 
-### Debugging and Logs
-
-*Warning! The debug output is substantial. It may fill your disk if you are not careful, don't leave it turned on.*
-
-The integration provides several levels of logging:
-
-- **Info Level**: Basic operational information (connections, entity creation)
-- **Debug Level**: Detailed information about topic discovery, message processing, and entity creation
-- **Warning/Error Levels**: Issues that might need attention
-
-Common log patterns to look for:
-
-- `Topic discovery completed` - Indicates successful MQTT topic scanning
-- `Adding sensor/binary_sensor/device_tracker` - Shows entity creation
-- `MQTT connection test completed` - Shows broker connection results
-- `Command response for...` - Shows command execution results
-
-To interpret logs effectively:
-1. Look for error messages indicating connection issues
-2. Check for topics being discovered correctly
-3. Verify entity creation messages for your expected metrics
-4. Watch for command results when testing integration functions
+> ⚠️ **Warning**: Debug logging produces substantial output. It may fill your disk if left enabled - don't forget to turn it off!
 
 ## Using the Integration
 
@@ -369,6 +359,12 @@ The integration provides **8 services** for vehicle control and monitoring:
 | `ovms.tpms_map` | TPMS sensor mapping | ✅ Yes |
 | `ovms.aux_monitor` | 12V battery monitoring | ✅ Yes |
 
+**How commands work (MQTT protocol):**
+1. Command is published to: `{prefix}/{username}/{vehicle_id}/client/rr/command/{command_id}`
+2. Response is received on: `{prefix}/{username}/{vehicle_id}/client/rr/response/{command_id}`
+3. Unique command IDs ensure responses are matched to requests
+4. Commands are rate limited to **5 per minute** to prevent overwhelming the vehicle
+
 ---
 
 ### `ovms.send_command`
@@ -424,8 +420,6 @@ Here are some useful OVMS commands you can send through the `send_command` servi
 | `metrics list` | List available metrics | `v.b.soc` |
 | `feature` | Toggle features | `vehicle` |
 | `notify raise` | Trigger notification | `alert.charge.stopped` |
-
-Commands are rate limited to 5 per minute by default to prevent overwhelming the vehicle. The integration implements exponential backoff for reconnection attempts when connectivity is lost.
 
 ---
 
@@ -485,19 +479,6 @@ data:
 | `limit` | No | Charge limit percentage (1-100%) |
 
 ---
-
-### `ovms.homelink`
-Activate a Homelink button on the OVMS module.
-Control the vehicle's charging functions.
-
-```yaml
-service: ovms.control_charging
-data:
-  vehicle_id: your_vehicle_id
-  action: start  # Options: start, stop, status
-  mode: range  # Options: standard, storage, range, performance
-  limit: 80  # Percentage limit for charging
-```
 
 ### `ovms.homelink`
 Activate a Homelink button on the OVMS module.
@@ -823,17 +804,6 @@ The integration uses pattern matching and metric definitions to determine entity
 - Numeric values become standard sensors
 - Array data (like cell voltages) is processed with statistical analysis
 
-### Command Protocol
-
-Commands use a request-response pattern:
-1. Command is published to: `{prefix}/{username}/{vehicle_id}/client/rr/command/{command_id}`
-2. Response is received on: `{prefix}/{username}/{vehicle_id}/client/rr/response/{command_id}`
-3. Unique command IDs ensure responses are matched to requests
-
-You can for example use the developer tool in Home Assistant to update all the metrics at once with this command:
-
-![send update all](/assets/send_update_all.png)
-
 ### Data Processing
 
 The integration includes sophisticated data processing:
@@ -895,7 +865,24 @@ This integration undergoes regular validation through:
 
 ## Troubleshooting
 
-*Warning! The debug output is substantial. It may fill your disk if you are not careful, don't leave it turned on.*
+> ⚠️ **Warning**: Debug logging produces substantial output. It may fill your disk if left enabled!
+
+To enable debug logging, add to your `configuration.yaml`:
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.ovms: debug
+```
+
+### Log Patterns to Look For
+
+| Pattern | Meaning |
+|---------|---------|
+| `Topic discovery completed` | Successful MQTT topic scanning |
+| `Adding sensor/binary_sensor/device_tracker` | Entity creation |
+| `MQTT connection test completed` | Broker connection results |
+| `Command response for...` | Command execution results |
 
 ### No Entities Created
 
