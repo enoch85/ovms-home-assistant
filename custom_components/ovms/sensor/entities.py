@@ -280,7 +280,13 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                 saved_attributes = {
                     k: v
                     for k, v in state.attributes.items()
-                    if k not in ["device_class", "state_class", "unit_of_measurement"]
+                    if k
+                    not in [
+                        "device_class",
+                        "state_class",
+                        "unit_of_measurement",
+                        "unit",
+                    ]
                 }
 
                 # Remove stale/inconsistent formatted attributes
@@ -612,7 +618,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 saved_attributes = {
                     k: v
                     for k, v in state.attributes.items()
-                    if k not in ["device_class", "state_class", "unit_of_measurement"]
+                    if k
+                    not in [
+                        "device_class",
+                        "state_class",
+                        "unit_of_measurement",
+                        "unit",
+                    ]
                 }
 
                 # Remove stale/inconsistent formatted attributes
