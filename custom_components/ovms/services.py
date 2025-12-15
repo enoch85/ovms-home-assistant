@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import config_validation as cv
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import CONF_VEHICLE_ID, DOMAIN, LOGGER_NAME
+from .const import CONF_VEHICLE_ID, DEFAULT_COMMAND_TIMEOUT, DOMAIN, LOGGER_NAME
 from .utils import get_merged_config
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -517,8 +517,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     async def async_refresh_metrics(call: ServiceCall) -> Dict[str, Any]:
         """Request metrics refresh from the OVMS module.
 
-        Uses on-demand metric request for edge firmware (fast, pattern-supported).
-        Falls back to 'server v3 update all' command for legacy firmware.
+        Uses 'server v3 update all' command which works with all firmware.
+        For edge firmware with pattern support, also sends on-demand request.
         """
         vehicle_id = call.data.get("vehicle_id")
         pattern = call.data.get("pattern", "*")
@@ -531,35 +531,30 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
         mqtt_client = get_mqtt_client_or_raise(vehicle_id)
 
-        # Try on-demand metric request first (edge firmware)
-        success = await mqtt_client.async_request_metrics(pattern)
-
-        if success:
-            return {
-                "success": True,
-                "method": "on-demand",
-                "pattern": pattern,
-                "message": f"Requested metrics with pattern '{pattern}' (edge firmware)",
-            }
-
-        # Fall back to legacy command for older firmware
-        _LOGGER.debug(
-            "On-demand request failed, falling back to 'server v3 update all'"
-        )
+        # Always use 'server v3 update all' as primary method - works universally
+        # The on-demand metric request only works with edge firmware and we can't
+        # reliably detect firmware version from MQTT publish success alone
         try:
             result = await mqtt_client.async_send_command(
                 command="server v3 update all",
-                timeout=10,
+                timeout=DEFAULT_COMMAND_TIMEOUT,
             )
+
+            # Also send on-demand request for edge firmware (non-blocking bonus)
+            # This provides pattern filtering for edge firmware users
+            if pattern != "*":
+                # Only send on-demand if user specified a pattern
+                await mqtt_client.async_request_metrics(pattern)
+
             return {
                 "success": True,
-                "method": "legacy",
-                "pattern": "*",  # Legacy doesn't support patterns
-                "message": "Requested all metrics via 'server v3 update all' (legacy firmware)",
+                "method": "server-command",
+                "pattern": pattern,
+                "message": "Requested all metrics via 'server v3 update all'",
                 "response": result.get("response", ""),
             }
-        except Exception as ex:
-            _LOGGER.warning("Legacy metric refresh failed: %s", ex)
+        except (OSError, TimeoutError, ValueError) as ex:
+            _LOGGER.warning("Metric refresh via server command failed: %s", ex)
             raise HomeAssistantError(
                 f"Failed to refresh metrics: {ex}. "
                 "Ensure your OVMS module is online and connected."

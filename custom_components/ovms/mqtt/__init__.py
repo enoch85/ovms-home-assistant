@@ -218,7 +218,11 @@ class OVMSMQTTClient:
             # Older firmware will ignore this, but retained messages + passive
             # publishes will still work
             _LOGGER.info("Reconnected to MQTT broker, requesting metrics refresh")
-            asyncio.create_task(self._async_request_metrics_on_reconnect())
+            # Use run_coroutine_threadsafe since this callback runs in paho thread
+            asyncio.run_coroutine_threadsafe(
+                self._async_request_metrics_on_reconnect(),
+                self.hass.loop,
+            )
 
     async def _async_request_metrics_on_reconnect(self) -> None:
         """Request all metrics after reconnecting to quickly refresh entity states.

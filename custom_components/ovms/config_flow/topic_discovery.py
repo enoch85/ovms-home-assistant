@@ -984,8 +984,8 @@ async def test_topic_availability(hass: HomeAssistant, config):
         _LOGGER.debug("%s - Sending test command to: %s", log_prefix, command_topic)
 
         try:
-            # Use 'stat' command which should work with OVMS
-            mqttc.publish(command_topic, "stat", qos=config.get(CONF_QOS, 1))
+            # Use '?' command - lists available commands, minimal, works with all firmware
+            mqttc.publish(command_topic, "?", qos=config.get(CONF_QOS, 1))
 
             # Wait for a response
             _LOGGER.debug("%s - Waiting for command response", log_prefix)
