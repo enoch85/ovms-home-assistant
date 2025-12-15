@@ -225,6 +225,7 @@ ERROR_UNKNOWN = "unknown"
 # Command rate limiting
 DEFAULT_COMMAND_RATE_LIMIT = 5  # commands per minute
 DEFAULT_COMMAND_RATE_PERIOD = 60.0  # seconds
+DEFAULT_COMMAND_TIMEOUT = 10  # seconds to wait for command response
 
 # Maximum length for state values in Home Assistant
 MAX_STATE_LENGTH = 255
