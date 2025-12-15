@@ -182,7 +182,12 @@ GOOD_DISCOVERY_PERCENT = 25  # Skip active discovery if this percentage already 
 
 # Generic vehicle fallback (vehicle-specific values are in metrics/vehicles/)
 GENERIC_VEHICLE_TYPE = "generic"
-GENERIC_VEHICLE_NAME = "Generic OVMS"
+GENERIC_VEHICLE_NAME = "OVMS Vehicle"
+# Expected metric count for generic OVMS vehicles (baseline for discovery percentage)
+# This is dynamically calculated from common metric categories (battery, charging,
+# climate, door, location, motor, trip, device, diagnostic, power, network, system, tire)
+# Used as fallback when vehicle type detection fails during discovery
+DEFAULT_EXPECTED_METRICS = 196
 
 # Logger
 LOGGER_NAME = "custom_components.ovms"

@@ -69,7 +69,7 @@ def detect_vehicle_type(topics: Set[str]) -> tuple[str, str]:
 
     Returns:
         Tuple of (vehicle_type_id, vehicle_type_name)
-        e.g., ("vw_eup", "VW e-UP!") or ("generic", "Generic OVMS")
+        e.g., ("vw_eup", "VW e-UP!") or ("generic", "OVMS Vehicle")
     """
     for topic in topics:
         # Extract metric path from topic (last part after /metric/)

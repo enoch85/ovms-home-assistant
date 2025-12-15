@@ -452,10 +452,25 @@ def main():
     if result.passed:
         print_success("Black formatting check passed")
     else:
-        print_error(result.message)
+        print_warning("Black formatting issues detected, auto-fixing...")
         for issue in result.warnings:
-            print_error(f"  {issue}")
-        black_errors = 1
+            print_warning(f"  {issue}")
+        # Auto-fix with black
+        import subprocess
+        try:
+            fix_result = subprocess.run(
+                ["black", str(validator.custom_components_path), "--line-length", "88"],
+                capture_output=True,
+                text=True,
+            )
+            if fix_result.returncode == 0:
+                print_success("Black formatting auto-fixed successfully")
+            else:
+                print_error("Black auto-fix failed")
+                black_errors = 1
+        except Exception as e:
+            print_error(f"Failed to auto-fix: {e}")
+            black_errors = 1
 
     # Test file structure
     print_colored("\n📁 Testing File Structure:", Colors.WHITE)
