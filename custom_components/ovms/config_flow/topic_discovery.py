@@ -28,6 +28,7 @@ from ..const import (
     CONF_VEHICLE_ID,
     CONF_QOS,
     CONF_VERIFY_SSL,
+    DEFAULT_QOS,
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_TOPIC_STRUCTURE,
     DEFAULT_VERIFY_SSL,
@@ -386,7 +387,7 @@ async def discover_topics(hass: HomeAssistant, config):
             _LOGGER.debug(
                 "%s - Subscribing to discovery topic: %s", log_prefix, discovery_topic
             )
-            mqttc.subscribe(discovery_topic, qos=config.get(CONF_QOS, 1))
+            mqttc.subscribe(discovery_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
     def on_message(_, __, msg):
         """Handle incoming messages."""
@@ -548,7 +549,7 @@ async def discover_topics(hass: HomeAssistant, config):
             )
             try:
                 if request_all_metrics(
-                    mqttc, config, client_id, config.get(CONF_QOS, 1)
+                    mqttc, config, client_id, config.get(CONF_QOS, DEFAULT_QOS)
                 ):
                     # Wait for active discovery timeout
                     _LOGGER.debug(
@@ -811,12 +812,12 @@ async def test_topic_availability(hass: HomeAssistant, config):
         if rc == 0:
             # Subscribe to general topics and response topic
             _LOGGER.debug("%s - Subscribing to general topic: %s", log_prefix, topic)
-            mqttc.subscribe(topic, qos=config.get(CONF_QOS, 1))
+            mqttc.subscribe(topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
             _LOGGER.debug(
                 "%s - Subscribing to response topic: %s", log_prefix, response_topic
             )
-            mqttc.subscribe(response_topic, qos=config.get(CONF_QOS, 1))
+            mqttc.subscribe(response_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
             # Also try a direct subscription to known topic patterns
             prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
@@ -830,7 +831,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
                         log_prefix,
                         direct_topic,
                     )
-                    mqttc.subscribe(direct_topic, qos=config.get(CONF_QOS, 1))
+                    mqttc.subscribe(direct_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
                 # Also try with the pattern matching any username
                 alt_topic = f"{prefix}/+/{vehicle_id}/#"
@@ -839,7 +840,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
                     log_prefix,
                     alt_topic,
                 )
-                mqttc.subscribe(alt_topic, qos=config.get(CONF_QOS, 1))
+                mqttc.subscribe(alt_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
     def on_message(_, __, msg):
         """Handle incoming messages."""
@@ -985,7 +986,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
 
         try:
             # Use '?' command - lists available commands, minimal, works with all firmware
-            mqttc.publish(command_topic, "?", qos=config.get(CONF_QOS, 1))
+            mqttc.publish(command_topic, "?", qos=config.get(CONF_QOS, DEFAULT_QOS))
 
             # Wait for a response
             _LOGGER.debug("%s - Waiting for command response", log_prefix)

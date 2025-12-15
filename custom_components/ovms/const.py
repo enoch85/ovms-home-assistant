@@ -171,6 +171,8 @@ CONFIG_RESPONSE_TOPIC_TEMPLATE = (
 # Legacy discovery passively waits for OVMS to publish metrics (older firmware)
 ACTIVE_DISCOVERY_TIMEOUT = 10  # seconds to wait after requesting metrics
 LEGACY_DISCOVERY_TIMEOUT = 60  # fallback timeout for older firmware
+# Delay before requesting metrics after reconnection to ensure subscriptions are established
+RECONNECT_METRIC_REQUEST_DELAY = ACTIVE_DISCOVERY_TIMEOUT / 2  # 5 seconds
 
 # Discovery thresholds (percentage-based)
 # These are percentages of expected metrics for the detected vehicle type

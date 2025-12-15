@@ -17,7 +17,8 @@ from ..const import (
     METRIC_REQUEST_TOPIC_TEMPLATE,
     CONF_CLIENT_ID,
     CONF_QOS,
-    ACTIVE_DISCOVERY_TIMEOUT,
+    DEFAULT_QOS,
+    RECONNECT_METRIC_REQUEST_DELAY,
     GPS_ACCURACY_MIN_METERS,
     GPS_ACCURACY_MAX_METERS,
 )
@@ -236,7 +237,7 @@ class OVMSMQTTClient:
         """
         try:
             # Small delay to ensure subscriptions are active
-            await asyncio.sleep(ACTIVE_DISCOVERY_TIMEOUT / 2)
+            await asyncio.sleep(RECONNECT_METRIC_REQUEST_DELAY)
 
             if self.connected:
                 await self.async_request_metrics("*")
@@ -297,7 +298,7 @@ class OVMSMQTTClient:
             )
 
             # Publish the request
-            qos = self.config.get(CONF_QOS, 1)
+            qos = self.config.get(CONF_QOS, DEFAULT_QOS)
             success = await self.connection_manager.async_publish(
                 metric_request_topic, pattern, qos=qos
             )

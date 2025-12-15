@@ -15,6 +15,7 @@ from ..const import (
     CONF_VEHICLE_ID,
     DEFAULT_COMMAND_RATE_LIMIT,
     DEFAULT_COMMAND_RATE_PERIOD,
+    DEFAULT_QOS,
     COMMAND_TOPIC_TEMPLATE,
     RESPONSE_TOPIC_TEMPLATE,
 )
@@ -177,7 +178,7 @@ class CommandHandler:
             # Send the command
             _LOGGER.debug("Publishing command to %s: %s", command_topic, payload)
             if not await mqtt_client.async_publish(
-                command_topic, payload, qos=self.config.get(CONF_QOS)
+                command_topic, payload, qos=self.config.get(CONF_QOS, DEFAULT_QOS)
             ):
                 return {
                     "success": False,
