@@ -9,16 +9,16 @@ import traceback
 import uuid
 from typing import Dict, Any, Optional
 
-import paho.mqtt.client as mqtt  # pylint: disable=import-error
+import paho.mqtt.client as mqtt
 
-from homeassistant.const import (  # pylint: disable=import-error
+from homeassistant.const import (
     CONF_HOST,
     CONF_PASSWORD,
     CONF_PORT,
     CONF_USERNAME,
     CONF_PROTOCOL,
 )
-from homeassistant.core import HomeAssistant  # pylint: disable=import-error
+from homeassistant.core import HomeAssistant
 
 from ..const import (
     CONF_QOS,

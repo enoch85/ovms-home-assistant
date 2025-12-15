@@ -8,17 +8,17 @@ import time
 import uuid
 from typing import Any
 
-import voluptuous as vol  # pylint: disable=import-error
+import voluptuous as vol
 
-from homeassistant import config_entries  # pylint: disable=import-error
-from homeassistant.const import (  # pylint: disable=import-error
+from homeassistant import config_entries
+from homeassistant.const import (
     CONF_HOST,
     CONF_PASSWORD,
     CONF_PORT,
     CONF_USERNAME,
     CONF_PROTOCOL,
 )
-from homeassistant.core import callback  # pylint: disable=import-error
+from homeassistant.core import callback
 
 from ..const import (
     DOMAIN,

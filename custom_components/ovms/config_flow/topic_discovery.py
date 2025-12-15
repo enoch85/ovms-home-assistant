@@ -10,16 +10,17 @@ import traceback
 import uuid
 from typing import Dict, Any, Optional, Set
 
-import paho.mqtt.client as mqtt  # pylint: disable=import-error
+import paho.mqtt.client as mqtt
+from paho.mqtt import MQTTException
 
-from homeassistant.const import (  # pylint: disable=import-error
+from homeassistant.const import (
     CONF_HOST,
     CONF_PASSWORD,
     CONF_PORT,
     CONF_USERNAME,
     CONF_PROTOCOL,
 )
-from homeassistant.core import HomeAssistant  # pylint: disable=import-error
+from homeassistant.core import HomeAssistant
 
 from ..const import (
     CONF_MQTT_USERNAME,
@@ -578,7 +579,7 @@ async def discover_topics(hass: HomeAssistant, config):
                             log_prefix,
                             len(discovered_topics) - metric_topics_before,
                         )
-            except (mqtt.MQTTException, OSError, ValueError) as ex:
+            except (MQTTException, OSError, ValueError) as ex:
                 _LOGGER.debug("%s - Active metric request failed: %s", log_prefix, ex)
 
         # Phase 2: Passive discovery fallback
@@ -604,7 +605,7 @@ async def discover_topics(hass: HomeAssistant, config):
         mqttc.loop_stop()
         try:
             mqttc.disconnect()
-        except (mqtt.MQTTException, OSError) as ex:
+        except (MQTTException, OSError) as ex:
             _LOGGER.debug("%s - Error disconnecting: %s", log_prefix, ex)
 
         # Process discovery results
@@ -738,9 +739,11 @@ async def discover_topics(hass: HomeAssistant, config):
             "error_type": ERROR_CANNOT_CONNECT,
             "message": f"Connection error during topic discovery: {socket_err}",
         }
-    except (mqtt.MQTTException, ValueError, RuntimeError) as ex:
-        _LOGGER.error("%s - MQTT error: %s", log_prefix, ex)
-        _LOGGER.debug("%s - MQTT error details: %s", log_prefix, traceback.format_exc())
+    except (MQTTException, ValueError, RuntimeError) as ex:
+        _LOGGER.error("%s - Discovery error: %s", log_prefix, ex)
+        _LOGGER.debug(
+            "%s - Discovery error details: %s", log_prefix, traceback.format_exc()
+        )
         return {
             "success": False,
             "error_type": ERROR_UNKNOWN,
@@ -1000,7 +1003,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
                 _LOGGER.debug("%s - Command response received!", log_prefix)
             else:
                 _LOGGER.debug("%s - No command response received", log_prefix)
-        except (mqtt.MQTTException, OSError, ValueError) as ex:
+        except (MQTTException, OSError, ValueError) as ex:
             _LOGGER.warning("%s - Error sending command: %s", log_prefix, ex)
             _LOGGER.debug(
                 "%s - Command error details: %s", log_prefix, traceback.format_exc()
@@ -1015,7 +1018,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
         mqttc.loop_stop()
         try:
             mqttc.disconnect()
-        except (mqtt.MQTTException, OSError) as ex:
+        except (MQTTException, OSError) as ex:
             _LOGGER.debug("%s - Disconnect error (ignorable): %s", log_prefix, ex)
 
         # Check if we received any messages
@@ -1105,7 +1108,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
             "details": f"Socket error during topic testing: {socket_err}",
             "debug_info": debug_info,
         }
-    except (mqtt.MQTTException, ValueError, RuntimeError) as ex:
+    except (MQTTException, ValueError, RuntimeError) as ex:
         _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
         _LOGGER.debug(
             "%s - Unexpected error details: %s", log_prefix, traceback.format_exc()
