@@ -27,6 +27,7 @@ from ..const import (
     DEFAULT_EXPECTED_METRICS,
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_TOPIC_STRUCTURE,
+    GENERIC_VEHICLE_NAME,
     CONF_VEHICLE_ID,
     CONF_QOS,
     CONF_TOPIC_PREFIX,
@@ -322,7 +323,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             topics_count = len(self.discovered_topics or [])
             metric_count = discovery_result.get("metric_count", topics_count)
             vehicle_type = discovery_result.get("vehicle_type", "generic")
-            vehicle_name = discovery_result.get("vehicle_name", "OVMS Vehicle")
+            vehicle_name = discovery_result.get("vehicle_name", GENERIC_VEHICLE_NAME)
             expected_count = discovery_result.get(
                 "expected_count", DEFAULT_EXPECTED_METRICS
             )
