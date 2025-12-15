@@ -172,11 +172,15 @@ CONFIG_RESPONSE_TOPIC_TEMPLATE = (
 ACTIVE_DISCOVERY_TIMEOUT = 10  # seconds to wait after requesting metrics
 LEGACY_DISCOVERY_TIMEOUT = 60  # fallback timeout for older firmware
 
-# Discovery quality thresholds
-# Minimum metric topics needed for a "good" discovery (excludes /client/ topics)
-MINIMUM_DISCOVERY_TOPICS = 10  # Below this, show warning to user
-GOOD_DISCOVERY_TOPICS = 50  # Considered a good discovery
-EXCELLENT_DISCOVERY_TOPICS = 100  # Excellent discovery with most metrics
+# Discovery thresholds (percentage-based)
+# These are percentages of expected metrics for the detected vehicle type
+MINIMUM_DISCOVERY_PERCENT = 5  # Below this, show warning to user
+# Threshold for skipping active discovery when enough retained messages exist
+GOOD_DISCOVERY_PERCENT = 25  # Skip active discovery if this percentage already found
+
+# Generic vehicle fallback (vehicle-specific values are in metrics/vehicles/)
+GENERIC_VEHICLE_TYPE = "generic"
+GENERIC_VEHICLE_NAME = "Generic OVMS"
 
 # Logger
 LOGGER_NAME = "custom_components.ovms"

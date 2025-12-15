@@ -39,16 +39,135 @@ from ..const import (
     METRIC_REQUEST_TOPIC_TEMPLATE,
     ACTIVE_DISCOVERY_TIMEOUT,
     LEGACY_DISCOVERY_TIMEOUT,
-    MINIMUM_DISCOVERY_TOPICS,
-    GOOD_DISCOVERY_TOPICS,
-    EXCELLENT_DISCOVERY_TOPICS,
+    MINIMUM_DISCOVERY_PERCENT,
+    GOOD_DISCOVERY_PERCENT,
+    GENERIC_VEHICLE_TYPE,
+    GENERIC_VEHICLE_NAME,
     LOGGER_NAME,
     ERROR_CANNOT_CONNECT,
     ERROR_TIMEOUT,
     ERROR_UNKNOWN,
 )
+from ..metrics.vehicles import VEHICLE_TYPE_PREFIXES, VEHICLE_TYPE_NAMES
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
+
+def detect_vehicle_type(topics: Set[str]) -> tuple[str, str]:
+    """Detect vehicle type from discovered topics.
+
+    Looks for vehicle-specific metric prefixes (xvu., xse., xmg., xnl., xrt.)
+    in the topic paths to determine the vehicle type.
+
+    Args:
+        topics: Set of discovered MQTT topics
+
+    Returns:
+        Tuple of (vehicle_type_id, vehicle_type_name)
+        e.g., ("vw_eup", "VW e-UP!") or ("generic", "Generic OVMS")
+    """
+    for topic in topics:
+        # Extract metric path from topic (last part after /metric/)
+        if "/metric/" in topic:
+            metric_path = topic.split("/metric/")[-1]
+            # Check for vehicle-specific prefixes
+            for prefix, vehicle_type in VEHICLE_TYPE_PREFIXES.items():
+                if metric_path.startswith(prefix):
+                    vehicle_name = VEHICLE_TYPE_NAMES.get(vehicle_type, vehicle_type)
+                    _LOGGER.debug(
+                        "Detected vehicle type '%s' (%s) from topic: %s",
+                        vehicle_type,
+                        vehicle_name,
+                        topic,
+                    )
+                    return vehicle_type, vehicle_name
+
+    return GENERIC_VEHICLE_TYPE, GENERIC_VEHICLE_NAME
+
+
+def get_expected_metric_count(vehicle_type: str) -> int:
+    """Get the expected number of metrics for a vehicle type.
+
+    Calculates expected metrics by counting defined metrics from the metrics module.
+    This provides a dynamic count based on actual metric definitions.
+
+    Args:
+        vehicle_type: Vehicle type identifier (e.g., "vw_eup", "generic")
+
+    Returns:
+        Expected number of metrics for this vehicle type
+    """
+    # Import here to avoid circular imports
+    # pylint: disable=import-outside-toplevel
+    from ..metrics import METRIC_DEFINITIONS
+
+    # Common categories that apply to all vehicles
+    common_categories = [
+        "battery",
+        "charging",
+        "climate",
+        "door",
+        "location",
+        "motor",
+        "trip",
+        "device",
+        "diagnostic",
+        "power",
+        "network",
+        "system",
+        "tire",
+    ]
+
+    # Count common metrics
+    common_count = sum(
+        1 for v in METRIC_DEFINITIONS.values() if v.get("category") in common_categories
+    )
+
+    # Add vehicle-specific metrics if applicable
+    if vehicle_type != "generic":
+        vehicle_count = sum(
+            1 for v in METRIC_DEFINITIONS.values() if v.get("category") == vehicle_type
+        )
+        total = common_count + vehicle_count
+        _LOGGER.debug(
+            "Expected metrics for %s: %d common + %d vehicle-specific = %d total",
+            vehicle_type,
+            common_count,
+            vehicle_count,
+            total,
+        )
+        return total
+
+    _LOGGER.debug("Expected metrics for generic vehicle: %d common", common_count)
+    return common_count
+
+
+def calculate_discovery_percentage(
+    metric_count: int, expected_count: int
+) -> tuple[int, str]:
+    """Calculate discovery percentage and quality indicator.
+
+    Args:
+        metric_count: Number of metrics actually discovered
+        expected_count: Expected number of metrics for this vehicle type
+
+    Returns:
+        Tuple of (percentage, quality_indicator)
+        Quality indicator is emoji: ✅ (>=70%), ⚠️ (>=30%), ❌ (<30%)
+    """
+    if expected_count <= 0:
+        return 0, "❌"
+
+    percentage = min(100, int((metric_count / expected_count) * 100))
+
+    if percentage >= 70:
+        quality = "✅"
+    elif percentage >= 30:
+        quality = "⚠️"
+    else:
+        quality = "❌"
+
+    return percentage, quality
 
 
 def format_structure_prefix(config):
@@ -380,13 +499,25 @@ async def discover_topics(hass: HomeAssistant, config):
         # Count only metric topics, not /client/ echoes (Issue 1 fix)
         metric_topics_before = count_metric_topics(discovered_topics)
 
-        # Check if retained messages already gave us enough metrics
+        # Get expected metrics for percentage calculation
+        # We detect vehicle type early to calculate thresholds
+        vehicle_type_early, _ = detect_vehicle_type(discovered_topics)
+        expected_count_early = get_expected_metric_count(vehicle_type_early)
+        retained_percentage = (
+            int((metric_topics_before / expected_count_early) * 100)
+            if expected_count_early > 0
+            else 0
+        )
+
+        # Check if retained messages already gave us enough metrics (percentage-based)
         # This happens when broker has retained messages from a running OVMS module
-        if metric_topics_before >= GOOD_DISCOVERY_TOPICS:
+        if retained_percentage >= GOOD_DISCOVERY_PERCENT:
             _LOGGER.info(
-                "%s - Already received %d metric topics from retained messages, skipping active discovery",
+                "%s - Already received %d metric topics (%d%%) from retained messages, "
+                "skipping active discovery",
                 log_prefix,
                 metric_topics_before,
+                retained_percentage,
             )
             active_discovery_succeeded = True
             debug_info["discovery_method"] = "retained"
@@ -501,26 +632,24 @@ async def discover_topics(hass: HomeAssistant, config):
         except Exception as ex:  # pylint: disable=broad-except
             _LOGGER.debug("%s - Error disconnecting: %s", log_prefix, ex)
 
-        # Return the results with quality assessment (Issue 2 & 3 fix)
+        # Process discovery results
         topics_count = len(discovered_topics)
         metric_topics = [t for t in discovered_topics if "/metric/" in t]
         metric_count = len(metric_topics)
 
-        # Determine discovery quality for user feedback
-        if metric_count >= EXCELLENT_DISCOVERY_TOPICS:
-            discovery_quality = "excellent"
-        elif metric_count >= GOOD_DISCOVERY_TOPICS:
-            discovery_quality = "good"
-        elif metric_count >= MINIMUM_DISCOVERY_TOPICS:
-            discovery_quality = "partial"
-        elif metric_count > 0:
-            discovery_quality = "minimal"
-        else:
-            discovery_quality = "none"
+        # Detect vehicle type and calculate expected metrics
+        vehicle_type, vehicle_name = detect_vehicle_type(discovered_topics)
+        expected_count = get_expected_metric_count(vehicle_type)
+        discovery_percentage, quality_indicator = calculate_discovery_percentage(
+            metric_count, expected_count
+        )
 
         debug_info["topics_count"] = topics_count
         debug_info["metric_count"] = metric_count
-        debug_info["discovery_quality"] = discovery_quality
+        debug_info["vehicle_type"] = vehicle_type
+        debug_info["vehicle_name"] = vehicle_name
+        debug_info["expected_count"] = expected_count
+        debug_info["discovery_percentage"] = discovery_percentage
         debug_info["discovered_topics"] = (
             list(discovered_topics)
             if len(discovered_topics) < 50
@@ -528,32 +657,40 @@ async def discover_topics(hass: HomeAssistant, config):
         )
 
         _LOGGER.debug(
-            "%s - Discovery complete. Found %d topics (%d metric topics, quality: %s): %s",
+            "%s - Discovery complete. Found %d topics (%d metric topics). "
+            "Vehicle: %s. Coverage: %d%% (%d/%d expected)",
             log_prefix,
             topics_count,
             metric_count,
-            discovery_quality,
-            list(metric_topics)[:10],
+            vehicle_name,
+            discovery_percentage,
+            metric_count,
+            expected_count,
         )
 
-        # Add warning if few metric topics found
+        # Build result
         result = {
             "success": True,
             "discovered_topics": discovered_topics,
             "topic_count": topics_count,
             "metric_count": metric_count,
-            "discovery_quality": discovery_quality,
+            "vehicle_type": vehicle_type,
+            "vehicle_name": vehicle_name,
+            "expected_count": expected_count,
+            "discovery_percentage": discovery_percentage,
+            "quality_indicator": quality_indicator,
             "debug_info": debug_info,
         }
 
-        if metric_count < MINIMUM_DISCOVERY_TOPICS:
+        if discovery_percentage < MINIMUM_DISCOVERY_PERCENT:
             result["warning"] = "few_topics"
             _LOGGER.warning(
-                "%s - Only %d metric topics found (minimum recommended: %d). "
+                "%s - Only %d metric topics found (%d%%, minimum recommended: %d%%). "
                 "Check that your OVMS module is online and publishing metrics.",
                 log_prefix,
                 metric_count,
-                MINIMUM_DISCOVERY_TOPICS,
+                discovery_percentage,
+                MINIMUM_DISCOVERY_PERCENT,
             )
 
         return result

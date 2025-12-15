@@ -20,6 +20,11 @@ from homeassistant.const import (
     EntityCategory,
 )
 
+# Vehicle metadata
+VEHICLE_TYPE = "smart_fortwo"
+VEHICLE_NAME = "Smart EQ fortwo"
+METRIC_PREFIX = "xse."
+
 # Smart ForTwo specific metrics
 SMART_FORTWO_METRICS = {
     "xsq.bms.amp2": {

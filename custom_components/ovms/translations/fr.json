@@ -34,7 +34,7 @@
       },
       "topic_discovery": {
         "title": "Découverte des sujets",
-        "description": "{topic_count} sujets trouvés ({metric_count} métriques).\n\n{quality_message}\n\nExemples de sujets métriques:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nIDs de véhicules potentiels:\n• {potential_vehicle_ids}\n\nRemarque: Votre broker MQTT peut conserver des sujets de configurations précédentes.\nLe système sélectionne automatiquement l'ID de véhicule le plus probable en fonction de la structure des sujets - veuillez vérifier que les suggestions sont correctes.\n\nPour réinitialiser les IDs de véhicules potentiels, effacez les sujets inutilisés de votre broker MQTT.",
+        "description": "{quality_indicator} Détecté: **{vehicle_name}**\n\nDécouvert {metric_count} sur {expected_count} métriques attendues ({discovery_percentage}%)\n\nExemples de sujets:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nIDs de véhicules potentiels:\n• {potential_vehicle_ids}",
         "data": {
           "retry_discovery": "Réessayer la découverte"
         }
