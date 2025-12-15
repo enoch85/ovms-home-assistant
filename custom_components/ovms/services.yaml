@@ -306,3 +306,22 @@ aux_monitor:
           max: 15.0
           step: 0.1
           unit_of_measurement: "V"
+
+refresh_metrics:
+  name: Refresh metrics
+  description: Request a metrics refresh from the OVMS module. Uses fast on-demand requests on edge firmware, falls back to 'server v3 update all' on legacy firmware (3.3.005 and older).
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      description: ID of the vehicle
+      required: true
+      selector:
+        text:
+    pattern:
+      name: Pattern
+      description: "Metric pattern to request (edge firmware only). Use '*' for all metrics, or patterns like 'v.b.*' for battery metrics. Legacy firmware ignores this and updates all metrics."
+      required: false
+      default: "*"
+      example: "v.b.*"
+      selector:
+        text:

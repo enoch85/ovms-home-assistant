@@ -346,7 +346,7 @@ automation:
 
 ## Services Reference
 
-The integration provides **8 services** for vehicle control and monitoring:
+The integration provides **9 services** for vehicle control and monitoring:
 
 | Service | Description | Returns Response |
 |---------|-------------|------------------|
@@ -358,6 +358,7 @@ The integration provides **8 services** for vehicle control and monitoring:
 | `ovms.climate_schedule` | Manage climate schedules | ✅ Yes |
 | `ovms.tpms_map` | TPMS sensor mapping | ✅ Yes |
 | `ovms.aux_monitor` | 12V battery monitoring | ✅ Yes |
+| `ovms.refresh_metrics` | Request metrics refresh | ✅ Yes |
 
 **How commands work (MQTT protocol):**
 1. Command is published to: `{prefix}/{username}/{vehicle_id}/client/rr/command/{command_id}`
@@ -626,6 +627,52 @@ charge thresh=14.00
 2s avg=15.59v
 diff=0.01v
 state=charging
+```
+
+---
+
+### `ovms.refresh_metrics`
+Request a metrics refresh from the OVMS module. This service intelligently uses the best method based on your firmware version.
+
+```yaml
+# Refresh all metrics
+service: ovms.refresh_metrics
+data:
+  vehicle_id: your_vehicle_id
+
+# Refresh only battery metrics (edge firmware only)
+service: ovms.refresh_metrics
+data:
+  vehicle_id: your_vehicle_id
+  pattern: "v.b.*"
+
+# Refresh position/GPS metrics (edge firmware only)
+service: ovms.refresh_metrics
+data:
+  vehicle_id: your_vehicle_id
+  pattern: "v.p.*"
+```
+
+**Parameters:**
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `vehicle_id` | Yes | Your vehicle ID |
+| `pattern` | No | Metric pattern (default: `*` for all). Edge firmware supports patterns like `v.b.*`, `v.p.*`, `v.c.*` |
+
+**Firmware behavior:**
+| Firmware | Method | Pattern Support |
+|----------|--------|-----------------|
+| Edge | Fast on-demand request | ✅ Yes |
+| 3.3.005 and older | `server v3 update all` command | ❌ No (always refreshes all) |
+
+**Example response:**
+```json
+{
+  "success": true,
+  "method": "on-demand",
+  "pattern": "v.b.*",
+  "message": "Requested metrics with pattern 'v.b.*' (edge firmware)"
+}
 ```
 
 ## Communication Flow

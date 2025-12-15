@@ -66,6 +66,7 @@ SERVICE_HOMELINK = "homelink"
 SERVICE_CLIMATE_SCHEDULE = "climate_schedule"
 SERVICE_TPMS_MAP = "tpms_map"
 SERVICE_AUX_MONITOR = "aux_monitor"
+SERVICE_REFRESH_METRICS = "refresh_metrics"
 
 # Schema for the send_command service
 SEND_COMMAND_SCHEMA = vol.Schema(
@@ -150,6 +151,14 @@ AUX_MONITOR_SCHEMA = vol.Schema(
         vol.Required("action"): vol.In(["status", "enable", "disable"]),
         vol.Optional("low_threshold"): vol.Coerce(float),
         vol.Optional("charging_threshold"): vol.Coerce(float),
+    }
+)
+
+# Schema for the refresh_metrics service
+REFRESH_METRICS_SCHEMA = vol.Schema(
+    {
+        vol.Required("vehicle_id"): cv.string,
+        vol.Optional("pattern", default="*"): cv.string,
     }
 )
 
@@ -505,6 +514,57 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.exception("Error in aux_monitor service: %s", ex)
             raise HomeAssistantError(f"Failed to manage 12V aux monitor: {ex}") from ex
 
+    async def async_refresh_metrics(call: ServiceCall) -> Dict[str, Any]:
+        """Request metrics refresh from the OVMS module.
+
+        Uses on-demand metric request for edge firmware (fast, pattern-supported).
+        Falls back to 'server v3 update all' command for legacy firmware.
+        """
+        vehicle_id = call.data.get("vehicle_id")
+        pattern = call.data.get("pattern", "*")
+
+        _LOGGER.debug(
+            "Service call refresh_metrics for vehicle %s: pattern=%s",
+            vehicle_id,
+            pattern,
+        )
+
+        mqtt_client = get_mqtt_client_or_raise(vehicle_id)
+
+        # Try on-demand metric request first (edge firmware)
+        success = await mqtt_client.async_request_metrics(pattern)
+
+        if success:
+            return {
+                "success": True,
+                "method": "on-demand",
+                "pattern": pattern,
+                "message": f"Requested metrics with pattern '{pattern}' (edge firmware)",
+            }
+
+        # Fall back to legacy command for older firmware
+        _LOGGER.debug(
+            "On-demand request failed, falling back to 'server v3 update all'"
+        )
+        try:
+            result = await mqtt_client.async_send_command(
+                command="server v3 update all",
+                timeout=10,
+            )
+            return {
+                "success": True,
+                "method": "legacy",
+                "pattern": "*",  # Legacy doesn't support patterns
+                "message": "Requested all metrics via 'server v3 update all' (legacy firmware)",
+                "response": result.get("response", ""),
+            }
+        except Exception as ex:
+            _LOGGER.warning("Legacy metric refresh failed: %s", ex)
+            raise HomeAssistantError(
+                f"Failed to refresh metrics: {ex}. "
+                "Ensure your OVMS module is online and connected."
+            ) from ex
+
     # Register the services with response support for data-returning services
     hass.services.async_register(
         DOMAIN,
@@ -570,6 +630,14 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         supports_response=SupportsResponse.OPTIONAL,
     )
 
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_REFRESH_METRICS,
+        async_refresh_metrics,
+        schema=REFRESH_METRICS_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+
 
 async def async_unload_services(hass: HomeAssistant) -> None:
     """Unload OVMS services."""
@@ -582,6 +650,7 @@ async def async_unload_services(hass: HomeAssistant) -> None:
         SERVICE_CLIMATE_SCHEDULE,
         SERVICE_TPMS_MAP,
         SERVICE_AUX_MONITOR,
+        SERVICE_REFRESH_METRICS,
     ]
     for service in services:
         if hass.services.has_service(DOMAIN, service):
