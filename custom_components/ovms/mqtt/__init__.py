@@ -213,11 +213,15 @@ class OVMSMQTTClient:
         if not connected:
             self.reconnect_count += 1
         elif connected and not was_connected:
-            # Just reconnected - request all metrics to quickly refresh state
+            # Just connected/reconnected - request all metrics to quickly refresh state
             # This uses the on-demand feature in OVMS edge firmware
             # Older firmware will ignore this, but retained messages + passive
             # publishes will still work
-            _LOGGER.info("Reconnected to MQTT broker, requesting metrics refresh")
+            is_reconnect = self.reconnect_count > 0
+            if is_reconnect:
+                _LOGGER.info("Reconnected to MQTT broker, requesting metrics refresh")
+            else:
+                _LOGGER.info("Connected to MQTT broker, requesting initial metrics")
             # Use run_coroutine_threadsafe since this callback runs in paho thread
             asyncio.run_coroutine_threadsafe(
                 self._async_request_metrics_on_reconnect(),
