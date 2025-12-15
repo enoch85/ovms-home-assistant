@@ -287,10 +287,10 @@ class CommandHandler:
                 # Clean up
                 del self.pending_commands[command_id]
             else:
-                # This can happen with QoS 1 message redelivery or retained messages
+                # This can happen with QoS 1 message redelivery or stale messages
                 _LOGGER.debug(
                     "Received response for command ID not in pending list: %s "
-                    "(may be duplicate delivery or from another client)",
+                    "(may be duplicate QoS 1 delivery or from another client)",
                     command_id,
                 )
 

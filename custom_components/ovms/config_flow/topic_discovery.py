@@ -370,6 +370,7 @@ async def discover_topics(hass: HomeAssistant, config):
     mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
 
     discovered_topics = set()
+    retained_topics = set()  # Track topics received with retain flag
     connection_status = {"connected": False, "rc": None}
 
     # Define callbacks
@@ -393,12 +394,15 @@ async def discover_topics(hass: HomeAssistant, config):
     def on_message(_, __, msg):
         """Handle incoming messages."""
         _LOGGER.debug(
-            "%s - Message received on topic: %s (payload len: %d)",
+            "%s - Message received on topic: %s (payload len: %d, retained: %s)",
             log_prefix,
             msg.topic,
             len(msg.payload),
+            msg.retain,
         )
         discovered_topics.add(msg.topic)
+        if msg.retain:
+            retained_topics.add(msg.topic)
 
     def on_disconnect(_, __, rc, _properties=None):
         """Handle disconnection."""
@@ -490,7 +494,7 @@ async def discover_topics(hass: HomeAssistant, config):
             }
 
         # Hybrid discovery strategy:
-        # 1. If retained messages already provided enough metrics, skip active/legacy
+        # 1. If retained messages (msg.retain=True) already provided enough metrics, skip active/legacy
         # 2. Otherwise try active metric request (OVMS edge firmware) with short timeout
         # 3. If no/few topics found, fall back to legacy passive discovery
 
@@ -501,7 +505,9 @@ async def discover_topics(hass: HomeAssistant, config):
 
         # Track whether active discovery succeeded
         active_discovery_succeeded = False
-        # Count only metric topics, not /client/ echoes (Issue 1 fix)
+        # Count only retained metric topics (messages with MQTT retain flag set)
+        retained_metric_count = count_metric_topics(retained_topics)
+        # Store count before active request to measure new topics received
         metric_topics_before = count_metric_topics(discovered_topics)
 
         # Get expected metrics for percentage calculation
@@ -509,24 +515,35 @@ async def discover_topics(hass: HomeAssistant, config):
         vehicle_type_early, _ = detect_vehicle_type(discovered_topics)
         expected_count_early = get_expected_metric_count(vehicle_type_early)
         retained_percentage = (
-            int((metric_topics_before / expected_count_early) * 100)
+            int((retained_metric_count / expected_count_early) * 100)
             if expected_count_early > 0
             else 0
         )
 
-        # Check if retained messages already gave us enough metrics (percentage-based)
+        _LOGGER.debug(
+            "%s - Initial discovery stats: %d total metrics, %d retained (msg.retain=True), "
+            "%d%% of expected %d",
+            log_prefix,
+            metric_topics_before,
+            retained_metric_count,
+            retained_percentage,
+            expected_count_early,
+        )
+
+        # Check if retained messages (msg.retain=True) already gave us enough metrics
         # This happens when broker has retained messages from a running OVMS module
         if retained_percentage >= GOOD_DISCOVERY_PERCENT:
             _LOGGER.info(
-                "%s - Already received %d metric topics (%d%%) from retained messages, "
+                "%s - Already received %d retained metric topics (%d%% of expected), "
                 "skipping active discovery",
                 log_prefix,
-                metric_topics_before,
+                retained_metric_count,
                 retained_percentage,
             )
             active_discovery_succeeded = True
             debug_info["discovery_method"] = "retained"
-            debug_info["retained_metric_topics"] = metric_topics_before
+            debug_info["retained_metric_topics"] = retained_metric_count
+            debug_info["total_metric_topics"] = metric_topics_before
         else:
             # Phase 1: Try active metric request (OVMS edge firmware)
             _LOGGER.debug(
@@ -624,11 +641,6 @@ async def discover_topics(hass: HomeAssistant, config):
                     remaining_wait,
                 )
                 await asyncio.sleep(remaining_wait)
-                _LOGGER.debug(
-                    "%s - Test message error details: %s",
-                    log_prefix,
-                    traceback.format_exc(),
-                )
 
         # Clean up
         mqttc.loop_stop()
@@ -642,6 +654,29 @@ async def discover_topics(hass: HomeAssistant, config):
         metric_topics = [t for t in discovered_topics if "/metric/" in t]
         metric_count = len(metric_topics)
 
+        # Calculate retained message statistics
+        retained_count = len(retained_topics)
+        retained_metric_topics = [t for t in retained_topics if "/metric/" in t]
+        retained_metric_final = len(retained_metric_topics)
+        retained_percentage_of_total = (
+            int((retained_count / topics_count) * 100) if topics_count > 0 else 0
+        )
+        retained_metric_percentage = (
+            int((retained_metric_final / metric_count) * 100) if metric_count > 0 else 0
+        )
+
+        _LOGGER.debug(
+            "%s - Retained message stats: %d/%d total topics (%d%%), "
+            "%d/%d metric topics (%d%%) were retained",
+            log_prefix,
+            retained_count,
+            topics_count,
+            retained_percentage_of_total,
+            retained_metric_final,
+            metric_count,
+            retained_metric_percentage,
+        )
+
         # Detect vehicle type and calculate expected metrics
         vehicle_type, vehicle_name = detect_vehicle_type(discovered_topics)
         expected_count = get_expected_metric_count(vehicle_type)
@@ -651,6 +686,10 @@ async def discover_topics(hass: HomeAssistant, config):
 
         debug_info["topics_count"] = topics_count
         debug_info["metric_count"] = metric_count
+        debug_info["retained_total_count"] = retained_count
+        debug_info["retained_metric_count"] = retained_metric_final
+        debug_info["retained_percentage_of_total"] = retained_percentage_of_total
+        debug_info["retained_metric_percentage"] = retained_metric_percentage
         debug_info["vehicle_type"] = vehicle_type
         debug_info["vehicle_name"] = vehicle_name
         debug_info["expected_count"] = expected_count
@@ -679,6 +718,9 @@ async def discover_topics(hass: HomeAssistant, config):
             "discovered_topics": discovered_topics,
             "topic_count": topics_count,
             "metric_count": metric_count,
+            "retained_count": retained_count,
+            "retained_metric_count": retained_metric_final,
+            "retained_percentage": retained_metric_percentage,
             "vehicle_type": vehicle_type,
             "vehicle_name": vehicle_name,
             "expected_count": expected_count,

@@ -175,7 +175,7 @@ LEGACY_DISCOVERY_TIMEOUT = 60  # fallback timeout for older firmware
 # Discovery thresholds (percentage-based)
 # These are percentages of expected metrics for the detected vehicle type
 MINIMUM_DISCOVERY_PERCENT = 5  # Below this, show warning to user
-# Threshold for skipping active discovery when enough retained messages exist
+# Threshold for skipping active discovery when enough retained messages (msg.retain=True) exist
 GOOD_DISCOVERY_PERCENT = 25  # Skip active discovery if this percentage already found
 
 # Generic vehicle fallback (vehicle-specific values are in metrics/vehicles/)
