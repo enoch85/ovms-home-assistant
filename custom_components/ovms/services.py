@@ -167,8 +167,16 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     config = get_merged_config(entry)
                     if config.get(CONF_VEHICLE_ID) == vehicle_id:
                         return data["mqtt_client"]
-
         return None
+
+    def get_mqtt_client_or_raise(vehicle_id: str):
+        """Get MQTT client for vehicle or raise HomeAssistantError."""
+        mqtt_client = find_mqtt_client(vehicle_id)
+        if not mqtt_client:
+            raise HomeAssistantError(
+                f"No OVMS integration found for vehicle_id: {vehicle_id}"
+            )
+        return mqtt_client
 
     async def async_send_command(call: ServiceCall) -> Dict[str, Any]:
         """Send a command to the OVMS module."""
@@ -185,12 +193,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             parameters,
         )
 
-        # Find client synchronously first
-        mqtt_client = find_mqtt_client(vehicle_id)
-        if not mqtt_client:
-            raise HomeAssistantError(
-                f"No OVMS integration found for vehicle_id: {vehicle_id}"
-            )
+        mqtt_client = get_mqtt_client_or_raise(vehicle_id)
 
         try:
             # Send the command and get the result
@@ -218,12 +221,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             "Service call set_feature for vehicle %s: %s=%s", vehicle_id, feature, value
         )
 
-        # Find client synchronously first
-        mqtt_client = find_mqtt_client(vehicle_id)
-        if not mqtt_client:
-            raise HomeAssistantError(
-                f"No OVMS integration found for vehicle_id: {vehicle_id}"
-            )
+        mqtt_client = get_mqtt_client_or_raise(vehicle_id)
 
         try:
             # Format the command
@@ -250,12 +248,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
         _LOGGER.debug("Service call control_climate for vehicle %s", vehicle_id)
 
-        # Find client synchronously first
-        mqtt_client = find_mqtt_client(vehicle_id)
-        if not mqtt_client:
-            raise HomeAssistantError(
-                f"No OVMS integration found for vehicle_id: {vehicle_id}"
-            )
+        mqtt_client = get_mqtt_client_or_raise(vehicle_id)
 
         try:
             # Build the climate command
@@ -298,12 +291,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             "Service call control_charging for vehicle %s: %s", vehicle_id, action
         )
 
-        # Find client synchronously first
-        mqtt_client = find_mqtt_client(vehicle_id)
-        if not mqtt_client:
-            raise HomeAssistantError(
-                f"No OVMS integration found for vehicle_id: {vehicle_id}"
-            )
+        mqtt_client = get_mqtt_client_or_raise(vehicle_id)
 
         try:
             # Build the charge command
@@ -336,11 +324,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             "Service call homelink for vehicle %s: button %s", vehicle_id, button
         )
 
-        mqtt_client = find_mqtt_client(vehicle_id)
-        if not mqtt_client:
-            raise HomeAssistantError(
-                f"No OVMS integration found for vehicle_id: {vehicle_id}"
-            )
+        mqtt_client = get_mqtt_client_or_raise(vehicle_id)
 
         try:
             # Format the command
@@ -377,11 +361,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             action,
         )
 
-        mqtt_client = find_mqtt_client(vehicle_id)
-        if not mqtt_client:
-            raise HomeAssistantError(
-                f"No OVMS integration found for vehicle_id: {vehicle_id}"
-            )
+        mqtt_client = get_mqtt_client_or_raise(vehicle_id)
 
         try:
             # Build the climate schedule command
@@ -445,11 +425,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             "Service call tpms_map for vehicle %s: action=%s", vehicle_id, action
         )
 
-        mqtt_client = find_mqtt_client(vehicle_id)
-        if not mqtt_client:
-            raise HomeAssistantError(
-                f"No OVMS integration found for vehicle_id: {vehicle_id}"
-            )
+        mqtt_client = get_mqtt_client_or_raise(vehicle_id)
 
         try:
             # Build the TPMS map command
@@ -498,11 +474,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             "Service call aux_monitor for vehicle %s: action=%s", vehicle_id, action
         )
 
-        mqtt_client = find_mqtt_client(vehicle_id)
-        if not mqtt_client:
-            raise HomeAssistantError(
-                f"No OVMS integration found for vehicle_id: {vehicle_id}"
-            )
+        mqtt_client = get_mqtt_client_or_raise(vehicle_id)
 
         try:
             # Build the aux monitor command

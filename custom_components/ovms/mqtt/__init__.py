@@ -207,9 +207,37 @@ class OVMSMQTTClient:
 
     def _on_connection_change(self, connected: bool) -> None:
         """Handle connection state changes."""
+        was_connected = self.connected
         self.connected = connected
+
         if not connected:
             self.reconnect_count += 1
+        elif connected and not was_connected:
+            # Just reconnected - request all metrics to quickly refresh state
+            # This uses the on-demand feature in OVMS edge firmware
+            # Older firmware will ignore this, but retained messages + passive
+            # publishes will still work
+            _LOGGER.info("Reconnected to MQTT broker, requesting metrics refresh")
+            asyncio.create_task(self._async_request_metrics_on_reconnect())
+
+    async def _async_request_metrics_on_reconnect(self) -> None:
+        """Request all metrics after reconnecting to quickly refresh entity states.
+
+        This is called automatically after a successful reconnection.
+        Uses a small delay to ensure subscriptions are fully established first.
+        """
+        try:
+            # Small delay to ensure subscriptions are active
+            await asyncio.sleep(ACTIVE_DISCOVERY_TIMEOUT / 2)
+
+            if self.connected:
+                await self.async_request_metrics("*")
+        except asyncio.CancelledError:
+            # Task was cancelled (e.g., during shutdown) - expected, don't log
+            pass
+        except (OSError, ValueError) as ex:
+            # Non-critical - passive updates will still work
+            _LOGGER.debug("Metric request on reconnect failed (non-critical): %s", ex)
 
     @property
     def structure_prefix(self) -> str:

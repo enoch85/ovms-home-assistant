@@ -580,60 +580,20 @@ async def discover_topics(hass: HomeAssistant, config):
             except (mqtt.MQTTException, OSError, ValueError) as ex:
                 _LOGGER.debug("%s - Active metric request failed: %s", log_prefix, ex)
 
-        # Phase 2: Legacy discovery (wait for passive messages or send stat command)
+        # Phase 2: Passive discovery fallback
+        # If active discovery didn't work (older firmware), just wait for passive publishes
+        # Note: The old "stat" command workaround was removed - it only returns text
+        # to the response topic, it doesn't publish metrics to their normal topics
         if not active_discovery_succeeded:
-            _LOGGER.debug("%s - Falling back to legacy passive discovery", log_prefix)
-            debug_info["discovery_method"] = "legacy"
+            _LOGGER.debug("%s - Falling back to passive discovery", log_prefix)
+            debug_info["discovery_method"] = "passive"
 
-            # Calculate remaining wait time for legacy discovery
-            # We already waited ACTIVE_DISCOVERY_TIMEOUT, so wait the difference
+            # Calculate remaining wait time
+            # Retained messages already arrived, passive publishes fill gaps
             remaining_wait = max(0, LEGACY_DISCOVERY_TIMEOUT - ACTIVE_DISCOVERY_TIMEOUT)
-            _LOGGER.debug(
-                "%s - Legacy discovery: waiting %d seconds (total %d seconds)",
-                log_prefix,
-                remaining_wait,
-                LEGACY_DISCOVERY_TIMEOUT,
-            )
-
-            # Try to publish a message to stimulate response
-            try:
-                _LOGGER.debug(
-                    "%s - Publishing test message to stimulate responses", log_prefix
-                )
-                command_id = uuid.uuid4().hex[:8]
-                # Use a generic discovery command - this will be ignored if structure wrong
-                # but might trigger responses from OVMS modules
-                test_topic = f"{topic_prefix}/client/rr/command/{command_id}"
-                test_payload = "stat"
-
-                mqttc.publish(test_topic, test_payload, qos=config.get(CONF_QOS, 1))
-                _LOGGER.debug(
-                    "%s - Test message published to %s", log_prefix, test_topic
-                )
-
-                # Also try a more generic topic to catch any responding devices
-                vehicle_id = config.get(CONF_VEHICLE_ID, "")
-                if vehicle_id:
-                    alt_test_topic = (
-                        f"{topic_prefix}/+/{vehicle_id}/client/rr/command/{command_id}"
-                    )
-                    mqttc.publish(
-                        alt_test_topic, test_payload, qos=config.get(CONF_QOS, 1)
-                    )
-                    _LOGGER.debug(
-                        "%s - Also testing alternative topic: %s",
-                        log_prefix,
-                        alt_test_topic,
-                    )
-            except (mqtt.MQTTException, OSError, ValueError) as ex:
-                _LOGGER.warning(
-                    "%s - Error publishing test message: %s", log_prefix, ex
-                )
-
-            # Wait the remaining time for legacy discovery
             if remaining_wait > 0:
                 _LOGGER.debug(
-                    "%s - Waiting %d seconds for passive discovery",
+                    "%s - Waiting %d seconds for passive metric publishes",
                     log_prefix,
                     remaining_wait,
                 )
