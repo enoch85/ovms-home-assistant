@@ -59,6 +59,9 @@ def detect_vehicle_type(topics: Set[str]) -> tuple[str, str]:
     Looks for vehicle-specific metric prefixes (xvu., xse., xmg., xnl., xrt.)
     in the topic paths to determine the vehicle type.
 
+    Note: MQTT topics use slashes (xvu/b/c/soh) while metric definitions use
+    dots (xvu.b.c.soh), so we convert the prefix dots to slashes for matching.
+
     Args:
         topics: Set of discovered MQTT topics
 
@@ -71,8 +74,10 @@ def detect_vehicle_type(topics: Set[str]) -> tuple[str, str]:
         if "/metric/" in topic:
             metric_path = topic.split("/metric/")[-1]
             # Check for vehicle-specific prefixes
+            # Convert dot to slash: "xvu." -> "xvu/" for MQTT topic matching
             for prefix, vehicle_type in VEHICLE_TYPE_PREFIXES.items():
-                if metric_path.startswith(prefix):
+                topic_prefix = prefix.replace(".", "/")
+                if metric_path.startswith(topic_prefix):
                     vehicle_name = VEHICLE_TYPE_NAMES.get(vehicle_type, vehicle_type)
                     _LOGGER.debug(
                         "Detected vehicle type '%s' (%s) from topic: %s",

@@ -34,7 +34,7 @@
       },
       "topic_discovery": {
         "title": "Themenerkennung",
-        "description": "{quality_indicator} Erkannt: **{vehicle_name}**\n\n{metric_count} von {expected_count} erwarteten Metriken gefunden ({discovery_percentage}%)\n\nBeispiel-Themen:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nMögliche Fahrzeug-IDs:\n• {potential_vehicle_ids}",
+        "description": "{quality_indicator} Erkannt: **{vehicle_name}**\n\n{metric_count} von {expected_count} erwarteten Metriken gefunden ({discovery_percentage}%)\n\nBeispiel-Themen:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nMögliche Fahrzeug-IDs:\n• {potential_vehicle_ids}\n\nHinweis: Ihr MQTT-Broker kann Themen aus früheren Konfigurationen beibehalten. Das System wählt automatisch die wahrscheinlichste Fahrzeug-ID basierend auf der Themenstruktur - bitte überprüfen Sie, ob die Vorschläge korrekt sind.\n\nUm potenzielle Fahrzeug-IDs zurückzusetzen, löschen Sie unbenutzte Themen von Ihrem MQTT-Broker.",
         "data": {
           "retry_discovery": "Erkennung wiederholen"
         }

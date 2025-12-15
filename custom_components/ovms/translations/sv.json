@@ -34,7 +34,7 @@
       },
       "topic_discovery": {
         "title": "Ämnesupptäckt",
-        "description": "{quality_indicator} Upptäckt: **{vehicle_name}**\n\nHittade {metric_count} av {expected_count} förväntade metriker ({discovery_percentage}%)\n\nExempel på ämnen:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nMöjliga fordons-ID:\n• {potential_vehicle_ids}",
+        "description": "{quality_indicator} Upptäckt: **{vehicle_name}**\n\nHittade {metric_count} av {expected_count} förväntade metriker ({discovery_percentage}%)\n\nExempel på ämnen:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nMöjliga fordons-ID:\n• {potential_vehicle_ids}\n\nObs: Din MQTT-broker kan behålla ämnen från tidigare konfigurationer. Systemet väljer automatiskt det mest troliga fordons-ID baserat på ämnesstrukturen - var god verifiera att förslagen är korrekta.\n\nFör att återställa möjliga fordons-ID, rensa oanvända ämnen från din MQTT-broker.",
         "data": {
           "retry_discovery": "Försök igen"
         }

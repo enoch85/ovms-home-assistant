@@ -34,7 +34,7 @@
       },
       "topic_discovery": {
         "title": "Descubrimiento de temas",
-        "description": "{quality_indicator} Detectado: **{vehicle_name}**\n\nDescubiertas {metric_count} de {expected_count} métricas esperadas ({discovery_percentage}%)\n\nTemas de ejemplo:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nIDs de vehículos potenciales:\n• {potential_vehicle_ids}",
+        "description": "{quality_indicator} Detectado: **{vehicle_name}**\n\nDescubiertas {metric_count} de {expected_count} métricas esperadas ({discovery_percentage}%)\n\nTemas de ejemplo:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nIDs de vehículos potenciales:\n• {potential_vehicle_ids}\n\nNota: Su broker MQTT puede retener temas de configuraciones anteriores. El sistema selecciona automáticamente el ID de vehículo más probable basado en la estructura de temas - por favor verifique que las sugerencias sean correctas.\n\nPara restablecer los IDs de vehículos potenciales, elimine los temas no utilizados de su broker MQTT.",
         "data": {
           "retry_discovery": "Reintentar descubrimiento"
         }
