@@ -1,14 +1,52 @@
 """Vehicle-specific metrics for OVMS integration."""
 
-from .vw_eup import VW_EUP_METRICS
-from .smart_fortwo import SMART_FORTWO_METRICS
-from .mg_zs_ev import MG_ZS_EV_METRICS
-from .nissan_leaf import NISSAN_LEAF_METRICS
-from .renault_twizy import RENAULT_TWIZY_METRICS
+from .vw_eup import (
+    VW_EUP_METRICS,
+    VEHICLE_TYPE as VW_EUP_TYPE,
+    VEHICLE_NAME as VW_EUP_NAME,
+    METRIC_PREFIX as VW_EUP_PREFIX,
+)
+from .smart_fortwo import (
+    SMART_FORTWO_METRICS,
+    VEHICLE_TYPE as SMART_FORTWO_TYPE,
+    VEHICLE_NAME as SMART_FORTWO_NAME,
+    METRIC_PREFIX as SMART_FORTWO_PREFIX,
+)
+from .mg_zs_ev import (
+    MG_ZS_EV_METRICS,
+    VEHICLE_TYPE as MG_ZS_EV_TYPE,
+    VEHICLE_NAME as MG_ZS_EV_NAME,
+    METRIC_PREFIX as MG_ZS_EV_PREFIX,
+)
+from .nissan_leaf import (
+    NISSAN_LEAF_METRICS,
+    VEHICLE_TYPE as NISSAN_LEAF_TYPE,
+    VEHICLE_NAME as NISSAN_LEAF_NAME,
+    METRIC_PREFIX as NISSAN_LEAF_PREFIX,
+)
+from .renault_twizy import (
+    RENAULT_TWIZY_METRICS,
+    VEHICLE_TYPE as RENAULT_TWIZY_TYPE,
+    VEHICLE_NAME as RENAULT_TWIZY_NAME,
+    METRIC_PREFIX as RENAULT_TWIZY_PREFIX,
+)
 
-# Add imports for future vehicle-specific metric sets here
-# from .tesla_model_s import TESLA_MODEL_S_METRICS
-# from .renault_zoe import RENAULT_ZOE_METRICS
+# Build lookup dicts from individual vehicle modules
+VEHICLE_TYPE_PREFIXES = {
+    VW_EUP_PREFIX: VW_EUP_TYPE,
+    SMART_FORTWO_PREFIX: SMART_FORTWO_TYPE,
+    MG_ZS_EV_PREFIX: MG_ZS_EV_TYPE,
+    NISSAN_LEAF_PREFIX: NISSAN_LEAF_TYPE,
+    RENAULT_TWIZY_PREFIX: RENAULT_TWIZY_TYPE,
+}
+
+VEHICLE_TYPE_NAMES = {
+    VW_EUP_TYPE: VW_EUP_NAME,
+    SMART_FORTWO_TYPE: SMART_FORTWO_NAME,
+    MG_ZS_EV_TYPE: MG_ZS_EV_NAME,
+    NISSAN_LEAF_TYPE: NISSAN_LEAF_NAME,
+    RENAULT_TWIZY_TYPE: RENAULT_TWIZY_NAME,
+}
 
 # Export all vehicle metrics for use in the main metrics module
 __all__ = [
@@ -17,6 +55,6 @@ __all__ = [
     "MG_ZS_EV_METRICS",
     "NISSAN_LEAF_METRICS",
     "RENAULT_TWIZY_METRICS",
-    # "TESLA_MODEL_S_METRICS",
-    # "RENAULT_ZOE_METRICS",
+    "VEHICLE_TYPE_PREFIXES",
+    "VEHICLE_TYPE_NAMES",
 ]

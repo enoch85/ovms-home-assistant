@@ -3,6 +3,28 @@
 
 The [Open Vehicle Monitoring System (OVMS)](https://www.openvehicles.com/) integration for Home Assistant. Connect your electric vehicle with Home Assistant via MQTT, automatically creating sensors for all vehicle metrics.
 
+## Table of Contents
+
+| Section | Description |
+|---------|-------------|
+| [Overview](#overview) | What this integration does |
+| [Features](#features) | Full feature list |
+| [Requirements](#requirements) | Prerequisites and firmware versions |
+| [Screenshots](#screenshots) | Visual examples |
+| [Installation](#installation) | HACS and manual install |
+| [MQTT Broker Configuration](#mqtt-broker-configuration) | MQTT broker setup and ACL |
+| [OVMS Configuration](#ovms-configuration) | OVMS module setup |
+| [Home Assistant Configuration](#home-assistant-configuration) | Integration setup in HA |
+| [Using the Integration](#using-the-integration) | Entities and data formatting |
+| [Services Reference](#services-reference) | All 8 available services with examples |
+| [Communication Flow](#communication-flow) | How data moves |
+| [Location Tracking & GPS](#location-tracking--gps) | GPS and geofencing |
+| [Technical Details](#technical-details) | MQTT topics, entity classification |
+| [Troubleshooting](#troubleshooting) | Common issues and solutions |
+| [FAQ](#faq) | Frequently asked questions |
+
+---
+
 ## Overview
 
 [![ovms-home-assistant_downloads](https://img.shields.io/github/downloads/enoch85/ovms-home-assistant/total)](https://github.com/enoch85/ovms-home-assistant)
@@ -26,7 +48,7 @@ The [OVMS integration](https://docs.openvehicles.com/en/latest/userguide/homeass
 - **Command Interface**: Send commands to your vehicle through services with proper rate limiting
 - **Vehicle Status**: Track online/offline status of your vehicle automatically
 - **Secure Communication**: Supports TLS/SSL connections to MQTT brokers with certificate verification
-- **Vehicle-Specific Metrics**: Special support for VW e-UP!, Smart ForTwo, Nissan Leaf, Reanult Twizy, and MG ZS-EV - with additional vehicle models planned
+- **Vehicle-Specific Metrics**: Special support for VW e-UP!, Smart ForTwo, Nissan Leaf, Renault Twizy, and MG ZS-EV - with additional vehicle models planned
 - **Diagnostics Support**: Provides detailed diagnostics for troubleshooting
 - **Flexible Topic Structure**: Supports various MQTT topic structures including custom formats
 - **Multi-language Support**: Includes translations for English, French, German, Spanish, and Swedish
@@ -39,26 +61,35 @@ The [OVMS integration](https://docs.openvehicles.com/en/latest/userguide/homeass
 - **Combined Location Tracking**: Automatically creates unified device tracker from separate latitude/longitude entities
 - **Tire Pressure**: Keep track of your TPMS values
 
-## Technical Quality
-
-- **Code Structure**: Well-organized codebase with proper separation of concerns
-- **Error Handling**: Comprehensive error handling with detailed logging
-- **Type Hints**: Full Python type hinting for better code maintainability
-- **Security**: SSL/TLS support, credential protection, and input validation
-- **Standards Compliance**: Follows Home Assistant development guidelines
-- **Performance**: Efficient MQTT message processing with minimal overhead
-- **Reliability**: Connection recovery mechanisms with exponential backoff strategy
-- **Testing**: Automated validations via HACS and Hassfest
-- **Maintenance**: Structured release process with version control
-
 ## Requirements
 
 - Home Assistant (2025.2.5 or newer) according to HACS specification
 - MQTT integration configured in Home Assistant
 - MQTT broker supporting MQTT 3.1, 3.1.1, or 5.0 (client ID length limit: 23 characters for 3.1/3.1.1)
 - OVMS module publishing to the same MQTT broker
-- OVMS firmware 3.3.001 or newer recommended (3.3.004+ for optimal performance)
+- OVMS firmware 3.3.001 or newer required (edge firmware for fastest discovery)
 - Python package: paho-mqtt>=1.6.1 (installed automatically)
+
+### OVMS Firmware Features by Version
+
+| Version | Features |
+|---------|----------|
+| 3.3.001+ | Basic MQTT support |
+| 3.3.003+ | GPS signal quality metric (`v.p.gpssq`) |
+| 3.3.004+ | Improved stability |
+| 3.3.005 | Current stable release |
+| Edge | On-demand metric requests (faster setup) |
+
+### Reducing MQTT Traffic (Optional)
+
+You can filter metrics at the OVMS side to reduce MQTT traffic:
+```
+# In OVMS shell - include only specific metrics
+config set server.v3 metrics.include "v.b.*,v.c.*,v.p.*"
+
+# Or exclude unwanted metrics
+config set server.v3 metrics.exclude "v.e.*.log"
+```
 
 ## Known "Issues" and Solutions
 
@@ -239,28 +270,7 @@ For testing purposes, you can:
 
 3. Check the Home Assistant logs for detailed information about discovered topics and created entities
 
-### Debugging and Logs
-
-*Warning! The debug output is substantial. It may fill your disk if you are not careful, don't leave it turned on.*
-
-The integration provides several levels of logging:
-
-- **Info Level**: Basic operational information (connections, entity creation)
-- **Debug Level**: Detailed information about topic discovery, message processing, and entity creation
-- **Warning/Error Levels**: Issues that might need attention
-
-Common log patterns to look for:
-
-- `Topic discovery completed` - Indicates successful MQTT topic scanning
-- `Adding sensor/binary_sensor/device_tracker` - Shows entity creation
-- `MQTT connection test completed` - Shows broker connection results
-- `Command response for...` - Shows command execution results
-
-To interpret logs effectively:
-1. Look for error messages indicating connection issues
-2. Check for topics being discovered correctly
-3. Verify entity creation messages for your expected metrics
-4. Watch for command results when testing integration functions
+> ⚠️ **Warning**: Debug logging produces substantial output. It may fill your disk if left enabled - don't forget to turn it off!
 
 ## Using the Integration
 
@@ -296,10 +306,70 @@ The integration automatically detects your OVMS module's firmware version and di
 
 ### Services
 
-The integration provides several services to interact with your vehicle:
+The integration provides several services to interact with your vehicle. **All services now return responses** that can be viewed in the Home Assistant UI or used in automations.
 
-#### `ovms.send_command`
-Send any command to the OVMS module.
+#### Service Response Feature
+
+Starting with v1.5.1, all OVMS services return responses from your vehicle. This means you can:
+
+- **See responses in Developer Tools**: When testing services, responses appear directly in the UI
+- **Use responses in automations**: Capture command results using `response_variable`
+- **Debug commands easily**: Immediately see if a command succeeded or failed
+
+![Service Response](/assets/screenshot-service-response.png)
+
+*Example: The `send_command` service with `metrics list` showing the response panel*
+
+![Service Response Detail](/assets/screenshot-service-response-detail.png)
+
+*Example: Detailed response showing all available metrics from the vehicle*
+
+**Example automation using service response:**
+```yaml
+automation:
+  - alias: "Check 12V battery status"
+    triggers:
+      - trigger: time
+        at: "08:00:00"
+    actions:
+      - action: ovms.aux_monitor
+        data:
+          vehicle_id: your_vehicle_id
+          action: status
+        response_variable: aux_status
+      - action: notify.mobile_app
+        data:
+          message: "12V Status: {{ aux_status }}"
+```
+
+---
+
+## Services Reference
+
+The integration provides **9 services** for vehicle control and monitoring:
+
+| Service | Description | Returns Response |
+|---------|-------------|------------------|
+| `ovms.send_command` | Send any OVMS command | ✅ Yes |
+| `ovms.set_feature` | Set OVMS configuration | ✅ Yes |
+| `ovms.control_climate` | Control climate system | ✅ Yes |
+| `ovms.control_charging` | Control charging | ✅ Yes |
+| `ovms.homelink` | Trigger homelink buttons | ✅ Yes |
+| `ovms.climate_schedule` | Manage climate schedules | ✅ Yes |
+| `ovms.tpms_map` | TPMS sensor mapping | ✅ Yes |
+| `ovms.aux_monitor` | 12V battery monitoring | ✅ Yes |
+| `ovms.refresh_metrics` | Request metrics refresh | ✅ Yes |
+
+**How commands work (MQTT protocol):**
+1. Command is published to: `{prefix}/{username}/{vehicle_id}/client/rr/command/{command_id}`
+2. Response is received on: `{prefix}/{username}/{vehicle_id}/client/rr/response/{command_id}`
+3. Unique command IDs ensure responses are matched to requests
+4. Commands are rate limited to **5 per minute** to prevent overwhelming the vehicle
+
+---
+
+### `ovms.send_command`
+Send any command to the OVMS module. This is the most flexible service - you can send any command your vehicle supports.
 
 ```yaml
 service: ovms.send_command
@@ -307,7 +377,7 @@ data:
   vehicle_id: your_vehicle_id
   command: stat
   parameters: range
-  timeout: 10  # Optional timeout in seconds
+  timeout: 10  # Optional timeout in seconds (default: 10, max: 60)
 ```
 
 Could be done as a button in HA:
@@ -336,7 +406,7 @@ name: "REG123: update all"
 
 #### Common OVMS Commands
 
-Here are some useful OVMS commands you can send through the service:
+Here are some useful OVMS commands you can send through the `send_command` service:
 
 | Command | Description | Example Parameters |
 |---------|-------------|-------------------|
@@ -352,9 +422,9 @@ Here are some useful OVMS commands you can send through the service:
 | `feature` | Toggle features | `vehicle` |
 | `notify raise` | Trigger notification | `alert.charge.stopped` |
 
-Commands are rate limited to 5 per minute by default to prevent overwhelming the vehicle. The integration implements exponential backoff for reconnection attempts when connectivity is lost.
+---
 
-#### `ovms.set_feature`
+### `ovms.set_feature`
 Set an OVMS configuration feature.
 
 ```yaml
@@ -365,7 +435,9 @@ data:
   value: feature_value
 ```
 
-#### `ovms.control_climate`
+---
+
+### `ovms.control_climate`
 Control the vehicle's climate system.
 
 ```yaml
@@ -373,11 +445,21 @@ service: ovms.control_climate
 data:
   vehicle_id: your_vehicle_id
   temperature: 21.5
-  hvac_mode: heat  # Options: off, heat, cool, auto
-  duration: 30  # Duration in minutes
+  hvac_mode: heat  # Options: on, off, heat, cool, auto
+  duration: 30  # Duration in minutes (1-60)
 ```
 
-#### `ovms.control_charging`
+**Parameters:**
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `vehicle_id` | Yes | Your vehicle ID |
+| `temperature` | No | Target temperature (15-30°C) |
+| `hvac_mode` | No | Mode: `on`, `off`, `heat`, `cool`, `auto` |
+| `duration` | No | Duration in minutes (1-60) |
+
+---
+
+### `ovms.control_charging`
 Control the vehicle's charging functions.
 
 ```yaml
@@ -389,12 +471,18 @@ data:
   limit: 80  # Percentage limit for charging
 ```
 
-### Homelink Control
+**Parameters:**
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `vehicle_id` | Yes | Your vehicle ID |
+| `action` | Yes | Action: `start`, `stop`, `status` |
+| `mode` | No | Mode: `standard`, `storage`, `range`, `performance` |
+| `limit` | No | Charge limit percentage (1-100%) |
 
-The integration provides a Homelink service that can trigger vehicle functions associated with Homelink buttons:
+---
 
-#### `ovms.homelink`
-Activate a Homelink button on the OVMS module. 
+### `ovms.homelink`
+Activate a Homelink button on the OVMS module.
 
 ```yaml
 service: ovms.homelink
@@ -423,6 +511,168 @@ tap_action:
   service_data:
     vehicle_id: your_vehicle_id
     button: 1
+```
+
+---
+
+### `ovms.climate_schedule`
+Manage scheduled precondition times for the vehicle's climate system. Supports multiple times per day with individual durations.
+
+```yaml
+# Set a schedule
+service: ovms.climate_schedule
+data:
+  vehicle_id: your_vehicle_id
+  action: set
+  day: mon
+  times: "07:30/10,17:45/15"  # Format: HH:MM/duration_minutes
+
+# List all schedules
+service: ovms.climate_schedule
+data:
+  vehicle_id: your_vehicle_id
+  action: list
+
+# Copy schedule to other days
+service: ovms.climate_schedule
+data:
+  vehicle_id: your_vehicle_id
+  action: copy
+  day: mon
+  target_days: "tue-fri"  # Supports ranges and lists
+```
+
+**Parameters:**
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `vehicle_id` | Yes | Your vehicle ID |
+| `action` | Yes | Action: `set`, `list`, `clear`, `copy`, `enable`, `disable`, `status` |
+| `day` | For set/clear/copy | Day: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`, `all` |
+| `times` | For set | Times: `HH:MM/duration` format, comma-separated |
+| `target_days` | For copy | Target days: ranges like `tue-fri` or lists like `sat,sun` |
+
+---
+
+### `ovms.tpms_map`
+Manage TPMS sensor-to-wheel mapping for wheel rotation/swap scenarios.
+
+```yaml
+# Show current mapping
+service: ovms.tpms_map
+data:
+  vehicle_id: your_vehicle_id
+  action: status
+
+# Set new mapping after wheel rotation
+service: ovms.tpms_map
+data:
+  vehicle_id: your_vehicle_id
+  action: set
+  mapping: "fl=rr fr=fl rl=fr rr=rl"
+
+# Reset to default
+service: ovms.tpms_map
+data:
+  vehicle_id: your_vehicle_id
+  action: reset
+```
+
+**Parameters:**
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `vehicle_id` | Yes | Your vehicle ID |
+| `action` | Yes | Action: `status`, `get`, `set`, `reset` |
+| `mapping` | For set | Mapping using wheel positions: `fl`, `fr`, `rl`, `rr` |
+
+---
+
+### `ovms.aux_monitor`
+Control the 12V auxiliary battery monitor for automatic shutdown/reboot based on voltage levels.
+
+```yaml
+# Check status
+service: ovms.aux_monitor
+data:
+  vehicle_id: your_vehicle_id
+  action: status
+
+# Enable with custom thresholds
+service: ovms.aux_monitor
+data:
+  vehicle_id: your_vehicle_id
+  action: enable
+  low_threshold: 11.5
+  charging_threshold: 14.0
+
+# Disable monitoring
+service: ovms.aux_monitor
+data:
+  vehicle_id: your_vehicle_id
+  action: disable
+```
+
+**Parameters:**
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `vehicle_id` | Yes | Your vehicle ID |
+| `action` | Yes | Action: `status`, `enable`, `disable` |
+| `low_threshold` | No | Low voltage threshold (10.0-14.0V) |
+| `charging_threshold` | No | Charging voltage threshold (12.0-15.0V) |
+
+**Example response from `status` action:**
+```
+low thresh=11.50
+charge thresh=14.00
+8s avg=15.58v
+2s avg=15.59v
+diff=0.01v
+state=charging
+```
+
+---
+
+### `ovms.refresh_metrics`
+Request a metrics refresh from the OVMS module. This service intelligently uses the best method based on your firmware version.
+
+```yaml
+# Refresh all metrics
+service: ovms.refresh_metrics
+data:
+  vehicle_id: your_vehicle_id
+
+# Refresh only battery metrics (edge firmware only)
+service: ovms.refresh_metrics
+data:
+  vehicle_id: your_vehicle_id
+  pattern: "v.b.*"
+
+# Refresh position/GPS metrics (edge firmware only)
+service: ovms.refresh_metrics
+data:
+  vehicle_id: your_vehicle_id
+  pattern: "v.p.*"
+```
+
+**Parameters:**
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `vehicle_id` | Yes | Your vehicle ID |
+| `pattern` | No | Metric pattern (default: `*` for all). Edge firmware supports patterns like `v.b.*`, `v.p.*`, `v.c.*` |
+
+**Firmware behavior:**
+| Firmware | Method | Pattern Support |
+|----------|--------|-----------------|
+| Edge | Fast on-demand request | ✅ Yes |
+| 3.3.005 and older | `server v3 update all` command | ❌ No (always refreshes all) |
+
+**Example response:**
+```json
+{
+  "success": true,
+  "method": "on-demand",
+  "pattern": "v.b.*",
+  "message": "Requested metrics with pattern 'v.b.*' (edge firmware)"
+}
 ```
 
 ## Communication Flow
@@ -601,17 +851,6 @@ The integration uses pattern matching and metric definitions to determine entity
 - Numeric values become standard sensors
 - Array data (like cell voltages) is processed with statistical analysis
 
-### Command Protocol
-
-Commands use a request-response pattern:
-1. Command is published to: `{prefix}/{username}/{vehicle_id}/client/rr/command/{command_id}`
-2. Response is received on: `{prefix}/{username}/{vehicle_id}/client/rr/response/{command_id}`
-3. Unique command IDs ensure responses are matched to requests
-
-You can for example use the developer tool in Home Assistant to update all the metrics at once with this command:
-
-![send update all](/assets/send_update_all.png)
-
 ### Data Processing
 
 The integration includes sophisticated data processing:
@@ -673,7 +912,24 @@ This integration undergoes regular validation through:
 
 ## Troubleshooting
 
-*Warning! The debug output is substantial. It may fill your disk if you are not careful, don't leave it turned on.*
+> ⚠️ **Warning**: Debug logging produces substantial output. It may fill your disk if left enabled!
+
+To enable debug logging, add to your `configuration.yaml`:
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.ovms: debug
+```
+
+### Log Patterns to Look For
+
+| Pattern | Meaning |
+|---------|---------|
+| `Topic discovery completed` | Successful MQTT topic scanning |
+| `Adding sensor/binary_sensor/device_tracker` | Entity creation |
+| `MQTT connection test completed` | Broker connection results |
+| `Command response for...` | Command execution results |
 
 ### No Entities Created
 

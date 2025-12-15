@@ -24,6 +24,7 @@ from ..const import (
     CONF_TOPIC_STRUCTURE,
     CONF_VEHICLE_ID,
     CONF_VERIFY_SSL,
+    DEFAULT_QOS,
     DEFAULT_TOPIC_STRUCTURE,
     DEFAULT_VERIFY_SSL,
     LOGGER_NAME,
@@ -208,7 +209,7 @@ class MQTTConnectionManager:
         # Add Last Will and Testament message
         self._status_topic = f"{self.structure_prefix}/status"
         will_payload = "offline"
-        will_qos = self.config.get(CONF_QOS, 1)
+        will_qos = self.config.get(CONF_QOS, DEFAULT_QOS)
         will_retain = True
 
         client.will_set(self._status_topic, will_payload, will_qos, will_retain)
@@ -378,7 +379,7 @@ class MQTTConnectionManager:
                     client.publish(
                         self._status_topic,
                         self._connected_payload,
-                        qos=self.config.get(CONF_QOS, 1),
+                        qos=self.config.get(CONF_QOS, DEFAULT_QOS),
                         retain=True,
                     )
             else:
@@ -525,7 +526,7 @@ class MQTTConnectionManager:
 
         try:
             # Format the topic
-            qos = self.config.get(CONF_QOS)
+            qos = self.config.get(CONF_QOS, DEFAULT_QOS)
 
             # Subscribe to all topics under the structure prefix
             topic = TOPIC_TEMPLATE.format(structure_prefix=self.structure_prefix)
@@ -559,7 +560,7 @@ class MQTTConnectionManager:
 
         try:
             if qos is None:
-                qos = self.config.get(CONF_QOS, 1)
+                qos = self.config.get(CONF_QOS, DEFAULT_QOS)
 
             await self.hass.async_add_executor_job(
                 self.client.publish, topic, payload, qos, retain
@@ -586,7 +587,7 @@ class MQTTConnectionManager:
                         self.client.publish,
                         self._status_topic,
                         "offline",
-                        self.config.get(CONF_QOS, 1),
+                        self.config.get(CONF_QOS, DEFAULT_QOS),
                         True,  # Retain
                     )
 

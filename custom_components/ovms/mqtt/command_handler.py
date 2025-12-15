@@ -15,6 +15,7 @@ from ..const import (
     CONF_VEHICLE_ID,
     DEFAULT_COMMAND_RATE_LIMIT,
     DEFAULT_COMMAND_RATE_PERIOD,
+    DEFAULT_QOS,
     COMMAND_TOPIC_TEMPLATE,
     RESPONSE_TOPIC_TEMPLATE,
 )
@@ -177,7 +178,7 @@ class CommandHandler:
             # Send the command
             _LOGGER.debug("Publishing command to %s: %s", command_topic, payload)
             if not await mqtt_client.async_publish(
-                command_topic, payload, qos=self.config.get(CONF_QOS)
+                command_topic, payload, qos=self.config.get(CONF_QOS, DEFAULT_QOS)
             ):
                 return {
                     "success": False,
@@ -287,22 +288,12 @@ class CommandHandler:
                 # Clean up
                 del self.pending_commands[command_id]
             else:
-                _LOGGER.warning(
-                    "Received response for unknown command ID: %s", command_id
+                # This can happen with QoS 1 message redelivery or stale messages
+                _LOGGER.debug(
+                    "Received response for command ID not in pending list: %s "
+                    "(may be duplicate QoS 1 delivery or from another client)",
+                    command_id,
                 )
 
         except Exception as ex:
             _LOGGER.exception("Error processing command response: %s", ex)
-
-    async def async_send_discovery_command(self) -> None:
-        """Send a discovery command to find OVMS modules."""
-        try:
-            command_id = uuid.uuid4().hex[:8]
-            # Use a generic discovery command
-            await self.async_send_command(
-                command="stat",
-                command_id=command_id,
-                timeout=3,  # Short timeout for discovery
-            )
-        except Exception as ex:
-            _LOGGER.warning("Error sending discovery command: %s", ex)

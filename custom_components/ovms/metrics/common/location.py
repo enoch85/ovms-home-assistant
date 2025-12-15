@@ -53,11 +53,10 @@ LOCATION_METRICS = {
     },
     "v.p.gpssq": {
         "name": "GPS Signal Quality",
-        "description": "GPS signal quality",
+        "description": "GPS signal quality (0-100%): below 30 unusable, above 50 good, above 80 excellent",
         "icon": "mdi:signal",
-        "device_class": SensorDeviceClass.SIGNAL_STRENGTH,
         "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "dBm",
+        "unit": PERCENTAGE,
         "category": "location",
     },
     "v.p.gpsspeed": {

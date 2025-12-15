@@ -20,6 +20,11 @@ from homeassistant.const import (
     EntityCategory,
 )
 
+# Vehicle metadata
+VEHICLE_TYPE = "renault_twizy"
+VEHICLE_NAME = "Renault Twizy"
+METRIC_PREFIX = "xrt."
+
 # Custom unit constants
 UNIT_AMPERE_HOUR = "Ah"
 

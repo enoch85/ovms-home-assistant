@@ -20,6 +20,21 @@ This is a **Home Assistant custom integration** that connects electric vehicles 
 
 **Key Architectural Principle**: Discovery-based entity creation with pattern matching - the integration dynamically creates entities from MQTT topics rather than requiring manual configuration.
 
+## OVMS Firmware Changelog
+
+**IMPORTANT**: When developing new features or improving existing functionality, always check the OVMS firmware changelog for new capabilities that could simplify implementation or enable new features:
+
+**Firmware Changelog URL**: https://raw.githubusercontent.com/openvehicles/Open-Vehicle-Monitoring-System-3/refs/heads/master/vehicle/OVMS.V3/changes.txt
+
+**When to check the changelog:**
+1. Before implementing new discovery mechanisms
+2. When adding command/response functionality  
+3. When troubleshooting MQTT communication issues
+4. Before major refactoring of MQTT-related code
+5. When users report features available in newer firmware
+
+This ensures the integration takes advantage of the latest OVMS capabilities rather than using legacy workarounds.
+
 ## Core Architecture
 
 ### Component Boundaries

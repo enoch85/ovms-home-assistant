@@ -8,24 +8,26 @@ import time
 import uuid
 from typing import Any
 
-import voluptuous as vol  # pylint: disable=import-error
+import voluptuous as vol
 
-from homeassistant import config_entries  # pylint: disable=import-error
-from homeassistant.const import (  # pylint: disable=import-error
+from homeassistant import config_entries
+from homeassistant.const import (
     CONF_HOST,
     CONF_PASSWORD,
     CONF_PORT,
     CONF_USERNAME,
     CONF_PROTOCOL,
 )
-from homeassistant.core import callback  # pylint: disable=import-error
+from homeassistant.core import callback
 
 from ..const import (
     DOMAIN,
     CONFIG_VERSION,
     DEFAULT_QOS,
+    DEFAULT_EXPECTED_METRICS,
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_TOPIC_STRUCTURE,
+    GENERIC_VEHICLE_NAME,
     CONF_VEHICLE_ID,
     CONF_QOS,
     CONF_TOPIC_PREFIX,
@@ -319,16 +321,35 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.discovered_topics = discovery_result.get("discovered_topics", set())
 
             topics_count = len(self.discovered_topics or [])
+            metric_count = discovery_result.get("metric_count", topics_count)
+            vehicle_type = discovery_result.get("vehicle_type", "generic")
+            vehicle_name = discovery_result.get("vehicle_name", GENERIC_VEHICLE_NAME)
+            expected_count = discovery_result.get(
+                "expected_count", DEFAULT_EXPECTED_METRICS
+            )
+            discovery_percentage = discovery_result.get("discovery_percentage", 0)
+            quality_indicator = discovery_result.get("quality_indicator", "❌")
+
+            # Filter to show only metric topics in sample
+            metric_topics = [t for t in self.discovered_topics if "/metric/" in t]
             topics_sample = (
-                list(self.discovered_topics)[:5]
-                if topics_count > 5
-                else list(self.discovered_topics)
+                list(metric_topics)[:5]
+                if len(metric_topics) > 5
+                else list(metric_topics)
             )
 
             # Fill sample topics, ensure we have 5 placeholders even if fewer topics
             sample_topics = topics_sample + [""] * (5 - len(topics_sample))
 
-            _LOGGER.debug("Discovered %d topics: %s", topics_count, topics_sample)
+            _LOGGER.debug(
+                "Discovered %d topics (%d metrics). Vehicle: %s. Coverage: %d%% (%d/%d)",
+                topics_count,
+                metric_count,
+                vehicle_name,
+                discovery_percentage,
+                metric_count,
+                expected_count,
+            )
 
             # Extract potential vehicle IDs from discovered topics
             potential_vehicle_ids = extract_vehicle_ids(
@@ -343,10 +364,16 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             self.debug_info["potential_vehicle_ids"] = list(potential_vehicle_ids)
+            self.debug_info["vehicle_type"] = vehicle_type
+            self.debug_info["discovery_percentage"] = discovery_percentage
             _LOGGER.debug("Potential vehicle IDs: %s", potential_vehicle_ids)
 
             # Create a schema without the confirmation checkbox
             data_schema = vol.Schema({})
+
+            # Show warning if few topics found
+            if discovery_result.get("warning") == "few_topics":
+                errors["base"] = "few_topics_warning"
 
             return self.async_show_form(
                 step_id="topic_discovery",
@@ -354,6 +381,11 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors=errors,
                 description_placeholders={
                     "topic_count": str(topics_count),
+                    "metric_count": str(metric_count),
+                    "expected_count": str(expected_count),
+                    "vehicle_name": vehicle_name,
+                    "discovery_percentage": str(discovery_percentage),
+                    "quality_indicator": quality_indicator,
                     "sample_topic1": sample_topics[0],
                     "sample_topic2": sample_topics[1],
                     "sample_topic3": sample_topics[2],

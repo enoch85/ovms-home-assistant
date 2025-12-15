@@ -128,9 +128,14 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         # Initialize device class and other attributes
         self._attr_device_class = attributes.get("device_class")
         self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_unit_of_measurement = attributes.get(
-            "unit_of_measurement"
-        ) or attributes.get("unit")
+        self._attr_native_unit_of_measurement = (
+            attributes.get("native_unit_of_measurement")
+            or attributes.get("unit_of_measurement")
+            or attributes.get("unit")
+        )
+        self._attr_suggested_unit_of_measurement = attributes.get(
+            "suggested_unit_of_measurement"
+        )
         self._attr_icon = attributes.get("icon")
         self._attr_suggested_display_precision = attributes.get(
             "suggested_display_precision"
@@ -276,11 +281,18 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
 
             # Restore attributes if available, but clean up inconsistent ones
             if state.attributes:
-                # Don't overwrite entity attributes like unit, etc.
+                # Exclude entity attributes that should come from metric definitions,
+                # not from restored state (prevents stale cached values)
                 saved_attributes = {
                     k: v
                     for k, v in state.attributes.items()
-                    if k not in ["device_class", "state_class", "unit_of_measurement"]
+                    if k
+                    not in [
+                        "device_class",
+                        "state_class",
+                        "unit_of_measurement",
+                        "unit",
+                    ]
                 }
 
                 # Remove stale/inconsistent formatted attributes
@@ -608,11 +620,18 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
             # Restore attributes if available, but clean up inconsistent ones
             if state.attributes:
-                # Don't overwrite entity attributes like unit, etc.
+                # Exclude entity attributes that should come from metric definitions,
+                # not from restored state (prevents stale cached values)
                 saved_attributes = {
                     k: v
                     for k, v in state.attributes.items()
-                    if k not in ["device_class", "state_class", "unit_of_measurement"]
+                    if k
+                    not in [
+                        "device_class",
+                        "state_class",
+                        "unit_of_measurement",
+                        "unit",
+                    ]
                 }
 
                 # Remove stale/inconsistent formatted attributes

@@ -14,6 +14,13 @@ from ..const import (
     DOMAIN,
     LOGGER_NAME,
     SIGNAL_PLATFORMS_LOADED,
+    METRIC_REQUEST_TOPIC_TEMPLATE,
+    CONF_CLIENT_ID,
+    CONF_QOS,
+    DEFAULT_QOS,
+    RECONNECT_METRIC_REQUEST_DELAY,
+    GPS_ACCURACY_MIN_METERS,
+    GPS_ACCURACY_MAX_METERS,
 )
 
 from .connection import MQTTConnectionManager
@@ -106,12 +113,13 @@ class OVMSMQTTClient:
         # Try to discover by subscribing again (in case initial subscription failed)
         await self.connection_manager.async_subscribe_topics()
 
-        # Try to discover by sending a test command if no topics found
+        # Request all metrics using on-demand feature (OVMS edge firmware)
+        # This replaces the old async_send_discovery_command() workaround
         if not self.discovered_topics and self.connected:
             _LOGGER.info(
-                "No topics discovered yet, trying to discover by sending a test command"
+                "No topics discovered yet, requesting metrics via on-demand feature"
             )
-            await self.command_handler.async_send_discovery_command()
+            await self.async_request_metrics()
 
     async def _on_message_received(self, topic: str, payload: str) -> None:
         """Handle message received from MQTT broker."""
@@ -200,9 +208,45 @@ class OVMSMQTTClient:
 
     def _on_connection_change(self, connected: bool) -> None:
         """Handle connection state changes."""
+        was_connected = self.connected
         self.connected = connected
+
         if not connected:
             self.reconnect_count += 1
+        elif connected and not was_connected:
+            # Just connected/reconnected - request all metrics to quickly refresh state
+            # This uses the on-demand feature in OVMS edge firmware
+            # Older firmware will ignore this, but retained messages + passive
+            # publishes will still work
+            is_reconnect = self.reconnect_count > 0
+            if is_reconnect:
+                _LOGGER.info("Reconnected to MQTT broker, requesting metrics refresh")
+            else:
+                _LOGGER.info("Connected to MQTT broker, requesting initial metrics")
+            # Use run_coroutine_threadsafe since this callback runs in paho thread
+            asyncio.run_coroutine_threadsafe(
+                self._async_request_metrics_on_reconnect(),
+                self.hass.loop,
+            )
+
+    async def _async_request_metrics_on_reconnect(self) -> None:
+        """Request all metrics after reconnecting to quickly refresh entity states.
+
+        This is called automatically after a successful reconnection.
+        Uses a small delay to ensure subscriptions are fully established first.
+        """
+        try:
+            # Small delay to ensure subscriptions are active
+            await asyncio.sleep(RECONNECT_METRIC_REQUEST_DELAY)
+
+            if self.connected:
+                await self.async_request_metrics("*")
+        except asyncio.CancelledError:
+            # Task was cancelled (e.g., during shutdown) - expected, don't log
+            pass
+        except (OSError, ValueError) as ex:
+            # Non-critical - passive updates will still work
+            _LOGGER.debug("Metric request on reconnect failed (non-critical): %s", ex)
 
     @property
     def structure_prefix(self) -> str:
@@ -212,6 +256,65 @@ class OVMSMQTTClient:
     async def async_send_command(self, **kwargs) -> Dict[str, Any]:
         """Send a command to the OVMS module."""
         return await self.command_handler.async_send_command(**kwargs)
+
+    async def async_request_metrics(self, pattern: str = "*") -> bool:
+        """Request metrics from the OVMS module using on-demand feature.
+
+        This uses the on-demand metric request feature in OVMS edge firmware.
+        Publishing a pattern to the metric request topic causes OVMS to immediately
+        publish all matching metrics to their normal topics.
+
+        Args:
+            pattern: Metric pattern to request. Defaults to "*" for all metrics.
+                     Examples: "*" (all), "v.b.*" (battery), "v.p.*" (position)
+
+        Returns:
+            True if the request was sent successfully, False otherwise.
+
+        Note:
+            This feature requires OVMS edge firmware (post-3.3.005).
+            Older firmware will simply not respond to the request.
+        """
+        if not self.connected or not self.connection_manager.connected:
+            _LOGGER.warning("Cannot request metrics: not connected to MQTT broker")
+            return False
+
+        try:
+            client_id = self.config.get(CONF_CLIENT_ID, "")
+            if not client_id:
+                _LOGGER.warning("Cannot request metrics: no client_id configured")
+                return False
+
+            # Format the metric request topic
+            metric_request_topic = METRIC_REQUEST_TOPIC_TEMPLATE.format(
+                structure_prefix=self.structure_prefix,
+                client_id=client_id,
+            )
+
+            _LOGGER.debug(
+                "Requesting metrics with pattern '%s' via topic: %s",
+                pattern,
+                metric_request_topic,
+            )
+
+            # Publish the request
+            qos = self.config.get(CONF_QOS, DEFAULT_QOS)
+            success = await self.connection_manager.async_publish(
+                metric_request_topic, pattern, qos=qos
+            )
+
+            if success:
+                _LOGGER.info(
+                    "Successfully published metric request with pattern '%s'", pattern
+                )
+            else:
+                _LOGGER.warning("Failed to publish metric request")
+
+            return success
+
+        except Exception as ex:
+            _LOGGER.warning("Error requesting metrics: %s", ex)
+            return False
 
     async def async_shutdown(self) -> None:
         """Shutdown the MQTT client."""
@@ -228,7 +331,21 @@ class OVMSMQTTClient:
         await self.connection_manager.async_shutdown()
 
     def get_gps_accuracy(self, vehicle_id: Optional[str] = None) -> Optional[float]:
-        """Get GPS accuracy from stored GPS quality data."""
+        """Get GPS accuracy in meters from stored GPS quality data.
+
+        Calculates positional accuracy based on GPS signal quality metric v.p.gpssq.
+
+        Args:
+            vehicle_id: Optional vehicle ID. Uses configured vehicle_id if not provided.
+
+        Returns:
+            GPS accuracy in meters, or None if no GPS quality data is available.
+            Lower values indicate better accuracy.
+
+        Note:
+            v.p.gpssq: 0-100% where <30 is unusable, >50 is good, >80 is excellent
+            See OVMS firmware changes.txt for metric details.
+        """
         if not vehicle_id:
             vehicle_id = self.config.get("vehicle_id", "")
 
@@ -237,17 +354,11 @@ class OVMSMQTTClient:
 
         gps_data = self.gps_quality_topics[vehicle_id]
 
-        # Calculate accuracy based on available data
+        # Use signal_quality (v.p.gpssq) - standard OVMS metric
         if "signal_quality" in gps_data:
             sq = gps_data["signal_quality"]["value"]
-            # Simple formula that translates signal quality (0-100) to meters accuracy
-            # Higher signal quality = better accuracy (lower value)
-            return max(5, 100 - sq)  # Minimum 5m accuracy
-
-        if "hdop" in gps_data:
-            hdop = gps_data["hdop"]["value"]
-            # HDOP directly relates to positional accuracy
-            # Lower HDOP = better accuracy
-            return max(5, hdop * 5)  # Each HDOP unit is ~5m of accuracy
+            # Signal quality 0-100% maps inversely to accuracy in meters
+            # 100% quality = minimum accuracy (best), 0% = maximum accuracy (worst)
+            return max(GPS_ACCURACY_MIN_METERS, GPS_ACCURACY_MAX_METERS - sq)
 
         return None

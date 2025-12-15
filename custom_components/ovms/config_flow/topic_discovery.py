@@ -10,16 +10,17 @@ import traceback
 import uuid
 from typing import Dict, Any, Optional, Set
 
-import paho.mqtt.client as mqtt  # pylint: disable=import-error
+import paho.mqtt.client as mqtt
+from paho.mqtt import MQTTException
 
-from homeassistant.const import (  # pylint: disable=import-error
+from homeassistant.const import (
     CONF_HOST,
     CONF_PASSWORD,
     CONF_PORT,
     CONF_USERNAME,
     CONF_PROTOCOL,
 )
-from homeassistant.core import HomeAssistant  # pylint: disable=import-error
+from homeassistant.core import HomeAssistant
 
 from ..const import (
     CONF_MQTT_USERNAME,
@@ -28,6 +29,7 @@ from ..const import (
     CONF_VEHICLE_ID,
     CONF_QOS,
     CONF_VERIFY_SSL,
+    DEFAULT_QOS,
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_TOPIC_STRUCTURE,
     DEFAULT_VERIFY_SSL,
@@ -36,13 +38,140 @@ from ..const import (
     TOPIC_TEMPLATE as CONST_TOPIC_TEMPLATE,
     COMMAND_TOPIC_TEMPLATE as CONST_COMMAND_TOPIC_TEMPLATE,
     RESPONSE_TOPIC_TEMPLATE as CONST_RESPONSE_TOPIC_TEMPLATE,
+    METRIC_REQUEST_TOPIC_TEMPLATE,
+    ACTIVE_DISCOVERY_TIMEOUT,
+    LEGACY_DISCOVERY_TIMEOUT,
+    MINIMUM_DISCOVERY_PERCENT,
+    GOOD_DISCOVERY_PERCENT,
+    GENERIC_VEHICLE_TYPE,
+    GENERIC_VEHICLE_NAME,
     LOGGER_NAME,
     ERROR_CANNOT_CONNECT,
     ERROR_TIMEOUT,
     ERROR_UNKNOWN,
 )
+from ..metrics import METRIC_DEFINITIONS
+from ..metrics.vehicles import VEHICLE_TYPE_PREFIXES, VEHICLE_TYPE_NAMES
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
+
+def detect_vehicle_type(topics: Set[str]) -> tuple[str, str]:
+    """Detect vehicle type from discovered topics.
+
+    Looks for vehicle-specific metric prefixes (xvu., xse., xmg., xnl., xrt.)
+    in the topic paths to determine the vehicle type.
+
+    Note: MQTT topics use slashes (xvu/b/c/soh) while metric definitions use
+    dots (xvu.b.c.soh), so we convert the prefix dots to slashes for matching.
+
+    Args:
+        topics: Set of discovered MQTT topics
+
+    Returns:
+        Tuple of (vehicle_type_id, vehicle_type_name)
+        e.g., ("vw_eup", "VW e-UP!") or ("generic", "OVMS Vehicle")
+    """
+    for topic in topics:
+        # Extract metric path from topic (last part after /metric/)
+        if "/metric/" in topic:
+            metric_path = topic.split("/metric/")[-1]
+            # Check for vehicle-specific prefixes
+            # Convert dot to slash: "xvu." -> "xvu/" for MQTT topic matching
+            for prefix, vehicle_type in VEHICLE_TYPE_PREFIXES.items():
+                topic_prefix = prefix.replace(".", "/")
+                if metric_path.startswith(topic_prefix):
+                    vehicle_name = VEHICLE_TYPE_NAMES.get(vehicle_type, vehicle_type)
+                    _LOGGER.debug(
+                        "Detected vehicle type '%s' (%s) from topic: %s",
+                        vehicle_type,
+                        vehicle_name,
+                        topic,
+                    )
+                    return vehicle_type, vehicle_name
+
+    return GENERIC_VEHICLE_TYPE, GENERIC_VEHICLE_NAME
+
+
+def get_expected_metric_count(vehicle_type: str) -> int:
+    """Get the expected number of metrics for a vehicle type.
+
+    Calculates expected metrics by counting defined metrics from the metrics module.
+    This provides a dynamic count based on actual metric definitions.
+
+    Args:
+        vehicle_type: Vehicle type identifier (e.g., "vw_eup", "generic")
+
+    Returns:
+        Expected number of metrics for this vehicle type
+    """
+    # Common categories that apply to all vehicles
+    common_categories = [
+        "battery",
+        "charging",
+        "climate",
+        "door",
+        "location",
+        "motor",
+        "trip",
+        "device",
+        "diagnostic",
+        "power",
+        "network",
+        "system",
+        "tire",
+    ]
+
+    # Count common metrics
+    common_count = sum(
+        1 for v in METRIC_DEFINITIONS.values() if v.get("category") in common_categories
+    )
+
+    # Add vehicle-specific metrics if applicable
+    if vehicle_type != "generic":
+        vehicle_count = sum(
+            1 for v in METRIC_DEFINITIONS.values() if v.get("category") == vehicle_type
+        )
+        total = common_count + vehicle_count
+        _LOGGER.debug(
+            "Expected metrics for %s: %d common + %d vehicle-specific = %d total",
+            vehicle_type,
+            common_count,
+            vehicle_count,
+            total,
+        )
+        return total
+
+    _LOGGER.debug("Expected metrics for generic vehicle: %d common", common_count)
+    return common_count
+
+
+def calculate_discovery_percentage(
+    metric_count: int, expected_count: int
+) -> tuple[int, str]:
+    """Calculate discovery percentage and quality indicator.
+
+    Args:
+        metric_count: Number of metrics actually discovered
+        expected_count: Expected number of metrics for this vehicle type
+
+    Returns:
+        Tuple of (percentage, quality_indicator)
+        Quality indicator is emoji: ✅ (>=70%), ⚠️ (>=30%), ❌ (<30%)
+    """
+    if expected_count <= 0:
+        return 0, "❌"
+
+    percentage = min(100, int((metric_count / expected_count) * 100))
+
+    if percentage >= 70:
+        quality = "✅"
+    elif percentage >= 30:
+        quality = "⚠️"
+    else:
+        quality = "❌"
+
+    return percentage, quality
 
 
 def format_structure_prefix(config):
@@ -66,6 +195,61 @@ def format_structure_prefix(config):
         prefix = config.get(CONF_TOPIC_PREFIX, "ovms")
         vehicle_id = config.get(CONF_VEHICLE_ID, "")
         return f"{prefix}/{vehicle_id}"
+
+
+def format_metric_request_topic(config, client_id: str) -> str:
+    """Format the metric request topic for on-demand metric requests.
+
+    This topic is used with OVMS edge firmware to request all metrics
+    immediately rather than waiting for passive discovery.
+
+    Args:
+        config: Configuration dictionary with topic structure settings
+        client_id: The MQTT client ID making the request
+
+    Returns:
+        Formatted metric request topic string
+    """
+    structure_prefix = format_structure_prefix(config)
+    return METRIC_REQUEST_TOPIC_TEMPLATE.format(
+        structure_prefix=structure_prefix,
+        client_id=client_id,
+    )
+
+
+def request_all_metrics(mqttc, config, client_id: str, qos: int = 1) -> bool:
+    """Publish a request for all metrics to the OVMS module.
+
+    This uses the on-demand metric request feature in OVMS edge firmware.
+    Publishing "*" to the metric request topic causes OVMS to immediately
+    publish all valid metrics to their normal topics.
+
+    Args:
+        mqttc: The MQTT client instance
+        config: Configuration dictionary
+        client_id: The MQTT client ID
+        qos: Quality of Service level (default: 1)
+
+    Returns:
+        True if the publish was successful, False otherwise
+    """
+    try:
+        metric_request_topic = format_metric_request_topic(config, client_id)
+        _LOGGER.debug(
+            "Requesting all metrics via topic: %s with payload '*'",
+            metric_request_topic,
+        )
+        result = mqttc.publish(metric_request_topic, "*", qos=qos)
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            _LOGGER.info(
+                "Successfully published metric request to %s", metric_request_topic
+            )
+            return True
+        _LOGGER.warning("Failed to publish metric request, rc=%s", result.rc)
+        return False
+    except Exception as ex:
+        _LOGGER.warning("Error requesting metrics: %s", ex)
+        return False
 
 
 def extract_vehicle_ids(topics, config):
@@ -185,6 +369,7 @@ async def discover_topics(hass: HomeAssistant, config):
     mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
 
     discovered_topics = set()
+    retained_topics = set()  # Track topics received with retain flag
     connection_status = {"connected": False, "rc": None}
 
     # Define callbacks
@@ -203,17 +388,20 @@ async def discover_topics(hass: HomeAssistant, config):
             _LOGGER.debug(
                 "%s - Subscribing to discovery topic: %s", log_prefix, discovery_topic
             )
-            mqttc.subscribe(discovery_topic, qos=config.get(CONF_QOS, 1))
+            mqttc.subscribe(discovery_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
     def on_message(_, __, msg):
         """Handle incoming messages."""
         _LOGGER.debug(
-            "%s - Message received on topic: %s (payload len: %d)",
+            "%s - Message received on topic: %s (payload len: %d, retained: %s)",
             log_prefix,
             msg.topic,
             len(msg.payload),
+            msg.retain,
         )
         discovered_topics.add(msg.topic)
+        if msg.retain:
+            retained_topics.add(msg.topic)
 
     def on_disconnect(_, __, rc, _properties=None):
         """Handle disconnection."""
@@ -304,58 +492,167 @@ async def discover_topics(hass: HomeAssistant, config):
                 "message": f"Failed to connect to MQTT broker (rc={rc})",
             }
 
-        # Wait for messages to arrive
-        _LOGGER.debug("%s - Waiting for messages", log_prefix)
-        await asyncio.sleep(3)  # Wait for up to 3 seconds
+        # Hybrid discovery strategy:
+        # 1. If retained messages (msg.retain=True) already provided enough metrics, skip active/legacy
+        # 2. Otherwise try active metric request (OVMS edge firmware) with short timeout
+        # 3. If no/few topics found, fall back to legacy passive discovery
 
-        # Try to publish a message to stimulate response
-        try:
-            _LOGGER.debug(
-                "%s - Publishing test message to stimulate responses", log_prefix
-            )
-            command_id = uuid.uuid4().hex[:8]
-            # Use a generic discovery command - this will be ignored if the structure is wrong
-            # but might trigger responses from OVMS modules
-            test_topic = f"{topic_prefix}/client/rr/command/{command_id}"
-            test_payload = "stat"
+        # Helper to count only metric topics (excludes /client/ command/response topics)
+        def count_metric_topics(topics):
+            """Count topics that are actual metrics, not command/response echoes."""
+            return sum(1 for t in topics if "/metric/" in t)
 
-            mqttc.publish(test_topic, test_payload, qos=config.get(CONF_QOS, 1))
-            _LOGGER.debug("%s - Test message published to %s", log_prefix, test_topic)
+        # Track whether active discovery succeeded
+        active_discovery_succeeded = False
+        # Count only retained metric topics (messages with MQTT retain flag set)
+        retained_metric_count = count_metric_topics(retained_topics)
+        # Store count before active request to measure new topics received
+        metric_topics_before = count_metric_topics(discovered_topics)
 
-            # Also try a more generic topic to catch any responding devices
-            vehicle_id = config.get(CONF_VEHICLE_ID, "")
-            if vehicle_id:
-                alt_test_topic = (
-                    f"{topic_prefix}/+/{vehicle_id}/client/rr/command/{command_id}"
-                )
-                mqttc.publish(alt_test_topic, test_payload, qos=config.get(CONF_QOS, 1))
-                _LOGGER.debug(
-                    "%s - Also testing alternative topic: %s",
-                    log_prefix,
-                    alt_test_topic,
-                )
+        # Get expected metrics for percentage calculation
+        # We detect vehicle type early to calculate thresholds
+        vehicle_type_early, _ = detect_vehicle_type(discovered_topics)
+        expected_count_early = get_expected_metric_count(vehicle_type_early)
+        retained_percentage = (
+            int((retained_metric_count / expected_count_early) * 100)
+            if expected_count_early > 0
+            else 0
+        )
 
-            # Wait a bit longer for responses
-            await asyncio.sleep(2)
-        except Exception as ex:  # pylint: disable=broad-except
-            _LOGGER.warning("%s - Error publishing test message: %s", log_prefix, ex)
-            _LOGGER.debug(
-                "%s - Test message error details: %s",
+        _LOGGER.debug(
+            "%s - Initial discovery stats: %d total metrics, %d retained (msg.retain=True), "
+            "%d%% of expected %d",
+            log_prefix,
+            metric_topics_before,
+            retained_metric_count,
+            retained_percentage,
+            expected_count_early,
+        )
+
+        # Check if retained messages (msg.retain=True) already gave us enough metrics
+        # This happens when broker has retained messages from a running OVMS module
+        if retained_percentage >= GOOD_DISCOVERY_PERCENT:
+            _LOGGER.info(
+                "%s - Already received %d retained metric topics (%d%% of expected), "
+                "skipping active discovery",
                 log_prefix,
-                traceback.format_exc(),
+                retained_metric_count,
+                retained_percentage,
             )
+            active_discovery_succeeded = True
+            debug_info["discovery_method"] = "retained"
+            debug_info["retained_metric_topics"] = retained_metric_count
+            debug_info["total_metric_topics"] = metric_topics_before
+        else:
+            # Phase 1: Try active metric request (OVMS edge firmware)
+            _LOGGER.debug(
+                "%s - Attempting active metric request (OVMS edge firmware)", log_prefix
+            )
+            try:
+                if request_all_metrics(
+                    mqttc, config, client_id, config.get(CONF_QOS, DEFAULT_QOS)
+                ):
+                    # Wait for active discovery timeout
+                    _LOGGER.debug(
+                        "%s - Waiting %d seconds for active discovery response",
+                        log_prefix,
+                        ACTIVE_DISCOVERY_TIMEOUT,
+                    )
+                    await asyncio.sleep(ACTIVE_DISCOVERY_TIMEOUT)
+
+                    # Count only metric topics to avoid false success from echoed requests
+                    metric_topics_after = count_metric_topics(discovered_topics)
+                    new_metric_topics = metric_topics_after - metric_topics_before
+
+                    if new_metric_topics > 0:
+                        _LOGGER.info(
+                            "%s - Active discovery succeeded: received %d new metric topics",
+                            log_prefix,
+                            new_metric_topics,
+                        )
+                        active_discovery_succeeded = True
+                        debug_info["discovery_method"] = "active"
+                        debug_info["active_discovery_topics"] = new_metric_topics
+                    else:
+                        _LOGGER.debug(
+                            "%s - No metric topics from active request (got %d total topics, may be echoes), firmware may be older",
+                            log_prefix,
+                            len(discovered_topics) - metric_topics_before,
+                        )
+            except (MQTTException, OSError, ValueError) as ex:
+                _LOGGER.debug("%s - Active metric request failed: %s", log_prefix, ex)
+
+        # Phase 2: Passive discovery fallback
+        # If active discovery didn't work (older firmware), just wait for passive publishes
+        # Note: The old "stat" command workaround was removed - it only returns text
+        # to the response topic, it doesn't publish metrics to their normal topics
+        if not active_discovery_succeeded:
+            _LOGGER.debug("%s - Falling back to passive discovery", log_prefix)
+            debug_info["discovery_method"] = "passive"
+
+            # Calculate remaining wait time
+            # Retained messages already arrived, passive publishes fill gaps
+            remaining_wait = max(0, LEGACY_DISCOVERY_TIMEOUT - ACTIVE_DISCOVERY_TIMEOUT)
+            if remaining_wait > 0:
+                _LOGGER.debug(
+                    "%s - Waiting %d seconds for passive metric publishes",
+                    log_prefix,
+                    remaining_wait,
+                )
+                await asyncio.sleep(remaining_wait)
 
         # Clean up
         mqttc.loop_stop()
         try:
             mqttc.disconnect()
-        except Exception as ex:  # pylint: disable=broad-except
+        except (MQTTException, OSError) as ex:
             _LOGGER.debug("%s - Error disconnecting: %s", log_prefix, ex)
 
-        # Return the results
+        # Process discovery results
         topics_count = len(discovered_topics)
+        metric_topics = [t for t in discovered_topics if "/metric/" in t]
+        metric_count = len(metric_topics)
+
+        # Calculate retained message statistics
+        retained_count = len(retained_topics)
+        retained_metric_topics = [t for t in retained_topics if "/metric/" in t]
+        retained_metric_final = len(retained_metric_topics)
+        retained_percentage_of_total = (
+            int((retained_count / topics_count) * 100) if topics_count > 0 else 0
+        )
+        retained_metric_percentage = (
+            int((retained_metric_final / metric_count) * 100) if metric_count > 0 else 0
+        )
+
+        _LOGGER.debug(
+            "%s - Retained message stats: %d/%d total topics (%d%%), "
+            "%d/%d metric topics (%d%%) were retained",
+            log_prefix,
+            retained_count,
+            topics_count,
+            retained_percentage_of_total,
+            retained_metric_final,
+            metric_count,
+            retained_metric_percentage,
+        )
+
+        # Detect vehicle type and calculate expected metrics
+        vehicle_type, vehicle_name = detect_vehicle_type(discovered_topics)
+        expected_count = get_expected_metric_count(vehicle_type)
+        discovery_percentage, quality_indicator = calculate_discovery_percentage(
+            metric_count, expected_count
+        )
 
         debug_info["topics_count"] = topics_count
+        debug_info["metric_count"] = metric_count
+        debug_info["retained_total_count"] = retained_count
+        debug_info["retained_metric_count"] = retained_metric_final
+        debug_info["retained_percentage_of_total"] = retained_percentage_of_total
+        debug_info["retained_metric_percentage"] = retained_metric_percentage
+        debug_info["vehicle_type"] = vehicle_type
+        debug_info["vehicle_name"] = vehicle_name
+        debug_info["expected_count"] = expected_count
+        debug_info["discovery_percentage"] = discovery_percentage
         debug_info["discovered_topics"] = (
             list(discovered_topics)
             if len(discovered_topics) < 50
@@ -363,18 +660,46 @@ async def discover_topics(hass: HomeAssistant, config):
         )
 
         _LOGGER.debug(
-            "%s - Discovery complete. Found %d topics: %s",
+            "%s - Discovery complete. Found %d topics (%d metric topics). "
+            "Vehicle: %s. Coverage: %d%% (%d/%d expected)",
             log_prefix,
             topics_count,
-            list(discovered_topics)[:10],
+            metric_count,
+            vehicle_name,
+            discovery_percentage,
+            metric_count,
+            expected_count,
         )
 
-        return {
+        # Build result
+        result = {
             "success": True,
             "discovered_topics": discovered_topics,
             "topic_count": topics_count,
+            "metric_count": metric_count,
+            "retained_count": retained_count,
+            "retained_metric_count": retained_metric_final,
+            "retained_percentage": retained_metric_percentage,
+            "vehicle_type": vehicle_type,
+            "vehicle_name": vehicle_name,
+            "expected_count": expected_count,
+            "discovery_percentage": discovery_percentage,
+            "quality_indicator": quality_indicator,
             "debug_info": debug_info,
         }
+
+        if discovery_percentage < MINIMUM_DISCOVERY_PERCENT:
+            result["warning"] = "few_topics"
+            _LOGGER.warning(
+                "%s - Only %d metric topics found (%d%%, minimum recommended: %d%%). "
+                "Check that your OVMS module is online and publishing metrics.",
+                log_prefix,
+                metric_count,
+                discovery_percentage,
+                MINIMUM_DISCOVERY_PERCENT,
+            )
+
+        return result
 
     except socket.timeout:
         _LOGGER.error("%s - Connection timeout", log_prefix)
@@ -414,9 +739,11 @@ async def discover_topics(hass: HomeAssistant, config):
             "error_type": ERROR_CANNOT_CONNECT,
             "message": f"Connection error during topic discovery: {socket_err}",
         }
-    except Exception as ex:  # pylint: disable=broad-except
-        _LOGGER.error("%s - MQTT error: %s", log_prefix, ex)
-        _LOGGER.debug("%s - MQTT error details: %s", log_prefix, traceback.format_exc())
+    except (MQTTException, ValueError, RuntimeError) as ex:
+        _LOGGER.error("%s - Discovery error: %s", log_prefix, ex)
+        _LOGGER.debug(
+            "%s - Discovery error details: %s", log_prefix, traceback.format_exc()
+        )
         return {
             "success": False,
             "error_type": ERROR_UNKNOWN,
@@ -488,12 +815,12 @@ async def test_topic_availability(hass: HomeAssistant, config):
         if rc == 0:
             # Subscribe to general topics and response topic
             _LOGGER.debug("%s - Subscribing to general topic: %s", log_prefix, topic)
-            mqttc.subscribe(topic, qos=config.get(CONF_QOS, 1))
+            mqttc.subscribe(topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
             _LOGGER.debug(
                 "%s - Subscribing to response topic: %s", log_prefix, response_topic
             )
-            mqttc.subscribe(response_topic, qos=config.get(CONF_QOS, 1))
+            mqttc.subscribe(response_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
             # Also try a direct subscription to known topic patterns
             prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
@@ -507,7 +834,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
                         log_prefix,
                         direct_topic,
                     )
-                    mqttc.subscribe(direct_topic, qos=config.get(CONF_QOS, 1))
+                    mqttc.subscribe(direct_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
                 # Also try with the pattern matching any username
                 alt_topic = f"{prefix}/+/{vehicle_id}/#"
@@ -516,7 +843,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
                     log_prefix,
                     alt_topic,
                 )
-                mqttc.subscribe(alt_topic, qos=config.get(CONF_QOS, 1))
+                mqttc.subscribe(alt_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
 
     def on_message(_, __, msg):
         """Handle incoming messages."""
@@ -661,8 +988,8 @@ async def test_topic_availability(hass: HomeAssistant, config):
         _LOGGER.debug("%s - Sending test command to: %s", log_prefix, command_topic)
 
         try:
-            # Use 'stat' command which should work with OVMS
-            mqttc.publish(command_topic, "stat", qos=config.get(CONF_QOS, 1))
+            # Use 'stat' command - returns vehicle status, works with all firmware
+            mqttc.publish(command_topic, "stat", qos=config.get(CONF_QOS, DEFAULT_QOS))
 
             # Wait for a response
             _LOGGER.debug("%s - Waiting for command response", log_prefix)
@@ -676,7 +1003,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
                 _LOGGER.debug("%s - Command response received!", log_prefix)
             else:
                 _LOGGER.debug("%s - No command response received", log_prefix)
-        except Exception as ex:  # pylint: disable=broad-except
+        except (MQTTException, OSError, ValueError) as ex:
             _LOGGER.warning("%s - Error sending command: %s", log_prefix, ex)
             _LOGGER.debug(
                 "%s - Command error details: %s", log_prefix, traceback.format_exc()
@@ -691,7 +1018,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
         mqttc.loop_stop()
         try:
             mqttc.disconnect()
-        except Exception as ex:  # pylint: disable=broad-except
+        except (MQTTException, OSError) as ex:
             _LOGGER.debug("%s - Disconnect error (ignorable): %s", log_prefix, ex)
 
         # Check if we received any messages
@@ -781,7 +1108,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
             "details": f"Socket error during topic testing: {socket_err}",
             "debug_info": debug_info,
         }
-    except Exception as ex:  # pylint: disable=broad-except
+    except (MQTTException, ValueError, RuntimeError) as ex:
         _LOGGER.exception("%s - Unexpected error: %s", log_prefix, ex)
         _LOGGER.debug(
             "%s - Unexpected error details: %s", log_prefix, traceback.format_exc()

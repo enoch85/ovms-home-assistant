@@ -155,6 +155,40 @@ DISCOVERY_TOPIC = "{prefix}/#"
 COMMAND_TOPIC_TEMPLATE = "{structure_prefix}/client/rr/command/{command_id}"
 RESPONSE_TOPIC_TEMPLATE = "{structure_prefix}/client/rr/response/{command_id}"
 
+# On-demand metric request topics (OVMS edge firmware)
+# These allow requesting specific metrics or all metrics with wildcard patterns
+# Source: OVMS firmware changes.txt - MQTT client on-demand requests
+# Example: Publishing "*" to the metric request topic returns all valid metrics
+# Example: Publishing "v.b.*" returns all metrics starting with "v.b."
+METRIC_REQUEST_TOPIC_TEMPLATE = "{structure_prefix}/client/{client_id}/request/metric"
+CONFIG_REQUEST_TOPIC_TEMPLATE = "{structure_prefix}/client/{client_id}/request/config"
+CONFIG_RESPONSE_TOPIC_TEMPLATE = (
+    "{structure_prefix}/client/{client_id}/config/{param}/{instance}"
+)
+
+# Discovery timing constants
+# Active discovery uses on-demand metric requests (OVMS edge firmware) for faster setup
+# Legacy discovery passively waits for OVMS to publish metrics (older firmware)
+ACTIVE_DISCOVERY_TIMEOUT = 10  # seconds to wait after requesting metrics
+LEGACY_DISCOVERY_TIMEOUT = 60  # fallback timeout for older firmware
+# Delay before requesting metrics after reconnection to ensure subscriptions are established
+RECONNECT_METRIC_REQUEST_DELAY = ACTIVE_DISCOVERY_TIMEOUT / 2  # 5 seconds
+
+# Discovery thresholds (percentage-based)
+# These are percentages of expected metrics for the detected vehicle type
+MINIMUM_DISCOVERY_PERCENT = 5  # Below this, show warning to user
+# Threshold for skipping active discovery when enough retained messages (msg.retain=True) exist
+GOOD_DISCOVERY_PERCENT = 25  # Skip active discovery if this percentage already found
+
+# Generic vehicle fallback (vehicle-specific values are in metrics/vehicles/)
+GENERIC_VEHICLE_TYPE = "generic"
+GENERIC_VEHICLE_NAME = "OVMS Vehicle"
+# Expected metric count for generic OVMS vehicles (baseline for discovery percentage)
+# This is dynamically calculated from common metric categories (battery, charging,
+# climate, door, location, motor, trip, device, diagnostic, power, network, system, tire)
+# Used as fallback when vehicle type detection fails during discovery
+DEFAULT_EXPECTED_METRICS = 196
+
 # Logger
 LOGGER_NAME = "custom_components.ovms"
 
@@ -198,9 +232,17 @@ ERROR_UNKNOWN = "unknown"
 # Command rate limiting
 DEFAULT_COMMAND_RATE_LIMIT = 5  # commands per minute
 DEFAULT_COMMAND_RATE_PERIOD = 60.0  # seconds
+DEFAULT_COMMAND_TIMEOUT = 10  # seconds to wait for command response
 
 # Maximum length for state values in Home Assistant
 MAX_STATE_LENGTH = 255
+
+# GPS accuracy calculation constants
+# Used to convert GPS signal quality (v.p.gpssq) to meters accuracy
+# Source: OVMS firmware v.p.gpssq is 0-100% where <30 unusable, >50 good, >80 excellent
+# See OVMS firmware changes.txt for metric details
+GPS_ACCURACY_MIN_METERS = 5  # Minimum accuracy floor in meters
+GPS_ACCURACY_MAX_METERS = 100  # Maximum accuracy value (poorest quality)
 
 
 def truncate_state_value(value, max_length=MAX_STATE_LENGTH):

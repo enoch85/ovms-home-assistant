@@ -168,3 +168,160 @@ homelink:
               value: "2"
             - label: "Button 3: 15min climate boost or 12V charging"
               value: "3"
+
+climate_schedule:
+  name: Climate schedule
+  description: Manage scheduled precondition times for the vehicle's climate system. Supports multiple times per day with individual durations.
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      description: ID of the vehicle
+      required: true
+      selector:
+        text:
+    action:
+      name: Action
+      description: Schedule action to perform
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Set schedule for a day"
+              value: "set"
+            - label: "List all schedules"
+              value: "list"
+            - label: "Clear schedule"
+              value: "clear"
+            - label: "Copy schedule to other days"
+              value: "copy"
+            - label: "Enable scheduling"
+              value: "enable"
+            - label: "Disable scheduling"
+              value: "disable"
+            - label: "Show status"
+              value: "status"
+    day:
+      name: Day
+      description: Day of week (required for set/clear/copy actions)
+      required: false
+      selector:
+        select:
+          options:
+            - "mon"
+            - "tue"
+            - "wed"
+            - "thu"
+            - "fri"
+            - "sat"
+            - "sun"
+            - "all"
+    times:
+      name: Times
+      description: "Schedule times for the day. Format: HH:MM[/duration][,HH:MM[/duration],...] (e.g., '07:30/10,17:45/15')"
+      required: false
+      example: "07:30/10,17:45/15"
+      selector:
+        text:
+    target_days:
+      name: Target days
+      description: "Target days for copy action. Supports ranges and lists (e.g., 'tue-fri' or 'sat,sun')"
+      required: false
+      example: "tue-fri"
+      selector:
+        text:
+
+tpms_map:
+  name: TPMS sensor mapping
+  description: Manage TPMS sensor-to-wheel mapping for wheel rotation/swap scenarios.
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      description: ID of the vehicle
+      required: true
+      selector:
+        text:
+    action:
+      name: Action
+      description: TPMS mapping action to perform
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Show current mapping"
+              value: "status"
+            - label: "Get mapping (machine-readable)"
+              value: "get"
+            - label: "Set new mapping"
+              value: "set"
+            - label: "Reset to default"
+              value: "reset"
+    mapping:
+      name: Mapping
+      description: "Sensor mapping for set action using wheel position names (e.g., 'fl=rr fr=fl rl=fr rr=rl')"
+      required: false
+      example: "fl=rr fr=fl rl=fr rr=rl"
+      selector:
+        text:
+
+aux_monitor:
+  name: 12V auxiliary monitor
+  description: Control the 12V auxiliary battery monitor for automatic shutdown/reboot based on voltage levels.
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      description: ID of the vehicle
+      required: true
+      selector:
+        text:
+    action:
+      name: Action
+      description: Aux monitor action to perform
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Show status"
+              value: "status"
+            - label: "Enable monitoring"
+              value: "enable"
+            - label: "Disable monitoring"
+              value: "disable"
+    low_threshold:
+      name: Low threshold
+      description: Low voltage threshold in volts (optional for enable action)
+      required: false
+      selector:
+        number:
+          min: 10.0
+          max: 14.0
+          step: 0.1
+          unit_of_measurement: "V"
+    charging_threshold:
+      name: Charging threshold
+      description: Charging voltage threshold in volts (optional for enable action)
+      required: false
+      selector:
+        number:
+          min: 12.0
+          max: 15.0
+          step: 0.1
+          unit_of_measurement: "V"
+
+refresh_metrics:
+  name: Refresh metrics
+  description: Request a metrics refresh from the OVMS module. Uses fast on-demand requests on edge firmware, falls back to 'server v3 update all' on legacy firmware (3.3.005 and older).
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      description: ID of the vehicle
+      required: true
+      selector:
+        text:
+    pattern:
+      name: Pattern
+      description: "Metric pattern to request (edge firmware only). Use '*' for all metrics, or patterns like 'v.b.*' for battery metrics. Legacy firmware ignores this and updates all metrics."
+      required: false
+      default: "*"
+      example: "v.b.*"
+      selector:
+        text:

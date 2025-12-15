@@ -9,20 +9,21 @@ import traceback
 import uuid
 from typing import Dict, Any, Optional
 
-import paho.mqtt.client as mqtt  # pylint: disable=import-error
+import paho.mqtt.client as mqtt
 
-from homeassistant.const import (  # pylint: disable=import-error
+from homeassistant.const import (
     CONF_HOST,
     CONF_PASSWORD,
     CONF_PORT,
     CONF_USERNAME,
     CONF_PROTOCOL,
 )
-from homeassistant.core import HomeAssistant  # pylint: disable=import-error
+from homeassistant.core import HomeAssistant
 
 from ..const import (
     CONF_QOS,
     CONF_VERIFY_SSL,
+    DEFAULT_QOS,
     DEFAULT_VERIFY_SSL,
     LOGGER_NAME,
     ERROR_CANNOT_CONNECT,
@@ -455,7 +456,7 @@ async def test_subscription(
 
     # Use a test topic that should be accessible to all users
     test_topic = f"homeassistant/{client_id}/test"
-    qos = config.get(CONF_QOS, 1)
+    qos = config.get(CONF_QOS, DEFAULT_QOS)
 
     subscription_result = {"success": False, "topic": test_topic}
 

@@ -1,10 +1,10 @@
 """Options flow handler for OVMS."""
 
 import logging
-import voluptuous as vol  # pylint: disable=import-error
+import voluptuous as vol
 
-from homeassistant.config_entries import OptionsFlow  # pylint: disable=import-error
-from homeassistant.core import callback  # pylint: disable=import-error
+from homeassistant.config_entries import OptionsFlow
+from homeassistant.core import callback
 
 from ..const import (
     CONF_QOS,

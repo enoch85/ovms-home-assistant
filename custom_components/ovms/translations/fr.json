@@ -34,7 +34,7 @@
       },
       "topic_discovery": {
         "title": "Découverte des sujets",
-        "description": "{topic_count} sujets trouvés.\n\nExemples de sujets:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nIDs de véhicules potentiels:\n• {potential_vehicle_ids}\n\nRemarque: Votre broker MQTT peut conserver des sujets de configurations précédentes.\nLe système sélectionne automatiquement l'ID de véhicule le plus probable en fonction de la structure des sujets - veuillez vérifier que les suggestions sont correctes.\n\nPour réinitialiser les IDs de véhicules potentiels, effacez les sujets inutilisés de votre broker MQTT.",
+        "description": "{quality_indicator} Détecté: **{vehicle_name}**\n\nDécouvert {metric_count} sur {expected_count} métriques attendues ({discovery_percentage}%)\n\nExemples de sujets:\n• {sample_topic1}\n• {sample_topic2}\n• {sample_topic3}\n• {sample_topic4}\n• {sample_topic5}\n\nIDs de véhicules potentiels:\n• {potential_vehicle_ids}\n\nNote: Votre broker MQTT peut conserver des sujets de configurations précédentes. Le système sélectionne automatiquement l'ID de véhicule le plus probable basé sur la structure des sujets - veuillez vérifier que les suggestions sont correctes.\n\nPour réinitialiser les IDs de véhicules potentiels, supprimez les sujets inutilisés de votre broker MQTT.",
         "data": {
           "retry_discovery": "Réessayer la découverte"
         }
@@ -53,6 +53,7 @@
       "timeout": "Délai de connexion dépassé",
       "invalid_response": "Réponse invalide du broker",
       "no_topics": "Aucun sujet OVMS trouvé",
+      "few_topics_warning": "Peu de sujets métriques trouvés. Votre module OVMS est peut-être hors ligne ou ne publie pas. Vous pouvez continuer, mais certaines entités peuvent être manquantes.",
       "topic_access_denied": "Accès refusé aux sujets OVMS",
       "tls_error": "Erreur de configuration TLS/SSL",
       "unknown": "Erreur inattendue",

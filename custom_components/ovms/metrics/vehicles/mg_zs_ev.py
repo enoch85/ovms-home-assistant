@@ -20,6 +20,11 @@ from homeassistant.const import (
     EntityCategory,
 )
 
+# Vehicle metadata
+VEHICLE_TYPE = "mg_zs_ev"
+VEHICLE_NAME = "MG ZS EV"
+METRIC_PREFIX = "xmg."
+
 # Custom unit constants
 UNIT_AMPERE_HOUR = "Ah"
 
