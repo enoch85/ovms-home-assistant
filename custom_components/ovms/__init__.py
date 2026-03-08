@@ -286,7 +286,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
             await _migrate_blacklist_patterns(hass, config_entry, version)
 
         if version <= 3:
-            await _migrate_lock_entities(hass, config_entry, version)
+            await async_migrate_lock_entities(hass, config_entry, version)
 
         # Update the config entry version
         hass.config_entries.async_update_entry(config_entry, version=CONFIG_VERSION)
