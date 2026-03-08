@@ -10,7 +10,7 @@ from homeassistant.const import (  # noqa: W0611
 )
 
 DOMAIN = "ovms"
-CONFIG_VERSION = 3
+CONFIG_VERSION = 4
 
 # Configuration
 CONF_VEHICLE_ID = "vehicle_id"
@@ -43,10 +43,10 @@ DEFAULT_TOPIC_STRUCTURE = "{prefix}/{mqtt_username}/{vehicle_id}"
 DEFAULT_VERIFY_SSL = True
 DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by default
 
-# Switch types configuration - maps metrics to their control commands
-# These metrics will automatically create switch entities alongside their sensors
-# The dictionary key is the metric path (e.g., "v.e.hvac")
-# Source: OVMS command documentation for controllable vehicle features
+# Switch types configuration - maps metrics to their control commands.
+# These metrics automatically create switch entities alongside their sensors.
+# The dictionary key is the metric path (e.g., "v.e.hvac").
+# Source: OVMS command documentation for controllable vehicle features.
 SWITCH_TYPES = {
     "v.e.hvac": {
         "type": "climate",
@@ -62,15 +62,6 @@ SWITCH_TYPES = {
         "on_command": "charge start",
         "off_command": "charge stop",
     },
-    "v.e.locked": {
-        "type": "lock",
-        "icon": "mdi:lock",
-        "category": None,
-        # WARNING: Lock/unlock commands may require a PIN for security.
-        # The PIN is not included here - users must configure vehicle-side PIN settings.
-        "on_command": "lock",
-        "off_command": "unlock",
-    },
     "v.e.valet": {
         "type": "valet",
         "icon": "mdi:key",
@@ -78,6 +69,21 @@ SWITCH_TYPES = {
         "on_command": "valet",
         "off_command": "unvalet",
     },
+}
+
+# Lock types configuration - maps metrics to Home Assistant lock entities.
+# These metrics automatically create native lock entities alongside their sensors.
+LOCK_TYPES = {
+    "v.e.locked": {
+        "type": "lock",
+        "name": "Vehicle Lock",
+        "icon": "mdi:lock",
+        "category": None,
+        # WARNING: Lock/unlock commands may require a PIN for security.
+        # The PIN is not included here - users must configure vehicle-side PIN settings.
+        "lock_command": "lock",
+        "unlock_command": "unlock",
+    }
 }
 
 # System topic blacklist patterns - these are always applied and cannot be modified by users
@@ -245,7 +251,9 @@ GPS_ACCURACY_MIN_METERS = 5  # Minimum accuracy floor in meters
 GPS_ACCURACY_MAX_METERS = 100  # Maximum accuracy value (poorest quality)
 
 
-def truncate_state_value(value, max_length=MAX_STATE_LENGTH):
+def truncate_state_value(
+    value: object, max_length: int = MAX_STATE_LENGTH
+) -> str | None:
     """Truncate state value to the maximum allowed length.
 
     Args:
