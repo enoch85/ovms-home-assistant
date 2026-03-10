@@ -1,7 +1,6 @@
 """Support for OVMS lock entities."""
 
 import logging
-from collections.abc import Awaitable, Callable
 
 from homeassistant.components.lock import LockEntity
 from homeassistant.config_entries import ConfigEntry
@@ -20,21 +19,18 @@ from ..entity_state import (
     parse_boolean_state,
     update_attributes_from_json,
 )
+from ..utils import CommandFunction, get_entry_command_function
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 DiscoveryData = dict[str, object]
-CommandResult = dict[str, object]
-CommandFunction = Callable[..., Awaitable[CommandResult]]
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up OVMS locks based on a config entry."""
-    command_function = hass.data[DOMAIN][entry.entry_id][
-        "mqtt_client"
-    ].async_send_command
+    command_function = get_entry_command_function(hass, entry)
 
     @callback
     def async_add_lock(data: DiscoveryData) -> None:
