@@ -32,6 +32,9 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up OVMS locks based on a config entry."""
+    command_function = hass.data[DOMAIN][entry.entry_id][
+        "mqtt_client"
+    ].async_send_command
 
     @callback
     def async_add_lock(data: DiscoveryData) -> None:
@@ -41,7 +44,6 @@ async def async_setup_entry(
 
         _LOGGER.info("Adding lock: %s", data["name"])
 
-        mqtt_client = hass.data[DOMAIN][entry.entry_id]["mqtt_client"]
         lock = OVMSLock(
             unique_id=data["unique_id"],
             name=data["name"],
@@ -49,7 +51,7 @@ async def async_setup_entry(
             initial_state=data["payload"],
             device_info=data["device_info"],
             attributes=data["attributes"],
-            command_function=mqtt_client.async_send_command,
+            command_function=command_function,
             hass=hass,
             friendly_name=data.get("friendly_name"),
             lock_config=data.get("lock_config", {}),

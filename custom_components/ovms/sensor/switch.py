@@ -42,6 +42,9 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up OVMS switches based on a config entry."""
+    command_function = hass.data[DOMAIN][entry.entry_id][
+        "mqtt_client"
+    ].async_send_command
 
     @callback
     def async_add_switch(data: DiscoveryData) -> None:
@@ -50,9 +53,6 @@ async def async_setup_entry(
             return
 
         _LOGGER.info("Adding switch: %s", data["name"])
-
-        # Get the MQTT client for publishing commands
-        mqtt_client = hass.data[DOMAIN][entry.entry_id]["mqtt_client"]
 
         # Extract switch_config if present (for controllable metrics)
         switch_config = data.get("switch_config", {})
@@ -65,7 +65,7 @@ async def async_setup_entry(
             initial_state=data["payload"],
             device_info=data["device_info"],
             attributes=data["attributes"],
-            command_function=mqtt_client.async_send_command,
+            command_function=command_function,
             hass=hass,
             friendly_name=data.get("friendly_name"),
             switch_config=switch_config,
