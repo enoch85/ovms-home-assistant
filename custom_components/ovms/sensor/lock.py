@@ -84,8 +84,11 @@ class OVMSLock(LockEntity, RestoreEntity):
         self._attr_name = friendly_name or name.replace("_", " ").title()
         self._topic = topic
         self._attr_device_info = device_info
+        filtered_attributes = {
+            key: value for key, value in attributes.items() if key != "invert_state"
+        }
         self._attr_extra_state_attributes = {
-            **attributes,
+            **filtered_attributes,
             "topic": topic,
             "last_updated": dt_util.utcnow().isoformat(),
         }
@@ -113,7 +116,7 @@ class OVMSLock(LockEntity, RestoreEntity):
                 saved_attributes = {
                     key: value
                     for key, value in state.attributes.items()
-                    if key not in ["icon"]
+                    if key not in ["icon", "invert_state"]
                 }
                 self._attr_extra_state_attributes.update(saved_attributes)
 
@@ -137,11 +140,9 @@ class OVMSLock(LockEntity, RestoreEntity):
 
     def _parse_state(self, state: object) -> bool:
         """Parse the current lock state from the MQTT payload."""
-        invert_state = self._attr_extra_state_attributes.get("invert_state", False)
         return parse_boolean_state(
             state,
             (LOCK_TRUE_STATES, LOCK_FALSE_STATES),
-            flip=invert_state,
         )
 
     async def _execute_command(self, command_key: str, locked_state: bool) -> None:
