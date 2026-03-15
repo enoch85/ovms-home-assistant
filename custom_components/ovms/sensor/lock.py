@@ -4,6 +4,7 @@ import logging
 
 from homeassistant.components.lock import LockEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import ATTR_CODE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -143,14 +144,14 @@ class OVMSLock(LockEntity, RestoreEntity):
             (LOCK_TRUE_STATES, LOCK_FALSE_STATES),
         )
 
-    async def _execute_command(self, command_key: str, locked_state: bool) -> None:
+    async def _execute_command(self, command_key: str, locked_state: bool, pin: str | None) -> None:
         """Execute a lock or unlock command."""
         command = self._lock_config.get(command_key)
         if not command:
             _LOGGER.error("No %s configured for lock %s", command_key, self.name)
             return
 
-        result = await self._command_function(command=command)
+        result = await self._command_function(command=command, parameters=pin)
         if result.get("success"):
             self._attr_is_locked = locked_state
             self.async_write_ha_state()
@@ -165,8 +166,10 @@ class OVMSLock(LockEntity, RestoreEntity):
 
     async def async_lock(self, **kwargs: object) -> None:
         """Lock the vehicle."""
-        await self._execute_command("lock_command", True)
+        pin: str = kwargs.get(ATTR_CODE)
+        await self._execute_command("lock_command", True, pin)
 
     async def async_unlock(self, **kwargs: object) -> None:
         """Unlock the vehicle."""
-        await self._execute_command("unlock_command", False)
+        pin: str = kwargs.get(ATTR_CODE)
+        await self._execute_command("unlock_command", False, pin)
