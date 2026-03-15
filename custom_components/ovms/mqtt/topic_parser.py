@@ -2,12 +2,12 @@
 
 import logging
 import re
-from typing import Dict, Any, Optional, Tuple, List
 
 from .. import metrics
 from ..const import (
     LOGGER_NAME,
     CONF_TOPIC_BLACKLIST,
+    LOCK_TYPES,
     SWITCH_TYPES,
     SYSTEM_TOPIC_BLACKLIST,
     LEGACY_TOPIC_BLACKLIST,
@@ -22,11 +22,13 @@ from ..metrics import (
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
+EntityData = dict[str, object]
+
 
 class TopicParser:
     """Parser for OVMS MQTT topics."""
 
-    def __init__(self, config: Dict[str, Any], entity_registry):
+    def __init__(self, config: dict[str, object], entity_registry: object):
         """Initialize the topic parser."""
         self.config = config
         self.entity_registry = entity_registry
@@ -64,7 +66,7 @@ class TopicParser:
             vehicle_id = self.config.get("vehicle_id", "")
             return f"{prefix}/{vehicle_id}"
 
-    def parse_topic(self, topic: str, payload: str) -> Optional[Dict[str, Any]]:
+    def parse_topic(self, topic: str, payload: str) -> EntityData | None:
         """Parse a topic to determine the entity type and info."""
         try:
             _LOGGER.debug("Parsing topic: %s", topic)
@@ -192,13 +194,11 @@ class TopicParser:
             _LOGGER.exception("Error parsing topic: %s", ex)
             return None
 
-    def get_related_entities(
-        self, primary_entity: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+    def get_related_entities(self, primary_entity: EntityData) -> list[EntityData]:
         """Get additional entities that should be created alongside the primary entity.
 
-        For controllable metrics (like v.e.hvac, v.c.charging), this creates switch
-        entities that allow the user to control the feature via Home Assistant.
+        For controllable metrics, this creates related control entities that allow
+        the user to operate the feature via Home Assistant.
 
         Args:
             primary_entity: The primary entity data from parse_topic()
@@ -213,58 +213,87 @@ class TopicParser:
             if not metric_path:
                 return related_entities
 
+            if metric_path in LOCK_TYPES:
+                lock_entity = self._build_related_control_entity(
+                    primary_entity,
+                    "lock",
+                    LOCK_TYPES[metric_path],
+                )
+                if lock_entity is not None:
+                    related_entities.append(lock_entity)
+
             # Check if this metric has an associated switch control
             if metric_path in SWITCH_TYPES:
-                switch_config = SWITCH_TYPES[metric_path]
-
-                # Validate required configuration keys
-                if not switch_config.get("on_command") or not switch_config.get(
-                    "off_command"
-                ):
-                    _LOGGER.warning(
-                        "Switch configuration for %s is missing required commands (on_command/off_command), skipping switch creation",
-                        metric_path,
-                    )
-                    return related_entities
-
-                _LOGGER.info("Creating switch entity for metric %s", metric_path)
-
-                # Create switch entity name based on primary entity
-                base_name = primary_entity.get("name", "")
-                raw_name = primary_entity.get("raw_name", "")
-
-                # Add _switch suffix to clearly indicate it's a switch entity
-                switch_name = f"{base_name}_switch"
-                switch_raw_name = f"{raw_name}_switch"
-
-                # Build the switch entity configuration
-                switch_entity = {
-                    "entity_type": "switch",
-                    "name": switch_name,
-                    "raw_name": switch_raw_name,
-                    "parts": primary_entity.get("parts", []),
-                    "metric_path": metric_path,
-                    "metric_info": primary_entity.get("metric_info"),
-                    "attributes": primary_entity.get("attributes", {}).copy(),
-                    "priority": primary_entity.get("priority", 0),
-                    # Switch-specific configuration for command handling
-                    "switch_config": {
-                        "on_command": switch_config.get("on_command"),
-                        "off_command": switch_config.get("off_command"),
-                        "icon": switch_config.get("icon"),
-                        "type": switch_config.get("type"),
-                        "state_metric": metric_path,
-                    },
-                }
-
-                related_entities.append(switch_entity)
+                switch_entity = self._build_related_control_entity(
+                    primary_entity,
+                    "switch",
+                    SWITCH_TYPES[metric_path],
+                )
+                if switch_entity is not None:
+                    related_entities.append(switch_entity)
 
         except Exception as ex:
             _LOGGER.exception("Error getting related entities: %s", ex)
 
         return related_entities
 
-    def _convert_to_metric_path(self, parts: List[str]) -> str:
+    def _build_related_control_entity(
+        self,
+        primary_entity: EntityData,
+        entity_type: str,
+        control_config: dict[str, object],
+    ) -> EntityData | None:
+        """Build a related control entity for a primary metric entity."""
+        metric_path = primary_entity.get("metric_path", "")
+        if entity_type == "switch":
+            required_keys = ("on_command", "off_command")
+            config_key = "switch_config"
+        else:
+            required_keys = ("lock_command", "unlock_command")
+            config_key = "lock_config"
+
+        missing_keys = [key for key in required_keys if not control_config.get(key)]
+        if missing_keys:
+            _LOGGER.warning(
+                "%s configuration for %s is missing required keys %s, skipping entity creation",
+                entity_type.title(),
+                metric_path,
+                ", ".join(missing_keys),
+            )
+            return None
+
+        _LOGGER.info("Creating %s entity for metric %s", entity_type, metric_path)
+
+        base_name = primary_entity.get("name", "")
+        raw_name = primary_entity.get("raw_name", "")
+        friendly_name = control_config.get("name")
+
+        if entity_type == "switch":
+            entity_name = f"{base_name}_switch"
+            entity_raw_name = f"{raw_name}_switch"
+        else:
+            entity_name = base_name
+            entity_raw_name = raw_name
+
+        return {
+            "entity_type": entity_type,
+            "name": entity_name,
+            "friendly_name": friendly_name,
+            "raw_name": entity_raw_name,
+            "parts": primary_entity.get("parts", []),
+            "metric_path": metric_path,
+            "metric_info": primary_entity.get("metric_info"),
+            "attributes": primary_entity.get("attributes", {}).copy(),
+            "priority": primary_entity.get("priority", 0),
+            config_key: {
+                **{key: control_config.get(key) for key in required_keys},
+                "icon": control_config.get("icon"),
+                "type": control_config.get("type"),
+                "state_metric": metric_path,
+            },
+        }
+
+    def _convert_to_metric_path(self, parts: list[str]) -> str:
         """Convert topic parts to metric path."""
         # Keep vendor-specific prefixes intact
         if len(parts) >= 2:
@@ -295,7 +324,7 @@ class TopicParser:
         return ".".join(parts)
 
     def _determine_entity_type(
-        self, parts: List[str], metric_path: str, topic: str
+        self, parts: list[str], metric_path: str, topic: str
     ) -> str:
         """Determine the entity type based on topic parts and metric info."""
         # Check if this should be a binary sensor
@@ -322,7 +351,7 @@ class TopicParser:
         # Default to sensor
         return "sensor"
 
-    def _should_be_binary_sensor(self, parts: List[str], metric_path: str) -> bool:
+    def _should_be_binary_sensor(self, parts: list[str], metric_path: str) -> bool:
         """Determine if topic should be a binary sensor."""
         try:
             # Check if this is a known binary metric
@@ -392,7 +421,7 @@ class TopicParser:
             _LOGGER.exception("Error determining if should be binary sensor: %s", ex)
             return False
 
-    def _is_coordinate_topic(self, parts: List[str], name: str, topic: str) -> bool:
+    def _is_coordinate_topic(self, parts: list[str], name: str, topic: str) -> bool:
         """Check if topic is a latitude/longitude coordinate topic.
 
         These topics contain actual location coordinates.
@@ -423,7 +452,7 @@ class TopicParser:
 
         return False
 
-    def _is_gps_metric_topic(self, parts: List[str], name: str, topic: str) -> bool:
+    def _is_gps_metric_topic(self, parts: list[str], name: str, topic: str) -> bool:
         """Check if topic is a GPS-related metric that should be a sensor."""
         gps_keywords = ["gpshdop", "gpssq", "gpsmode", "gpsspeed", "gpstime", "gps"]
         coordinate_keywords = ["latitude", "lat", "longitude", "long", "lon", "lng"]
@@ -436,7 +465,7 @@ class TopicParser:
 
         return False
 
-    def _normalize_blacklist(self, blacklist):
+    def _normalize_blacklist(self, blacklist: object) -> list[str]:
         """Normalize the blacklist format to always be a list of patterns."""
         if not blacklist:
             return []

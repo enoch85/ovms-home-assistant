@@ -1,5 +1,6 @@
 """Utility functions for OVMS integration."""
 
+from collections.abc import Awaitable, Callable
 import json
 import logging
 import re
@@ -14,10 +15,14 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfVolume,
 )
+from homeassistant.core import HomeAssistant
 
-from .const import LOGGER_NAME
+from .const import DOMAIN, LOGGER_NAME
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
+CommandResult = dict[str, object]
+CommandFunction = Callable[..., Awaitable[CommandResult]]
 
 
 def get_merged_config(entry: ConfigEntry) -> Dict[str, Any]:
@@ -35,6 +40,13 @@ def get_merged_config(entry: ConfigEntry) -> Dict[str, Any]:
     if entry.options:
         config.update(entry.options)
     return config
+
+
+def get_entry_command_function(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> CommandFunction:
+    """Get the shared OVMS command function for a config entry."""
+    return hass.data[DOMAIN][entry.entry_id]["mqtt_client"].async_send_command
 
 
 def convert_temperature(value: float, to_unit: str) -> float:

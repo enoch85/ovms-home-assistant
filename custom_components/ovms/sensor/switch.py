@@ -1,8 +1,6 @@
 """Support for OVMS switches."""
 
 import logging
-import json
-from typing import Any, Callable, Dict, Optional
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
@@ -21,29 +19,36 @@ from ..const import (
     SWITCH_TYPES,
     SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY,
-    truncate_state_value,
 )
+from ..entity_state import (
+    SWITCH_FALSE_STATES,
+    SWITCH_TRUE_STATES,
+    is_boolean_state,
+    parse_boolean_state,
+    update_attributes_from_json,
+)
+from ..utils import CommandFunction, get_entry_command_function
 
 from ..metrics import get_metric_by_path, get_metric_by_pattern
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
+DiscoveryData = dict[str, object]
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up OVMS switches based on a config entry."""
+    command_function = get_entry_command_function(hass, entry)
 
     @callback
-    def async_add_switch(data: Dict[str, Any]) -> None:
+    def async_add_switch(data: DiscoveryData) -> None:
         """Add switch based on discovery data."""
         if data["entity_type"] != "switch":
             return
 
         _LOGGER.info("Adding switch: %s", data["name"])
-
-        # Get the MQTT client for publishing commands
-        mqtt_client = hass.data[DOMAIN][entry.entry_id]["mqtt_client"]
 
         # Extract switch_config if present (for controllable metrics)
         switch_config = data.get("switch_config", {})
@@ -56,7 +61,7 @@ async def async_setup_entry(
             initial_state=data["payload"],
             device_info=data["device_info"],
             attributes=data["attributes"],
-            command_function=mqtt_client.async_send_command,
+            command_function=command_function,
             hass=hass,
             friendly_name=data.get("friendly_name"),
             switch_config=switch_config,
@@ -81,11 +86,11 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         topic: str,
         initial_state: str,
         device_info: DeviceInfo,
-        attributes: Dict[str, Any],
-        command_function: Callable,
-        hass: Optional[HomeAssistant] = None,
-        friendly_name: Optional[str] = None,
-        switch_config: Optional[Dict[str, Any]] = None,
+        attributes: dict[str, object],
+        command_function: CommandFunction,
+        hass: HomeAssistant | None = None,
+        friendly_name: str | None = None,
+        switch_config: dict[str, object] | None = None,
     ) -> None:
         """Initialize the switch.
 
@@ -159,13 +164,6 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         @callback
         def update_state(payload: str) -> None:
             """Update the switch state."""
-            # Ensure payload is properly truncated if it's a string
-            if isinstance(payload, str) and len(payload) > 255:
-                truncated_payload = truncate_state_value(payload)
-                payload = (
-                    truncated_payload if truncated_payload is not None else payload
-                )
-
             self._attr_is_on = self._parse_state(payload)
 
             # Update timestamp attribute
@@ -188,48 +186,13 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
     def _parse_state(self, state: str) -> bool:
         """Parse the state string to a boolean."""
         _LOGGER.debug("Parsing switch state: %s", state)
-
-        # Try to parse as JSON first
-        try:
-            data = json.loads(state)
-
-            # If JSON is a dict with a state/value field, use that
-            if isinstance(data, dict):
-                for key in ["state", "value", "status"]:
-                    if key in data:
-                        state = str(data[key])
-                        break
-            # If JSON is a boolean or number, use that directly
-            elif isinstance(data, bool):
-                return data
-            elif isinstance(data, (int, float)):
-                return bool(data)
-            else:
-                # Convert the entire JSON to string for normal parsing
-                state = str(data)
-
-        except (ValueError, json.JSONDecodeError):
-            # Not JSON, continue with string parsing
-            pass
-
-        # Make sure state is truncated if needed
-        if isinstance(state, str):
-            truncated_state = truncate_state_value(state)
-            state = truncated_state if truncated_state is not None else state
-
-        # Check for boolean-like values in string form
-        if isinstance(state, str):
-            if state.lower() in ("true", "on", "yes", "1", "enabled", "active"):
-                return True
-            if state.lower() in ("false", "off", "no", "0", "disabled", "inactive"):
-                return False
-
-        # Try numeric comparison for anything else
-        try:
-            return float(state) > 0
-        except (ValueError, TypeError):
+        if not is_boolean_state(state, (SWITCH_TRUE_STATES, SWITCH_FALSE_STATES)):
             _LOGGER.warning("Could not determine switch state from value: %s", state)
-            return False
+
+        return parse_boolean_state(
+            state,
+            (SWITCH_TRUE_STATES, SWITCH_FALSE_STATES),
+        )
 
     def _determine_switch_type(self) -> None:
         """Determine the switch type and set icon and category.
@@ -337,33 +300,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
 
     def _process_json_payload(self, payload: str) -> None:
         """Process JSON payload to extract additional attributes."""
-        try:
-            # Ensure payload is properly truncated if it's a string
-            if isinstance(payload, str) and len(payload) > 255:
-                truncated_payload = truncate_state_value(payload)
-                payload = (
-                    truncated_payload if truncated_payload is not None else payload
-                )
-
-            json_data = json.loads(payload)
-            if isinstance(json_data, dict):
-                # Add useful attributes from the data
-                for key, value in json_data.items():
-                    if (
-                        key not in ["value", "state", "status"]
-                        and key not in self._attr_extra_state_attributes
-                    ):
-                        self._attr_extra_state_attributes[key] = value
-
-                # If there's a timestamp in the JSON, use it
-                if "timestamp" in json_data:
-                    self._attr_extra_state_attributes["device_timestamp"] = json_data[
-                        "timestamp"
-                    ]
-
-        except (ValueError, json.JSONDecodeError):
-            # Not JSON, that's fine
-            pass
+        update_attributes_from_json(payload, self._attr_extra_state_attributes)
 
     async def _execute_command(self, command_type: str) -> None:
         """Execute a switch command (on or off).
@@ -409,10 +346,10 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
                 result.get("error"),
             )
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
+    async def async_turn_on(self, **kwargs: object) -> None:
         """Turn the switch on."""
         await self._execute_command("on")
 
-    async def async_turn_off(self, **kwargs: Any) -> None:
+    async def async_turn_off(self, **kwargs: object) -> None:
         """Turn the switch off."""
         await self._execute_command("off")

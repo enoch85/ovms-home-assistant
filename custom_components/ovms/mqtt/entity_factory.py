@@ -89,9 +89,11 @@ class EntityFactory:
             metric_info = entity_data.get("metric_info")
 
             # Create friendly name using the naming service
-            friendly_name = self.naming_service.create_friendly_name(
-                parts, metric_info, topic, raw_name
-            )
+            friendly_name = entity_data.get("friendly_name")
+            if not friendly_name:
+                friendly_name = self.naming_service.create_friendly_name(
+                    parts, metric_info, topic, raw_name
+                )
 
             # Reduce logging frequency - only log entity creation for important entities or during setup
             if len(self.created_entities) < 20 or entity_type in [
@@ -131,6 +133,9 @@ class EntityFactory:
             # Add switch-specific config if this is a switch entity
             if entity_type == "switch" and "switch_config" in entity_data:
                 dispatcher_data["switch_config"] = entity_data["switch_config"]
+
+            if entity_type == "lock" and "lock_config" in entity_data:
+                dispatcher_data["lock_config"] = entity_data["lock_config"]
 
             # Check if this is a coordinate entity to track for the device tracker
             is_coordinate = self._is_coordinate_entity(topic, entity_data)
@@ -303,14 +308,16 @@ class EntityFactory:
     ) -> Dict[str, Any]:
         """Generate unique IDs for entities.
 
-        For switch entities, appends '_switch' suffix to ensure uniqueness
-        when both a sensor and switch exist for the same metric.
+        For related control entities, appends a type-specific suffix to ensure
+        uniqueness when multiple entities exist for the same metric.
         """
         vehicle_id = self.config.get("vehicle_id", "unknown").lower()
         topic_hash = hashlib.md5(topic.encode()).hexdigest()[:6]
 
-        # Add _switch suffix for switch entities to avoid unique_id collision
-        suffix = "_switch" if entity_data.get("entity_type") == "switch" else ""
+        suffix = {
+            "switch": "_switch",
+            "lock": "_lock",
+        }.get(entity_data.get("entity_type"), "")
 
         # Extract metric path from topic (everything after vehicle ID)
         topic_parts = topic.split("/")

@@ -1,7 +1,6 @@
 """Support for OVMS binary sensors."""
 
 import logging
-from typing import Any, Dict, Optional
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -21,8 +20,13 @@ from ..const import (
     LOGGER_NAME,
     SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY,
-    truncate_state_value,
 )
+from ..entity_state import (
+    BINARY_SENSOR_FALSE_STATES,
+    BINARY_SENSOR_TRUE_STATES,
+    parse_boolean_state,
+)
+from ..const import truncate_state_value
 
 from ..metrics import (
     METRIC_DEFINITIONS,
@@ -33,6 +37,8 @@ from ..metrics import (
 )
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
+DiscoveryData = dict[str, object]
 
 # A mapping of binary sensor name patterns to device classes
 BINARY_SENSOR_TYPES = {
@@ -67,7 +73,7 @@ async def async_setup_entry(
     """Set up OVMS binary sensors based on a config entry."""
 
     @callback
-    def async_add_binary_sensor(data: Dict[str, Any]) -> None:
+    def async_add_binary_sensor(data: DiscoveryData) -> None:
         """Add binary sensor based on discovery data."""
         try:
             if data["entity_type"] != "binary_sensor":
@@ -108,9 +114,9 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
         topic: str,
         initial_state: str,
         device_info: DeviceInfo,
-        attributes: Dict[str, Any],
-        hass: Optional[HomeAssistant] = None,
-        friendly_name: Optional[str] = None,
+        attributes: dict[str, object],
+        hass: HomeAssistant | None = None,
+        friendly_name: str | None = None,
     ) -> None:
         """Initialize the binary sensor."""
         self._attr_unique_id = unique_id
@@ -214,35 +220,11 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                     "invert_state", False
                 )
 
-            # Parse the value to boolean
-            result = False
-
-            if isinstance(state, str):
-                # Make sure state is truncated if needed
-                truncated_state = truncate_state_value(state)
-                state = truncated_state if truncated_state is not None else state
-
-                if state.lower() in ("true", "on", "yes", "1", "open", "locked"):
-                    result = True
-                elif state.lower() in ("false", "off", "no", "0", "closed", "unlocked"):
-                    result = False
-                else:
-                    # Try numeric comparison
-                    try:
-                        result = float(state) > 0
-                    except (ValueError, TypeError):
-                        result = False
-            else:
-                # Try numeric comparison
-                try:
-                    result = float(state) > 0
-                except (ValueError, TypeError):
-                    result = False
-
-            # Apply inversion if needed
-            if invert_state:
-                return not result
-            return result
+            return parse_boolean_state(
+                state,
+                (BINARY_SENSOR_TRUE_STATES, BINARY_SENSOR_FALSE_STATES),
+                flip=invert_state,
+            )
 
         except Exception as ex:
             _LOGGER.exception("Error parsing state '%s': %s", state, ex)

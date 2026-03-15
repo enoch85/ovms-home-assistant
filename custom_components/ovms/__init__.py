@@ -17,6 +17,7 @@ from .const import (
 )
 
 from .mqtt import OVMSMQTTClient
+from .migrations import async_migrate_lock_entities
 from .services import async_setup_services, async_unload_services
 from .utils import get_merged_config
 
@@ -26,6 +27,7 @@ PLATFORMS = [
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
     Platform.SWITCH,
+    Platform.LOCK,
     Platform.DEVICE_TRACKER,
 ]
 
@@ -282,6 +284,9 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         if version in [1, 2]:
             # Migrate blacklist patterns to clean format
             await _migrate_blacklist_patterns(hass, config_entry, version)
+
+        if version <= 3:
+            await async_migrate_lock_entities(hass, config_entry, version)
 
         # Update the config entry version
         hass.config_entries.async_update_entry(config_entry, version=CONFIG_VERSION)
