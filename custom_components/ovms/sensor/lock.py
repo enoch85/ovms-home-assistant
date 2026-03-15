@@ -6,6 +6,7 @@ from homeassistant.components.lock import LockEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_CODE
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import async_generate_entity_id
@@ -146,6 +147,8 @@ class OVMSLock(LockEntity, RestoreEntity):
 
     async def _execute_command(self, command_key: str, locked_state: bool, pin: str | None) -> None:
         """Execute a lock or unlock command."""
+        ERROR_PREFIX = 'Error: '
+        
         command = self._lock_config.get(command_key)
         if not command:
             _LOGGER.error("No %s configured for lock %s", command_key, self.name)
@@ -153,9 +156,35 @@ class OVMSLock(LockEntity, RestoreEntity):
 
         result = await self._command_function(command=command, parameters=pin)
         if result.get("success"):
-            self._attr_is_locked = locked_state
-            self.async_write_ha_state()
-            return
+            response: str | None = result.get('response')
+            if response:
+                response = response.strip()
+
+            if response == 'Vehicle locked' or response == 'Vehicle unlocked':
+                self._attr_is_locked = locked_state
+                self.async_write_ha_state()
+                return
+
+            if response.startswith('Usage:'):
+                _LOGGER.error(
+                    "Error response received when executing %s for %s: %s",
+                    command_key,
+                    self.name,
+                    response,
+                )
+                if pin is None:
+                    raise HomeAssistantError('A pin code is likely required.')
+                else:
+                    raise HomeAssistantError('OVMS command seems to be malformed.')
+            
+            _LOGGER.error(
+                "Error response received when executing %s for %s: %s",
+                command_key,
+                self.name,
+                response,
+            )
+            error = response[len(ERROR_PREFIX):] if response.startswith(ERROR_PREFIX) else response
+            raise HomeAssistantError(f'OVMS reported {error}')
 
         _LOGGER.error(
             "Failed to execute %s for %s: %s",
