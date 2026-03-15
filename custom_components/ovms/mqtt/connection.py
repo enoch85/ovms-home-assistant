@@ -305,6 +305,12 @@ class MQTTConnectionManager:
                 rc = self._extract_reason_code(rc)
                 if rc == 0:
                     _LOGGER.info("Cleanly disconnected from MQTT broker")
+                elif rc is None:
+                    reason_message = self._get_reason_message(rc)
+                    _LOGGER.warning(
+                        "Disconnected from MQTT broker: %s",
+                        reason_message,
+                    )
                 else:
                     reason_message = self._get_reason_message(rc)
                     _LOGGER.warning(
