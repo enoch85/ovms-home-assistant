@@ -14,6 +14,14 @@ def get_metric_by_path(metric_path):
     if metric_path in METRIC_DEFINITIONS:
         return METRIC_DEFINITIONS[metric_path]
 
+    # OVMS generic metric topics commonly include a leading "metric." segment.
+    # Strip it here so entity-side topic reconstruction resolves to the same
+    # definitions as discovery-time parsing.
+    if metric_path.startswith("metric."):
+        alt_path = metric_path[7:]
+        if alt_path in METRIC_DEFINITIONS:
+            return METRIC_DEFINITIONS[alt_path]
+
     # For VW eUP metrics, try removing 'metric.' prefix if it's present
     if metric_path.startswith("metric.xvu."):
         alt_path = metric_path[7:]  # Remove 'metric.'
