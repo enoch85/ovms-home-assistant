@@ -7,11 +7,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import (
     async_dispatcher_connect,
-    async_dispatcher_send,
 )
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from ..const import LOGGER_NAME, SIGNAL_ADD_ENTITIES
+from ..const import LOGGER_NAME, get_add_entities_signal
 from .entities import OVMSSensor, CellVoltageSensor
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -79,6 +78,7 @@ async def async_setup_entry(
                 data.get("attributes", {}),
                 data.get("friendly_name"),
                 hass,
+                entry.entry_id,
             )
 
             async_add_entities([sensor])
@@ -87,8 +87,7 @@ async def async_setup_entry(
 
     # Subscribe to discovery events
     entry.async_on_unload(
-        async_dispatcher_connect(hass, SIGNAL_ADD_ENTITIES, async_add_sensor)
+        async_dispatcher_connect(
+            hass, get_add_entities_signal(entry.entry_id), async_add_sensor
+        )
     )
-
-    # Signal that all platforms are loaded
-    async_dispatcher_send(hass, "ovms_sensor_platform_loaded")

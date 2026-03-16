@@ -18,8 +18,8 @@ from homeassistant.util import dt as dt_util
 
 from ..const import (
     LOGGER_NAME,
-    SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY,
+    get_add_entities_signal,
 )
 from ..entity_state import (
     BINARY_SENSOR_FALSE_STATES,
@@ -98,7 +98,11 @@ async def async_setup_entry(
 
     # Subscribe to discovery events
     entry.async_on_unload(
-        async_dispatcher_connect(hass, SIGNAL_ADD_ENTITIES, async_add_binary_sensor)
+        async_dispatcher_connect(
+            hass,
+            get_add_entities_signal(entry.entry_id),
+            async_add_binary_sensor,
+        )
     )
 
 

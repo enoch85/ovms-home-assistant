@@ -12,12 +12,13 @@ from .const import (
     DOMAIN,
     LOGGER_NAME,
     CONFIG_VERSION,
-    SIGNAL_PLATFORMS_LOADED,
+    CONF_CONFIG_ENTRY_ID,
     CONF_TOPIC_BLACKLIST,
+    get_platforms_loaded_signal,
 )
 
 from .mqtt import OVMSMQTTClient
-from .migrations import async_migrate_lock_entities
+from .migrations import async_migrate_entity_identity, async_migrate_lock_entities
 from .services import async_setup_services, async_unload_services
 from .utils import get_merged_config
 
@@ -61,6 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Merge entry.data with entry.options, giving priority to options
         config = _get_merged_config(entry)
+        config[CONF_CONFIG_ENTRY_ID] = entry.entry_id
 
         # Debug: Check if client_id is present in the merged config
         from .const import CONF_CLIENT_ID
@@ -103,7 +105,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Signal that all platforms are loaded
         _LOGGER.info("All platforms loaded, notifying MQTT client")
-        async_dispatcher_send(hass, SIGNAL_PLATFORMS_LOADED)
+        async_dispatcher_send(hass, get_platforms_loaded_signal(entry.entry_id))
 
         return True
     except Exception as ex:
@@ -287,6 +289,9 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
         if version <= 3:
             await async_migrate_lock_entities(hass, config_entry, version)
+
+        if version <= 4:
+            await async_migrate_entity_identity(hass, config_entry, version)
 
         # Update the config entry version
         hass.config_entries.async_update_entry(config_entry, version=CONFIG_VERSION)

@@ -21,6 +21,7 @@ from ..const import LOGGER_NAME
 from ..metrics import get_metric_by_path, get_metric_by_pattern
 from ..metrics.common.tire import TIRE_POSITIONS
 from ..metrics.patterns import TOPIC_PATTERNS
+from ..utils import get_namespaced_ovms_unique_id
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -199,6 +200,7 @@ def create_cell_sensors(
     cell_values: List[float],
     vehicle_id: str,
     parent_unique_id: str,
+    config_entry_id: Optional[str],
     device_info: Dict[str, Any],
     attributes: Dict[str, Any],
     create_individual_sensors: bool = False,
@@ -258,8 +260,9 @@ def create_cell_sensors(
             # Use tire position names for tire sensors
             position_name, position_code = TIRE_POSITIONS[i]
             entity_name = f"ovms_{vehicle_id}_{category}_{metric_path}_{position_code.lower()}".lower()
-            cell_unique_id = (
-                f"{vehicle_id}_{category}_{topic_hash}_{position_code.lower()}"
+            cell_unique_id = get_namespaced_ovms_unique_id(
+                f"{vehicle_id}_{category}_{topic_hash}_{position_code.lower()}",
+                config_entry_id,
             )
             friendly_name = f"{attributes.get('name', 'Tire')} {position_name}"
             topic_suffix = f"{position_code.lower()}"
@@ -268,7 +271,10 @@ def create_cell_sensors(
             entity_name = (
                 f"ovms_{vehicle_id}_{category}_{metric_path}_{stat_type}_{i+1}".lower()
             )
-            cell_unique_id = f"{vehicle_id}_{category}_{topic_hash}_{stat_type}_{i+1}"
+            cell_unique_id = get_namespaced_ovms_unique_id(
+                f"{vehicle_id}_{category}_{topic_hash}_{stat_type}_{i+1}",
+                config_entry_id,
+            )
             friendly_name = f"{attributes.get('name', stat_type.capitalize())} {stat_type.capitalize()} {i+1}"
             topic_suffix = f"{stat_type}/{i+1}"
 

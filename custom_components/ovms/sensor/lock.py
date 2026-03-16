@@ -12,7 +12,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from ..const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
+from ..const import (
+    DOMAIN,
+    LOGGER_NAME,
+    SIGNAL_UPDATE_ENTITY,
+    get_add_entities_signal,
+)
 from ..entity_state import (
     LOCK_FALSE_STATES,
     LOCK_TRUE_STATES,
@@ -56,7 +61,9 @@ async def async_setup_entry(
         async_add_entities([lock])
 
     entry.async_on_unload(
-        async_dispatcher_connect(hass, SIGNAL_ADD_ENTITIES, async_add_lock)
+        async_dispatcher_connect(
+            hass, get_add_entities_signal(entry.entry_id), async_add_lock
+        )
     )
 
 

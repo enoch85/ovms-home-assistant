@@ -17,8 +17,8 @@ from ..const import (
     DOMAIN,
     LOGGER_NAME,
     SWITCH_TYPES,
-    SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY,
+    get_add_entities_signal,
 )
 from ..entity_state import (
     SWITCH_FALSE_STATES,
@@ -71,7 +71,9 @@ async def async_setup_entry(
 
     # Subscribe to discovery events
     entry.async_on_unload(
-        async_dispatcher_connect(hass, SIGNAL_ADD_ENTITIES, async_add_switch)
+        async_dispatcher_connect(
+            hass, get_add_entities_signal(entry.entry_id), async_add_switch
+        )
     )
 
 

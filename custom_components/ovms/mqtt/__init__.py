@@ -13,14 +13,15 @@ from homeassistant.helpers.dispatcher import (
 from ..const import (
     DOMAIN,
     LOGGER_NAME,
-    SIGNAL_PLATFORMS_LOADED,
     METRIC_REQUEST_TOPIC_TEMPLATE,
+    CONF_CONFIG_ENTRY_ID,
     CONF_CLIENT_ID,
     CONF_QOS,
     DEFAULT_QOS,
     RECONNECT_METRIC_REQUEST_DELAY,
     GPS_ACCURACY_MIN_METERS,
     GPS_ACCURACY_MAX_METERS,
+    get_platforms_loaded_signal,
 )
 
 from .connection import MQTTConnectionManager
@@ -43,6 +44,7 @@ class OVMSMQTTClient:
         """Initialize the MQTT Client."""
         self.hass = hass
         self.config = config
+        self.config_entry_id = config.get(CONF_CONFIG_ENTRY_ID)
         self.connected = False
         self.discovered_topics = set()
         self.topic_cache = {}
@@ -93,7 +95,9 @@ class OVMSMQTTClient:
         # Subscribe to platforms loaded event - Fixed dispatcher usage
         self._cleanup_listeners = [
             async_dispatcher_connect(
-                self.hass, SIGNAL_PLATFORMS_LOADED, self._async_platforms_loaded
+                self.hass,
+                get_platforms_loaded_signal(self.config_entry_id),
+                self._async_platforms_loaded,
             )
         ]
 

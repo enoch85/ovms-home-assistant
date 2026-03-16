@@ -17,7 +17,12 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, LOGGER_NAME
+from .const import (
+    DOMAIN,
+    LOGGER_NAME,
+    OVMS_DEVICE_MANUFACTURER,
+    OVMS_DEVICE_MODEL,
+)
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -47,6 +52,65 @@ def get_entry_command_function(
 ) -> CommandFunction:
     """Get the shared OVMS command function for a config entry."""
     return hass.data[DOMAIN][entry.entry_id]["mqtt_client"].async_send_command
+
+
+def get_namespaced_ovms_unique_id(
+    unique_id: str, config_entry_id: Optional[str]
+) -> str:
+    """Return an OVMS unique ID scoped to a config entry.
+
+    Home Assistant allows the config entry ID as a last-resort unique identifier.
+    We use it as a namespace so multiple OVMS entries can coexist even when they
+    expose the same vehicle_id and metric paths.
+    """
+    if not config_entry_id or not unique_id:
+        return unique_id
+
+    scoped_prefix = f"ovms_{config_entry_id}_"
+    if unique_id.startswith(scoped_prefix):
+        return unique_id
+
+    if unique_id.startswith("ovms_"):
+        return f"{scoped_prefix}{unique_id[5:]}"
+
+    return f"{scoped_prefix}{unique_id}"
+
+
+def get_ovms_device_identifier(
+    client_id: Optional[str], vehicle_id: Optional[str]
+) -> str:
+    """Return the stable device registry identifier for an OVMS vehicle."""
+    if client_id:
+        return str(client_id)
+
+    if vehicle_id:
+        return str(vehicle_id).lower()
+
+    return "unknown"
+
+
+def get_ovms_device_name(vehicle_id: Optional[str]) -> str:
+    """Return the Home Assistant device name for an OVMS vehicle."""
+    return f"OVMS - {vehicle_id or 'unknown'}"
+
+
+def get_ovms_device_info(
+    client_id: Optional[str],
+    vehicle_id: Optional[str],
+    sw_version: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build consistent Home Assistant device info for an OVMS vehicle."""
+    device_info: Dict[str, Any] = {
+        "identifiers": {(DOMAIN, get_ovms_device_identifier(client_id, vehicle_id))},
+        "name": get_ovms_device_name(vehicle_id),
+        "manufacturer": OVMS_DEVICE_MANUFACTURER,
+        "model": OVMS_DEVICE_MODEL,
+    }
+
+    if sw_version is not None:
+        device_info["sw_version"] = sw_version
+
+    return device_info
 
 
 def convert_temperature(value: float, to_unit: str) -> float:

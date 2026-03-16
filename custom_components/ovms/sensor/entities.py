@@ -20,8 +20,8 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 from ..const import (
     LOGGER_NAME,
-    SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY,
+    get_add_entities_signal,
     truncate_state_value,
 )
 from .parsers import (
@@ -380,12 +380,14 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         attributes: Dict[str, Any],
         friendly_name: Optional[str] = None,
         hass: Optional[HomeAssistant] = None,
+        config_entry_id: Optional[str] = None,
     ) -> None:
         """Initialize the sensor."""
         self._attr_unique_id = unique_id
         self._internal_name = name
         self._attr_name = friendly_name or name.replace("_", " ").title()
         self._topic = topic
+        self._config_entry_id = config_entry_id
         self._attr_device_info = device_info or {}
         self._attr_extra_state_attributes = {
             **attributes,
@@ -845,6 +847,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             cell_values,
             vehicle_id,
             self.unique_id or "unknown",
+            self._config_entry_id,
             device_info_dict,
             {
                 "name": self.name,
@@ -865,7 +868,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         if sensor_configs:
             async_dispatcher_send(
                 self.hass,
-                SIGNAL_ADD_ENTITIES,
+                get_add_entities_signal(self._config_entry_id),
                 {
                     "entity_type": "sensor",
                     "cell_sensors": sensor_configs,

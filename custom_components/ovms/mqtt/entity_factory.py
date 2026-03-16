@@ -11,13 +11,16 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from ..const import (
-    DOMAIN,
+    CONF_CLIENT_ID,
+    CONF_CONFIG_ENTRY_ID,
+    CONF_VEHICLE_ID,
     LOGGER_NAME,
-    SIGNAL_ADD_ENTITIES,
+    get_add_entities_signal,
 )
 from ..naming_service import EntityNamingService
 from ..attribute_manager import AttributeManager
 from ..metrics import get_metric_by_path, get_metric_by_pattern
+from ..utils import get_namespaced_ovms_unique_id, get_ovms_device_info
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -48,6 +51,9 @@ class EntityFactory:
         self.combined_tracker_created = (
             False  # Track if the combined tracker is created
         )
+        self._client_id = config.get(CONF_CLIENT_ID)
+        self._config_entry_id = config.get(CONF_CONFIG_ENTRY_ID)
+        self._add_entities_signal = get_add_entities_signal(self._config_entry_id)
 
     async def async_create_entities(
         self, topic: str, payload: str, entity_data: Dict[str, Any]
@@ -146,7 +152,7 @@ class EntityFactory:
             if self.platforms_loaded:
                 async_dispatcher_send(
                     self.hass,
-                    SIGNAL_ADD_ENTITIES,
+                    self._add_entities_signal,
                     dispatcher_data,
                 )
             else:
@@ -232,7 +238,10 @@ class EntityFactory:
             self.combined_tracker_created = True
 
             # Create a unique ID for the combined device tracker
-            tracker_id = f"{vehicle_id}_location"
+            tracker_id = get_namespaced_ovms_unique_id(
+                f"{vehicle_id}_location",
+                self._config_entry_id,
+            )
 
             # Skip if already created
             if tracker_id in self.created_entities:
@@ -292,7 +301,7 @@ class EntityFactory:
             if self.platforms_loaded:
                 async_dispatcher_send(
                     self.hass,
-                    SIGNAL_ADD_ENTITIES,
+                    self._add_entities_signal,
                     tracker_data,
                 )
             else:
@@ -311,7 +320,7 @@ class EntityFactory:
         For related control entities, appends a type-specific suffix to ensure
         uniqueness when multiple entities exist for the same metric.
         """
-        vehicle_id = self.config.get("vehicle_id", "unknown").lower()
+        vehicle_id = self.config.get(CONF_VEHICLE_ID, "unknown").lower()
         topic_hash = hashlib.md5(topic.encode()).hexdigest()[:6]
 
         suffix = {
@@ -328,28 +337,26 @@ class EntityFactory:
         else:
             unique_id = f"ovms_{vehicle_id}_{topic_hash}{suffix}"
 
-        entity_data["unique_id"] = unique_id
+        entity_data["unique_id"] = get_namespaced_ovms_unique_id(
+            unique_id,
+            self._config_entry_id,
+        )
         return entity_data
 
     def _get_device_info(self) -> Dict[str, Any]:
         """Get device info for the OVMS module."""
         try:
-            vehicle_id = self.config.get("vehicle_id")
-
-            return {
-                "identifiers": {(DOMAIN, vehicle_id)},
-                "name": f"OVMS - {vehicle_id}",
-                "manufacturer": "Open Vehicles",
-                "model": "OVMS Module",
-                "sw_version": "Unknown",  # Will be updated when version is received
-            }
+            return get_ovms_device_info(
+                self._client_id,
+                self.config.get(CONF_VEHICLE_ID),
+                sw_version="Unknown",
+            )
         except Exception as ex:
             _LOGGER.exception("Error getting device info: %s", ex)
-            # Return minimal device info
-            return {
-                "identifiers": {(DOMAIN, self.config.get("vehicle_id", "unknown"))},
-                "name": f"OVMS - {self.config.get('vehicle_id', 'unknown')}",
-            }
+            return get_ovms_device_info(
+                self._client_id,
+                self.config.get(CONF_VEHICLE_ID, "unknown"),
+            )
 
     def _get_metric_path_from_topic(self, topic: str) -> str:
         """Extract metric path from topic."""
@@ -387,7 +394,7 @@ class EntityFactory:
 
             async_dispatcher_send(
                 self.hass,
-                SIGNAL_ADD_ENTITIES,
+                self._add_entities_signal,
                 entity_data,
             )
 

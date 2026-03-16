@@ -18,7 +18,12 @@ from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
+from .const import (
+    DOMAIN,
+    LOGGER_NAME,
+    SIGNAL_UPDATE_ENTITY,
+    get_add_entities_signal,
+)
 from .naming_service import EntityNamingService
 from .attribute_manager import AttributeManager
 from .utils import get_merged_config
@@ -67,7 +72,11 @@ async def async_setup_entry(
 
     # Subscribe to discovery events
     entry.async_on_unload(
-        async_dispatcher_connect(hass, SIGNAL_ADD_ENTITIES, async_add_device_tracker)
+        async_dispatcher_connect(
+            hass,
+            get_add_entities_signal(entry.entry_id),
+            async_add_device_tracker,
+        )
     )
 
 

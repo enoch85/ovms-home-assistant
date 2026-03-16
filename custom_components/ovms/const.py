@@ -10,7 +10,10 @@ from homeassistant.const import (  # noqa: W0611
 )
 
 DOMAIN = "ovms"
-CONFIG_VERSION = 4
+CONFIG_VERSION = 5
+
+OVMS_DEVICE_MANUFACTURER = "Open Vehicles"
+OVMS_DEVICE_MODEL = "OVMS Module"
 
 # Configuration
 CONF_VEHICLE_ID = "vehicle_id"
@@ -23,6 +26,7 @@ CONF_MQTT_USERNAME = "mqtt_username"
 CONF_TOPIC_STRUCTURE = "topic_structure"
 CONF_VERIFY_SSL = "verify_ssl"
 CONF_ORIGINAL_VEHICLE_ID = "original_vehicle_id"
+CONF_CONFIG_ENTRY_ID = "config_entry_id"
 CONF_CREATE_CELL_SENSORS = (
     "create_cell_sensors"  # Option to create individual cell sensors
 )
@@ -218,12 +222,37 @@ CATEGORY_MG_ZS_EV = "mg_zs_ev"
 CATEGORY_NISSAN_LEAF = "nissan_leaf"
 CATEGORY_RENAULT_TWIZY = "renault_twizy"
 
-# Signal constants
+# Base dispatcher signals.
+# Multi-entry flows derive config-entry-scoped names from these helpers so
+# separate OVMS config entries do not receive each other's discovery events.
 SIGNAL_ENTITY_DISCOVERY = f"{DOMAIN}_entity_discovery"
 SIGNAL_TOPIC_UPDATE = f"{DOMAIN}_topic_update"
 SIGNAL_ADD_ENTITIES = f"{DOMAIN}_add_entities"
 SIGNAL_UPDATE_ENTITY = f"{DOMAIN}_update_entity"
 SIGNAL_PLATFORMS_LOADED = f"{DOMAIN}_platforms_loaded"
+
+
+def get_add_entities_signal(config_entry_id: str | None = None) -> str:
+    """Return the add-entities signal.
+
+    Falls back to the canonical base signal when no config entry is available.
+    """
+    if not config_entry_id:
+        return SIGNAL_ADD_ENTITIES
+
+    return f"{SIGNAL_ADD_ENTITIES}_{config_entry_id}"
+
+
+def get_platforms_loaded_signal(config_entry_id: str | None = None) -> str:
+    """Return the platforms-loaded signal.
+
+    Falls back to the canonical base signal when no config entry is available.
+    """
+    if not config_entry_id:
+        return SIGNAL_PLATFORMS_LOADED
+
+    return f"{SIGNAL_PLATFORMS_LOADED}_{config_entry_id}"
+
 
 # Error codes
 ERROR_CANNOT_CONNECT = "cannot_connect"
