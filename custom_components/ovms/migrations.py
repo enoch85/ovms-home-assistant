@@ -246,3 +246,102 @@ async def async_migrate_entity_identity(
                 from_version,
                 existing_device.id,
             )
+
+
+async def async_cleanup_stale_device_associations(
+    hass: HomeAssistant, config_entry: ConfigEntry
+) -> None:
+    """Remove this config entry from OVMS devices it does not own.
+
+    After identity migration, a config entry may still be listed in the
+    config_entry_ids of devices that belong to a different OVMS entry
+    (e.g. another vehicle on the same broker).  This leaves ghost devices
+    visible under the integration card.
+
+    For each OVMS device that lists *this* config entry:
+    - If the device is the correct one (matches this entry's identifier) → skip.
+    - Otherwise remove this config entry from that device.
+    - If the device has no remaining config entries, remove it entirely.
+    """
+    config = get_merged_config(config_entry)
+    client_id = config.get(CONF_CLIENT_ID)
+    vehicle_id = config.get(CONF_VEHICLE_ID, "unknown")
+    own_identifier = get_ovms_device_identifier(client_id, vehicle_id)
+
+    device_reg = device_registry.async_get(hass)
+    entity_reg = entity_registry.async_get(hass)
+
+    # Ensure this entry's device exists with the correct identifier
+    own_device = device_reg.async_get_device(identifiers={(DOMAIN, own_identifier)})
+    if own_device is None:
+        own_device = device_reg.async_get_or_create(
+            config_entry_id=config_entry.entry_id,
+            identifiers={(DOMAIN, own_identifier)},
+            manufacturer=OVMS_DEVICE_MANUFACTURER,
+            model=OVMS_DEVICE_MODEL,
+            name=get_ovms_device_name(vehicle_id),
+        )
+
+    # Walk all devices linked to this config entry
+    devices_for_entry = device_registry.async_entries_for_config_entry(
+        device_reg, config_entry.entry_id
+    )
+
+    for device in devices_for_entry:
+        if device.id == own_device.id:
+            continue
+
+        # Only touch OVMS devices (identified by our domain in identifiers)
+        is_ovms_device = any(domain == DOMAIN for domain, _ in device.identifiers)
+        if not is_ovms_device:
+            continue
+
+        # Check if this device still has entities from this config entry
+        device_entities = entity_registry.async_entries_for_device(
+            entity_reg, device.id, include_disabled_entities=True
+        )
+        has_our_entities = any(
+            ent.config_entry_id == config_entry.entry_id for ent in device_entities
+        )
+
+        if has_our_entities:
+            # Move orphaned entities to the correct device
+            for ent in device_entities:
+                if ent.config_entry_id == config_entry.entry_id:
+                    entity_reg.async_update_entity(
+                        ent.entity_id, device_id=own_device.id
+                    )
+            _LOGGER.info(
+                "Device cleanup: moved entities from device %s to %s",
+                device.id,
+                own_device.id,
+            )
+            # Re-check after moving
+            device_entities = entity_registry.async_entries_for_device(
+                entity_reg, device.id, include_disabled_entities=True
+            )
+
+        # Detach this config entry from the foreign device
+        device_reg.async_update_device(
+            device.id, remove_config_entry_id=config_entry.entry_id
+        )
+        _LOGGER.info(
+            "Device cleanup: removed config entry %s from device %s (%s)",
+            config_entry.entry_id,
+            device.id,
+            device.name,
+        )
+
+        # If the device is now empty (no config entries, no entities), remove it
+        updated_device = device_reg.async_get(device.id)
+        if updated_device and not updated_device.config_entries:
+            remaining = entity_registry.async_entries_for_device(
+                entity_reg, device.id, include_disabled_entities=True
+            )
+            if not remaining:
+                device_reg.async_remove_device(device.id)
+                _LOGGER.info(
+                    "Device cleanup: removed orphaned device %s (%s)",
+                    device.id,
+                    device.name,
+                )

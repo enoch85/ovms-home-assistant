@@ -13,12 +13,17 @@ from .const import (
     LOGGER_NAME,
     CONFIG_VERSION,
     CONF_CONFIG_ENTRY_ID,
+    CONF_TOPIC_STRUCTURE,
     CONF_TOPIC_BLACKLIST,
     get_platforms_loaded_signal,
 )
 
 from .mqtt import OVMSMQTTClient
-from .migrations import async_migrate_entity_identity, async_migrate_lock_entities
+from .migrations import (
+    async_cleanup_stale_device_associations,
+    async_migrate_entity_identity,
+    async_migrate_lock_entities,
+)
 from .services import async_setup_services, async_unload_services
 from .utils import get_merged_config
 
@@ -59,6 +64,47 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 CONFIG_VERSION,
             )
             await async_migrate_entry(hass, entry)
+
+        # Fix persisted topic_structure with leading/trailing whitespace
+        # (observed in issue #199 from config flow saving with a leading space)
+        updated_data = None
+        updated_options = None
+
+        data_topic_structure = entry.data.get(CONF_TOPIC_STRUCTURE)
+        if isinstance(data_topic_structure, str):
+            stripped_data_topic_structure = data_topic_structure.strip()
+            if data_topic_structure != stripped_data_topic_structure:
+                updated_data = dict(entry.data)
+                updated_data[CONF_TOPIC_STRUCTURE] = stripped_data_topic_structure
+                _LOGGER.info(
+                    "Stripped whitespace from stored topic_structure in data: %r -> %r",
+                    data_topic_structure,
+                    stripped_data_topic_structure,
+                )
+
+        options_topic_structure = entry.options.get(CONF_TOPIC_STRUCTURE)
+        if isinstance(options_topic_structure, str):
+            stripped_options_topic_structure = options_topic_structure.strip()
+            if options_topic_structure != stripped_options_topic_structure:
+                updated_options = dict(entry.options)
+                updated_options[CONF_TOPIC_STRUCTURE] = stripped_options_topic_structure
+                _LOGGER.info(
+                    "Stripped whitespace from stored topic_structure in options: %r -> %r",
+                    options_topic_structure,
+                    stripped_options_topic_structure,
+                )
+
+        if updated_data is not None or updated_options is not None:
+            hass.config_entries.async_update_entry(
+                entry,
+                data=updated_data or entry.data,
+                options=updated_options or entry.options,
+            )
+
+        # Remove stale device associations from previous migrations or
+        # version upgrades that left this config entry linked to devices
+        # belonging to other vehicles (fixes issue #199 ghost devices).
+        await async_cleanup_stale_device_associations(hass, entry)
 
         # Merge entry.data with entry.options, giving priority to options
         config = _get_merged_config(entry)

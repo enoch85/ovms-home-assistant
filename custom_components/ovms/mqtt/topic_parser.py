@@ -51,8 +51,9 @@ class TopicParser:
             vehicle_id = self.config.get("vehicle_id", "")
             mqtt_username = self.config.get("mqtt_username", "")
 
-            # Replace the variables in the structure
-            structure_prefix = structure.format(
+            # Strip whitespace to guard against config entries saved with
+            # accidental leading/trailing spaces (observed in issue #199).
+            structure_prefix = structure.strip().format(
                 prefix=prefix,
                 vehicle_id=vehicle_id,
                 mqtt_username=mqtt_username,

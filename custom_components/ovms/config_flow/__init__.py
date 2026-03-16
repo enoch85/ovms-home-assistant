@@ -278,7 +278,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LOGGER.debug(
                         "Custom structure validation successful: %s", test_format
                     )
-                    self.mqtt_config[CONF_TOPIC_STRUCTURE] = custom_structure
+                    self.mqtt_config[CONF_TOPIC_STRUCTURE] = custom_structure.strip()
                     return await self.async_step_topic_discovery()
                 except KeyError as ex:
                     errors["custom_structure"] = "invalid_placeholder"
