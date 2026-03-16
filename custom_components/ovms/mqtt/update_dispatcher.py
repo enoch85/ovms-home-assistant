@@ -30,6 +30,7 @@ class UpdateDispatcher:
         self.attribute_manager = attribute_manager
         self.last_location_update = {}  # Track when location was last updated
         self.location_values = {}  # Store current location values
+        self._last_combined_location_dispatch = 0.0
 
     def dispatch_update(self, topic: str, payload: Any) -> None:
         """Dispatch update to entities subscribed to a topic.
@@ -76,8 +77,10 @@ class UpdateDispatcher:
                         # Direct pass-through for location sensor pairs
                         self._update_entity(related_id, payload)
                     elif relationship_type == "combined_tracker":
-                        # For combined trackers, we need to update with all location data
-                        self._update_combined_tracker(related_id)
+                        # Coordinate topics are batched via _handle_location_update().
+                        # Updating the combined tracker here would emit a mixed pair
+                        # after the first coordinate message arrives.
+                        continue
                     else:
                         # Default behavior for other relationships
                         self._update_entity(related_id, payload)
@@ -170,6 +173,7 @@ class UpdateDispatcher:
             if (
                 "latitude" in self.location_values
                 and "longitude" in self.location_values
+                and self._has_fresh_coordinate_pair()
             ):
                 self._update_all_device_trackers()
 
@@ -384,8 +388,23 @@ class UpdateDispatcher:
                 if topic == "combined_location":
                     self._update_entity(tracker_id, payload)
 
+            self._last_combined_location_dispatch = max(
+                self.last_location_update.get("latitude", 0.0),
+                self.last_location_update.get("longitude", 0.0),
+            )
+
         except Exception as ex:
             _LOGGER.exception("Error updating device trackers: %s", ex)
+
+    def _has_fresh_coordinate_pair(self) -> bool:
+        """Return True when both coordinates have arrived since the last dispatch."""
+        latitude_updated = self.last_location_update.get("latitude", 0.0)
+        longitude_updated = self.last_location_update.get("longitude", 0.0)
+
+        return (
+            latitude_updated > self._last_combined_location_dispatch
+            and longitude_updated > self._last_combined_location_dispatch
+        )
 
     def _update_combined_tracker(self, tracker_id: str) -> None:
         """Update a combined device tracker with current location data."""
