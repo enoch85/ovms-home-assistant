@@ -77,13 +77,15 @@
           "Port": "Connection Port",
           "verify_ssl_certificate": "Verify SSL/TLS Certificate",
           "topic_blacklist": "Topic Blacklist",
+          "lock_pin": "Stored Lock PIN",
           "entity_staleness_header": "Entity Staleness Management",
           "entity_staleness_management": "Entity Staleness Management",
           "delete_stale_history": "Delete History"
         },
         "data_description": {
-          "verify_ssl_certificate": "SSL/TLS certificate verification only applies to secure ports (8883, 8084)",
+          "verify_ssl_certificate": "SSL/TLS certificate verification only applies to secure ports (8883, 8084). Lock PIN support requires verified TLS.",
           "topic_blacklist": "A comma-separated list of topic patterns to filter out. This prevents unwanted entities from being created. Any topic containing these patterns will be ignored. Use this to filter high-frequency log topics that create too many entities.",
+          "lock_pin": "Optional fallback PIN to send when lock or unlock is called without a code. This field is only available on verified secure MQTT connections. Some OVMS vehicle adapters still do not validate the PIN server-side.",
           "entity_staleness_header": "Automatically hide inactive sensors to reduce UI clutter",
           "entity_staleness_management": "Automatically hide inactive sensors after a period without updates to reduce UI clutter and improve performance",
           "delete_stale_history": "Delete history when hiding stale sensors (unchecked = hide only, preserves history)"

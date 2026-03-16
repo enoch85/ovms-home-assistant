@@ -234,7 +234,7 @@ class MQTTConnectionManager:
 
         return client
 
-    def _extract_reason_code(self, reason_code) -> int:
+    def _extract_reason_code(self, reason_code) -> int | None:
         """Extract numeric value from reason code (handles both int and ReasonCode objects)."""
         return reason_code.value if hasattr(reason_code, "value") else reason_code
 
@@ -319,7 +319,9 @@ class MQTTConnectionManager:
                         reason_message,
                     )
 
-                # Schedule reconnection if not intentional disconnect
+                # Schedule reconnection if not intentional disconnect.
+                # A None reason code still indicates an unexpected disconnect,
+                # so it should follow the same reconnect path as any non-zero code.
                 if rc != 0:
                     _LOGGER.info(
                         "Scheduling reconnection attempt with enhanced backoff"

@@ -23,6 +23,7 @@ CONF_MQTT_USERNAME = "mqtt_username"
 CONF_TOPIC_STRUCTURE = "topic_structure"
 CONF_VERIFY_SSL = "verify_ssl"
 CONF_ORIGINAL_VEHICLE_ID = "original_vehicle_id"
+CONF_LOCK_PIN = "lock_pin"
 CONF_CREATE_CELL_SENSORS = (
     "create_cell_sensors"  # Option to create individual cell sensors
 )
@@ -41,7 +42,11 @@ DEFAULT_SCAN_INTERVAL = 60
 DEFAULT_UNIT_SYSTEM = "metric"
 DEFAULT_TOPIC_STRUCTURE = "{prefix}/{mqtt_username}/{vehicle_id}"
 DEFAULT_VERIFY_SSL = True
+DEFAULT_LOCK_PIN = ""
 DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by default
+
+# PIN-based lock commands are only allowed on verified secure transports.
+PIN_SECURE_PROTOCOLS = ("mqtts", "wss")
 
 # Switch types configuration - maps metrics to their control commands.
 # These metrics automatically create switch entities alongside their sensors.
