@@ -59,7 +59,7 @@ class OVMSMQTTClient:
         self.entity_registry = EntityRegistry()
         self.topic_parser = TopicParser(self.config, self.entity_registry)
         self.update_dispatcher = UpdateDispatcher(
-            hass, self.entity_registry, self.attribute_manager
+            hass, self.entity_registry, self.attribute_manager, self.config
         )
         self.entity_factory = EntityFactory(
             hass,

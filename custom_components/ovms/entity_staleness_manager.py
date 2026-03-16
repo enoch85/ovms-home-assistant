@@ -36,6 +36,9 @@ from .utils import get_namespaced_ovms_unique_id, get_ovms_device_info
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 
+_STALENESS_UNIQUE_ID_MARKER = "staleness_status"
+
+
 def _is_ovms_entity(entity_id: str) -> bool:
     """Return True if the entity belongs to the OVMS integration."""
     return entity_id.startswith(
@@ -200,10 +203,12 @@ class EntityStalenessManager:
     async def _async_create_diagnostic_sensor(self) -> None:
         """Create a simple diagnostic sensor asynchronously."""
         # No additional delay needed here since call_later already handled the timing
+        # Do NOT pass sw_version here — the staleness sensor is created ~30s
+        # after startup, by which time the firmware topic has already set the
+        # correct version on the device.  Passing "Unknown" would overwrite it.
         device_info = get_ovms_device_info(
             self._client_id,
             self._vehicle_id,
-            sw_version="Unknown",
         )
 
         sensor = OVMSStalenessStatusSensor(
@@ -293,6 +298,13 @@ class EntityStalenessManager:
                 if (
                     self._config_entry_id
                     and entity_entry.config_entry_id != self._config_entry_id
+                ):
+                    continue
+
+                # Skip the staleness diagnostic sensor itself
+                if (
+                    entity_entry.unique_id
+                    and _STALENESS_UNIQUE_ID_MARKER in entity_entry.unique_id
                 ):
                     continue
 
@@ -412,6 +424,13 @@ class EntityStalenessManager:
                 if (
                     self._config_entry_id
                     and entity_entry.config_entry_id != self._config_entry_id
+                ):
+                    continue
+
+                # Never clean up the staleness diagnostic sensor itself
+                if (
+                    entity_entry.unique_id
+                    and _STALENESS_UNIQUE_ID_MARKER in entity_entry.unique_id
                 ):
                     continue
 

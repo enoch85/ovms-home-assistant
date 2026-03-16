@@ -22,13 +22,10 @@ def get_metric_by_path(metric_path):
         if alt_path in METRIC_DEFINITIONS:
             return METRIC_DEFINITIONS[alt_path]
 
-    # For VW eUP metrics, try removing 'metric.' prefix if it's present
+    # For VW eUP metrics with numeric suffixes (e.g., "metric.xvu.b.soc.01"),
+    # try stripping both the "metric." prefix and the trailing digit segment.
     if metric_path.startswith("metric.xvu."):
         alt_path = metric_path[7:]  # Remove 'metric.'
-        if alt_path in METRIC_DEFINITIONS:
-            return METRIC_DEFINITIONS[alt_path]
-
-        # Also try removing numeric suffixes from the alt_path
         parts = alt_path.split(".")
         if len(parts) > 1 and parts[-1].isdigit():
             base_path = ".".join(parts[:-1])

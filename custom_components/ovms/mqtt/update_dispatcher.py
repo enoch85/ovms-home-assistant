@@ -9,11 +9,15 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util import dt as dt_util
 
 from ..const import (
+    CONF_CLIENT_ID,
+    CONF_CONFIG_ENTRY_ID,
+    CONF_VEHICLE_ID,
     LOGGER_NAME,
     SIGNAL_UPDATE_ENTITY,
     DOMAIN,
 )
 from ..attribute_manager import AttributeManager
+from ..utils import get_ovms_device_identifier
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -22,7 +26,11 @@ class UpdateDispatcher:
     """Dispatcher for coordinating updates between related entities."""
 
     def __init__(
-        self, hass: HomeAssistant, entity_registry, attribute_manager: AttributeManager
+        self,
+        hass: HomeAssistant,
+        entity_registry,
+        attribute_manager: AttributeManager,
+        config: Optional[Dict[str, Any]] = None,
     ):
         """Initialize the update dispatcher."""
         self.hass = hass
@@ -31,6 +39,11 @@ class UpdateDispatcher:
         self.last_location_update = {}  # Track when location was last updated
         self.location_values = {}  # Store current location values
         self._last_combined_location_dispatch = 0.0
+        self._config = config or {}
+        self._device_identifier = get_ovms_device_identifier(
+            self._config.get(CONF_CLIENT_ID),
+            self._config.get(CONF_VEHICLE_ID),
+        )
 
     def dispatch_update(self, topic: str, payload: Any) -> None:
         """Dispatch update to entities subscribed to a topic.
@@ -214,33 +227,23 @@ class UpdateDispatcher:
 
                 # Only update the device firmware version if this is the main module version
                 if is_main_version:
-                    # Get the vehicle_id from config
-                    vehicle_id = None
-                    for entry_id, data in self.hass.data[DOMAIN].items():
-                        if "mqtt_client" in data:
-                            config = data["mqtt_client"].config
-                            if "vehicle_id" in config:
-                                vehicle_id = config["vehicle_id"]
-                                _LOGGER.debug(
-                                    "Found vehicle_id '%s' in config", vehicle_id
-                                )
-                                break
-
-                    # Find the device in the registry
                     from homeassistant.helpers import device_registry as dr
 
                     device_registry = dr.async_get(self.hass)
 
-                    # Find OVMS device
-                    device = None
-                    for dev in device_registry.devices.values():
-                        for identifier in dev.identifiers:
-                            if identifier[0] == DOMAIN:
-                                device = dev
-                                _LOGGER.debug("Found OVMS device: %s", dev.name)
-                                break
-                        if device:
-                            break
+                    # Look up device by its identifier directly
+                    device = device_registry.async_get_device(
+                        identifiers={(DOMAIN, self._device_identifier)}
+                    )
+
+                    if device is None:
+                        # Fallback: try legacy identifier (vehicle_id) for
+                        # setups that haven't restarted since migration.
+                        vehicle_id = self._config.get(CONF_VEHICLE_ID)
+                        if vehicle_id:
+                            device = device_registry.async_get_device(
+                                identifiers={(DOMAIN, str(vehicle_id))}
+                            )
 
                     # Update device with version information
                     if device:
@@ -257,14 +260,10 @@ class UpdateDispatcher:
                             _LOGGER.error(
                                 "Failed to update device with version: %s", ex
                             )
-                            # Try an alternative approach
                             try:
-                                # Use a simpler update call as a fallback
                                 device_registry.async_update_device(
                                     device.id,
-                                    sw_version=payload[
-                                        :100
-                                    ],  # Use just first 100 chars as a fallback
+                                    sw_version=payload[:100],
                                 )
                             except Exception:
                                 _LOGGER.error(
@@ -402,8 +401,12 @@ class UpdateDispatcher:
         longitude_updated = self.last_location_update.get("longitude", 0.0)
 
         return (
-            latitude_updated > self._last_combined_location_dispatch
-            and longitude_updated > self._last_combined_location_dispatch
+            latitude_updated >= self._last_combined_location_dispatch
+            and longitude_updated >= self._last_combined_location_dispatch
+            and (
+                latitude_updated > self._last_combined_location_dispatch
+                or longitude_updated > self._last_combined_location_dispatch
+            )
         )
 
     def _update_combined_tracker(self, tracker_id: str) -> None:

@@ -139,10 +139,11 @@ class TopicParser:
             if len(parts) < 2:
                 return None
 
-            # Check if this is a command/response topic - don't create entities for these
+            # Check if this is a command/response/request topic - don't create entities for these
             if (
                 "client/rr/command" in topic_suffix
                 or "client/rr/response" in topic_suffix
+                or "/request/" in topic_suffix
             ):
                 return None
 
