@@ -5,8 +5,14 @@ import voluptuous as vol
 
 from homeassistant.config_entries import OptionsFlow
 from homeassistant.core import callback
+from homeassistant.helpers.selector import (
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
 from ..const import (
+    CONF_LOCK_PIN,
     CONF_QOS,
     CONF_TOPIC_PREFIX,
     CONF_TOPIC_STRUCTURE,
@@ -23,11 +29,30 @@ from ..const import (
     DEFAULT_TOPIC_BLACKLIST,
     DEFAULT_ENTITY_STALENESS_MANAGEMENT,
     DEFAULT_DELETE_STALE_HISTORY,
+    DEFAULT_LOCK_PIN,
     TOPIC_STRUCTURES,
     LOGGER_NAME,
 )
+from ..utils import is_secure_pin_connection
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
+SENSITIVE_OPTION_KEYS = {CONF_LOCK_PIN}
+
+
+def _redact_sensitive_options(
+    options: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Redact sensitive option values before logging."""
+    if options is None:
+        return None
+
+    redacted_options = dict(options)
+    for key in SENSITIVE_OPTION_KEYS:
+        if key in redacted_options and redacted_options[key]:
+            redacted_options[key] = "***"
+
+    return redacted_options
 
 
 class OVMSOptionsFlow(OptionsFlow):
@@ -75,9 +100,24 @@ class OVMSOptionsFlow(OptionsFlow):
             clean_blacklist = list(dict.fromkeys(current_blacklist))
             return ",".join(clean_blacklist)
 
+    def _get_effective_config(
+        self,
+        entry_data: dict[str, object],
+        entry_options: dict[str, object],
+        user_input: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        """Build the effective config from persisted data plus pending input."""
+        effective_config = {**entry_data, **entry_options}
+        if user_input:
+            effective_config.update(user_input)
+        return effective_config
+
     async def async_step_init(self, user_input=None):
         """Manage the options."""
-        _LOGGER.debug("Options flow async_step_init with input: %s", user_input)
+        _LOGGER.debug(
+            "Options flow async_step_init with input: %s",
+            _redact_sensitive_options(user_input),
+        )
 
         if user_input is not None:
             # Process port and SSL verification
@@ -147,12 +187,20 @@ class OVMSOptionsFlow(OptionsFlow):
                         staleness_selection
                     )  # Convert to int
 
-            _LOGGER.debug("Saving options: %s", user_input)
+            if CONF_LOCK_PIN in user_input:
+                lock_pin = user_input[CONF_LOCK_PIN].strip()
+                user_input[CONF_LOCK_PIN] = lock_pin or None
+
+            if not is_secure_pin_connection(user_input):
+                user_input.pop(CONF_LOCK_PIN, None)
+
+            _LOGGER.debug("Saving options: %s", _redact_sensitive_options(user_input))
             return self.async_create_entry(title="", data=user_input)
 
         # Get current settings
         entry_data = self.config_entry.data
         entry_options = self.config_entry.options
+        current_config = self._get_effective_config(entry_data, entry_options)
 
         # Debug: Log what we're getting from config
         current_blacklist = entry_options.get(
@@ -167,8 +215,8 @@ class OVMSOptionsFlow(OptionsFlow):
         )
 
         # Determine current port selection
-        current_port = entry_data.get(CONF_PORT, 8883)
-        current_protocol = entry_data.get(CONF_PROTOCOL, "mqtts")
+        current_port = current_config.get(CONF_PORT, 8883)
+        current_protocol = current_config.get(CONF_PROTOCOL, "mqtts")
 
         port_selection = "8883"  # Default
         if current_port == 1883 and current_protocol == "mqtt":
@@ -179,9 +227,8 @@ class OVMSOptionsFlow(OptionsFlow):
             port_selection = "8084"
 
         # Create options schema with port selection and place SSL verification right after ports
-        current_verify_ssl = entry_options.get(
-            CONF_VERIFY_SSL, entry_data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
-        )
+        current_verify_ssl = current_config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+        secure_pin_connection = is_secure_pin_connection(current_config)
 
         options = {
             vol.Required("Port", default=port_selection): vol.In(
@@ -227,6 +274,18 @@ class OVMSOptionsFlow(OptionsFlow):
                 ): str,
             }
         )
+
+        if secure_pin_connection:
+            options[
+                vol.Optional(
+                    CONF_LOCK_PIN,
+                    default=entry_options.get(
+                        CONF_LOCK_PIN,
+                        entry_data.get(CONF_LOCK_PIN, DEFAULT_LOCK_PIN),
+                    )
+                    or DEFAULT_LOCK_PIN,
+                )
+            ] = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
         # Entity Staleness Management options
         current_staleness_hours = entry_options.get(
