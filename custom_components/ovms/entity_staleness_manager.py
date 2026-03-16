@@ -53,7 +53,7 @@ class OVMSStalenessStatusSensor(SensorEntity, RestoreEntity):
     _attr_icon = "mdi:clock-alert-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_unit_of_measurement = "entities"
-    _attr_entity_registry_enabled_default = False  # Hidden by default in UI
+    _attr_entity_registry_enabled_default = True
 
     def __init__(
         self,

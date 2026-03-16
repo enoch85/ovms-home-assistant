@@ -273,10 +273,7 @@ class EntityFactory:
                 "name": f"ovms_{vehicle_id}_location",
                 "friendly_name": friendly_name,
                 "topic": "combined_location",  # Virtual topic
-                "payload": {
-                    "latitude": 0,
-                    "longitude": 0,
-                },
+                "payload": {},
                 "device_info": self._get_device_info(),
                 "attributes": attributes,
             }
@@ -349,7 +346,6 @@ class EntityFactory:
             return get_ovms_device_info(
                 self._client_id,
                 self.config.get(CONF_VEHICLE_ID),
-                sw_version="Unknown",
             )
         except Exception as ex:
             _LOGGER.exception("Error getting device info: %s", ex)

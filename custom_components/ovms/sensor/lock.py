@@ -7,7 +7,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
@@ -101,11 +100,6 @@ class OVMSLock(LockEntity, RestoreEntity):
         self._lock_config = lock_config or {}
         self._attr_icon = self._lock_config.get("icon")
         self._attr_is_locked = self._parse_state(initial_state)
-
-        if hass:
-            self.entity_id = async_generate_entity_id(
-                "lock.{}", name.lower(), hass=hass
-            )
 
         update_attributes_from_json(initial_state, self._attr_extra_state_attributes)
 

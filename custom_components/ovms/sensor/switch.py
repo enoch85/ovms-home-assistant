@@ -8,7 +8,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.const import EntityCategory
-from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
@@ -128,12 +127,6 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         self._command_function = command_function
         # Store switch configuration for controllable metrics
         self._switch_config = switch_config or {}
-
-        # Explicitly set entity_id - this ensures consistent naming
-        if hass:
-            self.entity_id = async_generate_entity_id(
-                "switch.{}", name.lower(), hass=hass
-            )
 
         # Determine switch type and attributes
         self._determine_switch_type()

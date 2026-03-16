@@ -11,7 +11,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.const import EntityCategory
-from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
@@ -148,17 +147,6 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
         # Now parse the state after attributes and device class are set
         self._attr_is_on = self._parse_state(initial_state)
         self._attr_device_info = device_info
-
-        # Explicitly set entity_id - this ensures consistent naming
-        if hass:
-            try:
-                self.entity_id = async_generate_entity_id(
-                    "binary_sensor.{}", name.lower(), hass=hass
-                )
-            except Exception as ex:
-                _LOGGER.exception("Error generating entity_id: %s", ex)
-                # Use a fallback entity_id
-                self.entity_id = f"binary_sensor.{name.lower()}"
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""

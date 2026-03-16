@@ -15,7 +15,6 @@ from homeassistant.helpers.dispatcher import (
     async_dispatcher_send,
 )
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 from ..const import (
@@ -199,14 +198,6 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             device_class_for_formatting,
             self._attr_extra_state_attributes,
         )
-
-        # Set entity_id
-        if hass:
-            self.entity_id = async_generate_entity_id(
-                "sensor.{}",
-                name.lower(),
-                hass=hass,
-            )
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -395,14 +386,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             "last_updated": dt_util.utcnow().isoformat(),
         }
         self.hass: Optional[HomeAssistant] = hass
-
-        # Set entity_id
-        if hass:
-            self.entity_id = async_generate_entity_id(
-                "sensor.{}",
-                name.lower(),
-                hass=hass,
-            )
 
         # Determine sensor type
         sensor_type = determine_sensor_type(
