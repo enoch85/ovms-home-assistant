@@ -17,7 +17,13 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, LOGGER_NAME
+from .const import (
+    CONF_PROTOCOL,
+    CONF_VERIFY_SSL,
+    DOMAIN,
+    LOGGER_NAME,
+    PIN_SECURE_PROTOCOLS,
+)
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -47,6 +53,13 @@ def get_entry_command_function(
 ) -> CommandFunction:
     """Get the shared OVMS command function for a config entry."""
     return hass.data[DOMAIN][entry.entry_id]["mqtt_client"].async_send_command
+
+
+def is_secure_pin_connection(config: Dict[str, Any]) -> bool:
+    """Return True when PINs may be sent over the configured MQTT transport."""
+    protocol = config.get(CONF_PROTOCOL)
+    verify_ssl = config.get(CONF_VERIFY_SSL, False)
+    return protocol in PIN_SECURE_PROTOCOLS and bool(verify_ssl)
 
 
 def convert_temperature(value: float, to_unit: str) -> float:
