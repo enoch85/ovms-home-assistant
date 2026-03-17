@@ -3,7 +3,6 @@
 import asyncio
 import logging
 from typing import Dict, Optional, List, Any
-from datetime import datetime
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -20,6 +19,7 @@ from .const import (
     CONF_CONFIG_ENTRY_ID,
     CONF_ENTITY_STALENESS_MANAGEMENT,
     CONF_DELETE_STALE_HISTORY,
+    DOMAIN,
     CONF_VEHICLE_ID,
     DEFAULT_ENTITY_STALENESS_MANAGEMENT,
     DEFAULT_DELETE_STALE_HISTORY,
@@ -37,13 +37,6 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 
 
 _STALENESS_UNIQUE_ID_MARKER = "staleness_status"
-
-
-def _is_ovms_entity(entity_id: str) -> bool:
-    """Return True if the entity belongs to the OVMS integration."""
-    return entity_id.startswith(
-        ("sensor.ovms_", "binary_sensor.ovms_", "switch.ovms_", "device_tracker.ovms_")
-    )
 
 
 class OVMSStalenessStatusSensor(SensorEntity, RestoreEntity):
@@ -214,7 +207,7 @@ class EntityStalenessManager:
         sensor = OVMSStalenessStatusSensor(
             self,
             get_namespaced_ovms_unique_id(
-                "ovms_staleness_status",
+                f"ovms_{_STALENESS_UNIQUE_ID_MARKER}",
                 self._config_entry_id,
             ),
             device_info,
@@ -299,7 +292,7 @@ class EntityStalenessManager:
                 registry_entries = []
 
             for entity_entry in registry_entries:
-                if not _is_ovms_entity(entity_entry.entity_id):
+                if entity_entry.platform != DOMAIN:
                     continue
 
                 # Skip the staleness diagnostic sensor itself
@@ -363,6 +356,8 @@ class EntityStalenessManager:
 
             if len(stale_entities) >= 40:
                 self._cache["entities_note"] = f"Showing first 40 entities"
+            else:
+                self._cache.pop("entities_note", None)
 
             return self._cache
 
@@ -438,7 +433,7 @@ class EntityStalenessManager:
                 registry_entries = []
 
             for entity_entry in registry_entries:
-                if not _is_ovms_entity(entity_entry.entity_id):
+                if entity_entry.platform != DOMAIN:
                     continue
 
                 # Never clean up the staleness diagnostic sensor itself

@@ -97,7 +97,8 @@ LOCK_TYPES = {
     }
 }
 
-# System topic blacklist patterns - these are always applied and cannot be modified by users
+# System topic blacklist patterns used as defaults for new users and migrations.
+# Users can still edit or remove these patterns from the saved blacklist.
 SYSTEM_TOPIC_BLACKLIST = [
     "event",
     "log",
