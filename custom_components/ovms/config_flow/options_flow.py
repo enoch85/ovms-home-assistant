@@ -200,7 +200,11 @@ class OVMSOptionsFlow(OptionsFlow):
                         staleness_selection
                     )  # Convert to int
 
-            if CONF_LOCK_PIN in user_input:
+            # Process lock PIN mode selection
+            lock_pin_mode = user_input.pop("lock_pin_mode", None)
+            if lock_pin_mode == "nopin":
+                user_input[CONF_LOCK_PIN] = DEFAULT_LOCK_PIN
+            elif CONF_LOCK_PIN in user_input:
                 lock_pin = normalize_lock_pin(user_input[CONF_LOCK_PIN])
                 if lock_pin_contains_whitespace(lock_pin):
                     errors["base"] = "invalid_lock_pin"
@@ -298,11 +302,18 @@ class OVMSOptionsFlow(OptionsFlow):
         )
 
         if secure_pin_connection:
+            current_pin = current_config.get(CONF_LOCK_PIN, DEFAULT_LOCK_PIN) or ""
+            pin_mode = "custom" if current_pin else "nopin"
+            options[vol.Optional("lock_pin_mode", default=pin_mode)] = vol.In(
+                {
+                    "nopin": "No PIN (disabled)",
+                    "custom": "Custom PIN",
+                }
+            )
             options[
                 vol.Optional(
                     CONF_LOCK_PIN,
-                    default=current_config.get(CONF_LOCK_PIN, DEFAULT_LOCK_PIN)
-                    or DEFAULT_LOCK_PIN,
+                    default=current_pin,
                 )
             ] = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
