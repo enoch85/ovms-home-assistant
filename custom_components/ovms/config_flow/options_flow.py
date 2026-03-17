@@ -5,6 +5,7 @@ import voluptuous as vol
 
 from homeassistant.config_entries import OptionsFlow
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers.selector import (
     TextSelector,
     TextSelectorConfig,
@@ -32,12 +33,18 @@ from ..const import (
     DEFAULT_LOCK_PIN,
     TOPIC_STRUCTURES,
     LOGGER_NAME,
+    SENSITIVE_LOG_REDACTION,
 )
-from ..utils import is_secure_pin_connection
+from ..utils import (
+    is_secure_pin_connection,
+    lock_pin_contains_whitespace,
+    normalize_lock_pin,
+)
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 SENSITIVE_OPTION_KEYS = {CONF_LOCK_PIN}
+SECTION_LOCK_PIN = "lock_pin_settings"
 
 
 def _redact_sensitive_options(
@@ -47,10 +54,17 @@ def _redact_sensitive_options(
     if options is None:
         return None
 
-    redacted_options = dict(options)
-    for key in SENSITIVE_OPTION_KEYS:
-        if key in redacted_options and redacted_options[key]:
-            redacted_options[key] = "***"
+    redacted_options: dict[str, object] = {}
+    for key, value in options.items():
+        if isinstance(value, dict):
+            redacted_options[key] = _redact_sensitive_options(value)
+            continue
+
+        if key in SENSITIVE_OPTION_KEYS and value:
+            redacted_options[key] = SENSITIVE_LOG_REDACTION
+            continue
+
+        redacted_options[key] = value
 
     return redacted_options
 
@@ -114,12 +128,18 @@ class OVMSOptionsFlow(OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
+        errors: dict[str, str] = {}
         _LOGGER.debug(
             "Options flow async_step_init with input: %s",
             _redact_sensitive_options(user_input),
         )
 
         if user_input is not None:
+            if SECTION_LOCK_PIN in user_input:
+                lock_settings = user_input.pop(SECTION_LOCK_PIN) or {}
+                if isinstance(lock_settings, dict):
+                    user_input[CONF_LOCK_PIN] = lock_settings.get(CONF_LOCK_PIN)
+
             # Process port and SSL verification
             if "Port" in user_input:
                 port_selection = user_input["Port"]
@@ -188,19 +208,28 @@ class OVMSOptionsFlow(OptionsFlow):
                     )  # Convert to int
 
             if CONF_LOCK_PIN in user_input:
-                lock_pin = user_input[CONF_LOCK_PIN].strip()
-                user_input[CONF_LOCK_PIN] = lock_pin or None
+                lock_pin = normalize_lock_pin(user_input[CONF_LOCK_PIN])
+                if lock_pin_contains_whitespace(lock_pin):
+                    errors["base"] = "invalid_lock_pin"
+                user_input[CONF_LOCK_PIN] = lock_pin
 
             if not is_secure_pin_connection(user_input):
                 user_input.pop(CONF_LOCK_PIN, None)
 
-            _LOGGER.debug("Saving options: %s", _redact_sensitive_options(user_input))
-            return self.async_create_entry(title="", data=user_input)
+            if not errors:
+                _LOGGER.debug(
+                    "Saving options: %s", _redact_sensitive_options(user_input)
+                )
+                return self.async_create_entry(title="", data=user_input)
 
         # Get current settings
         entry_data = self.config_entry.data
         entry_options = self.config_entry.options
-        current_config = self._get_effective_config(entry_data, entry_options)
+        current_config = self._get_effective_config(
+            entry_data,
+            entry_options,
+            user_input,
+        )
 
         # Debug: Log what we're getting from config
         current_blacklist = entry_options.get(
@@ -276,16 +305,20 @@ class OVMSOptionsFlow(OptionsFlow):
         )
 
         if secure_pin_connection:
-            options[
-                vol.Optional(
-                    CONF_LOCK_PIN,
-                    default=entry_options.get(
-                        CONF_LOCK_PIN,
-                        entry_data.get(CONF_LOCK_PIN, DEFAULT_LOCK_PIN),
-                    )
-                    or DEFAULT_LOCK_PIN,
-                )
-            ] = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
+            options[vol.Required(SECTION_LOCK_PIN)] = section(
+                vol.Schema(
+                    {
+                        vol.Optional(
+                            CONF_LOCK_PIN,
+                            default=current_config.get(CONF_LOCK_PIN, DEFAULT_LOCK_PIN)
+                            or DEFAULT_LOCK_PIN,
+                        ): TextSelector(
+                            TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                        )
+                    }
+                ),
+                {"collapsed": False},
+            )
 
         # Entity Staleness Management options
         current_staleness_hours = entry_options.get(
@@ -336,5 +369,6 @@ class OVMSOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(options),
+            errors=errors,
             description_placeholders={"ssl_note": "data_description"},
         )

@@ -81,6 +81,18 @@
           "entity_staleness_management": "Entity Staleness Management",
           "delete_stale_history": "Delete History"
         },
+        "sections": {
+          "lock_pin_settings": {
+            "name": "Lock PIN",
+            "description": "Optional fallback PIN configuration for lock and unlock commands.",
+            "data": {
+              "lock_pin": "Stored Lock PIN"
+            },
+            "data_description": {
+              "lock_pin": "Optional fallback PIN to send when lock or unlock is called without a code. Leave the lock dialog PIN blank to use this stored value. PINs cannot contain spaces or other whitespace. This field is only available on verified secure MQTT connections. Some OVMS vehicle adapters still do not validate the PIN server-side."
+            }
+          }
+        },
         "data_description": {
           "verify_ssl_certificate": "SSL/TLS certificate verification only applies to secure ports (8883, 8084). Lock PIN support requires verified TLS.",
           "topic_blacklist": "A comma-separated list of topic patterns to filter out. This prevents unwanted entities from being created. Any topic containing these patterns will be ignored. Use this to filter high-frequency log topics that create too many entities.",
@@ -89,6 +101,9 @@
           "delete_stale_history": "Delete history when hiding stale sensors (unchecked = hide only, preserves history)"
         }
       }
+    },
+    "error": {
+      "invalid_lock_pin": "PIN codes cannot contain spaces or other whitespace."
     }
   },
   "services": {

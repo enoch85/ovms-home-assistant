@@ -247,12 +247,25 @@ After initial setup, additional options can be configured via the integration op
 
 The Topic Blacklist feature is particularly useful to prevent high-frequency log topics from creating hundreds of unwanted entities. The integration comes with default filters for common log topics, but you may need to add additional patterns based on your specific OVMS module and vehicle.
 
+The default blacklist now also includes `event`, which blocks high-frequency event topics from creating entities unless you explicitly remove that pattern in the options flow.
+
 **Common patterns to blacklist:**
+- `event` - Blocks event topics published by OVMS
 - `.log` - Blocks all log topics (matches any topic containing ".log")
 - `battery.log` - Blocks battery log specific topics
 - `power.log` - Blocks power log specific topics
 - `gps.log` - Blocks GPS log specific topics
 - `xrt.log` - Blocks Renault Twizy specific log topics
+
+### Lock PIN Behavior
+
+The native Home Assistant lock entity supports OVMS lock and unlock commands.
+
+- The stored lock PIN option is only shown when using a verified secure MQTT connection (`mqtts://` or `wss://` with certificate verification enabled).
+- If you save a stored lock PIN in the integration options, the Home Assistant lock dialog can be left blank and the stored value will be used as a fallback.
+- If you do not save a stored lock PIN, Home Assistant will require you to enter one when using the lock entity.
+- OVMS itself registers `lock` and `unlock` as commands that take one PIN argument. Some vehicle modules validate that PIN, while others ignore it. If your vehicle does not actually validate the PIN, you may still need to configure a simple placeholder value so the command has the required argument. A value like `nopin` is a safe example.
+- PIN values cannot contain spaces or other whitespace.
 
 ### Testing Configuration
 

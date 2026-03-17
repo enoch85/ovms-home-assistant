@@ -123,6 +123,23 @@ def is_secure_pin_connection(config: Dict[str, Any]) -> bool:
     return protocol in PIN_SECURE_PROTOCOLS and bool(verify_ssl)
 
 
+def normalize_lock_pin(pin: Any) -> Optional[str]:
+    """Normalize a configured or user-supplied lock PIN."""
+    if pin is None:
+        return None
+
+    normalized = str(pin).strip()
+    return normalized or None
+
+
+def lock_pin_contains_whitespace(pin: str | None) -> bool:
+    """Return True when a lock PIN contains unsupported whitespace."""
+    if pin is None:
+        return False
+
+    return any(character.isspace() for character in pin)
+
+
 def convert_temperature(value: float, to_unit: str) -> float:
     """Convert temperature between units."""
     if to_unit == UnitOfTemperature.CELSIUS:

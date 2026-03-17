@@ -51,6 +51,8 @@ DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by d
 
 # PIN-based lock commands are only allowed on verified secure transports.
 PIN_SECURE_PROTOCOLS = ("mqtts", "wss")
+PIN_SENSITIVE_COMMANDS = ("lock", "unlock", "valet", "unvalet")
+SENSITIVE_LOG_REDACTION = "***"
 
 # Switch types configuration - maps metrics to their control commands.
 # These metrics automatically create switch entities alongside their sensors.

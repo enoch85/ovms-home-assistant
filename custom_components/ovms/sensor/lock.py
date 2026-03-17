@@ -26,8 +26,14 @@ from ..entity_state import (
     parse_boolean_state,
     update_attributes_from_json,
 )
-from ..utils import CommandFunction, get_entry_command_function, get_merged_config
-from ..utils import is_secure_pin_connection
+from ..utils import (
+    CommandFunction,
+    get_entry_command_function,
+    get_merged_config,
+    is_secure_pin_connection,
+    lock_pin_contains_whitespace,
+    normalize_lock_pin,
+)
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -39,10 +45,13 @@ LOCK_COMMAND_SUCCESS_RESPONSES = {
     True: "vehicle locked",
     False: "vehicle unlocked",
 }
-LOCK_CODE_FORMAT = r"^\d+$"
+LOCK_CODE_FORMAT_OPTIONAL = r"^\S*$"
+LOCK_CODE_FORMAT_REQUIRED = r"^\S+$"
 LOCK_PIN_SECURITY_ERROR = (
     "PIN codes require a verified secure MQTT connection (mqtts:// or wss://)."
 )
+LOCK_PIN_FORMAT_ERROR = "PIN codes cannot contain spaces or other whitespace."
+LOCK_PIN_REQUIRED_ERROR = "A PIN code is required for lock and unlock commands."
 
 
 def _normalize_lock_command_response(response: object) -> str | None:
@@ -53,15 +62,6 @@ def _normalize_lock_command_response(response: object) -> str | None:
     normalized = (
         response.strip() if isinstance(response, str) else str(response).strip()
     )
-    return normalized or None
-
-
-def _normalize_lock_pin(pin: object) -> str | None:
-    """Normalize a configured or user-supplied lock PIN."""
-    if pin is None:
-        return None
-
-    normalized = str(pin).strip()
     return normalized or None
 
 
@@ -82,7 +82,7 @@ async def async_setup_entry(
     """Set up OVMS locks based on a config entry."""
     command_function = get_entry_command_function(hass, entry)
     config = get_merged_config(entry)
-    default_lock_pin = _normalize_lock_pin(config.get(CONF_LOCK_PIN))
+    default_lock_pin = normalize_lock_pin(config.get(CONF_LOCK_PIN))
     pin_allowed = is_secure_pin_connection(config)
 
     @callback
@@ -151,7 +151,7 @@ class OVMSLock(LockEntity, RestoreEntity):
         }
         self._command_function = command_function
         self._lock_config = lock_config or {}
-        self._default_pin = _normalize_lock_pin(default_pin)
+        self._default_pin = normalize_lock_pin(default_pin)
         self._pin_allowed = pin_allowed
         self._attr_icon = self._lock_config.get("icon")
         self._attr_is_locked = self._parse_state(initial_state)
@@ -202,7 +202,13 @@ class OVMSLock(LockEntity, RestoreEntity):
     @property
     def code_format(self) -> str | None:
         """Return the expected lock PIN format for Home Assistant."""
-        return LOCK_CODE_FORMAT if self._pin_allowed else None
+        if not self._pin_allowed:
+            return None
+
+        if self._default_pin:
+            return LOCK_CODE_FORMAT_OPTIONAL
+
+        return LOCK_CODE_FORMAT_REQUIRED
 
     async def _execute_command(
         self,
@@ -271,16 +277,24 @@ class OVMSLock(LockEntity, RestoreEntity):
         )
         raise HomeAssistantError(f"Failed to execute {command}: {error_message}")
 
+    def _resolve_lock_pin(self, code: object) -> str:
+        """Resolve and validate the lock PIN for a command invocation."""
+        pin = normalize_lock_pin(code) or self._default_pin
+        if pin is None:
+            raise HomeAssistantError(LOCK_PIN_REQUIRED_ERROR)
+        if lock_pin_contains_whitespace(pin):
+            raise HomeAssistantError(LOCK_PIN_FORMAT_ERROR)
+        if not self._pin_allowed:
+            raise HomeAssistantError(LOCK_PIN_SECURITY_ERROR)
+
+        return pin
+
     async def async_lock(self, **kwargs: object) -> None:
         """Lock the vehicle."""
-        pin = _normalize_lock_pin(kwargs.get(ATTR_CODE)) or self._default_pin
-        if pin and not self._pin_allowed:
-            raise HomeAssistantError(LOCK_PIN_SECURITY_ERROR)
+        pin = self._resolve_lock_pin(kwargs.get(ATTR_CODE))
         await self._execute_command("lock_command", True, pin)
 
     async def async_unlock(self, **kwargs: object) -> None:
         """Unlock the vehicle."""
-        pin = _normalize_lock_pin(kwargs.get(ATTR_CODE)) or self._default_pin
-        if pin and not self._pin_allowed:
-            raise HomeAssistantError(LOCK_PIN_SECURITY_ERROR)
+        pin = self._resolve_lock_pin(kwargs.get(ATTR_CODE))
         await self._execute_command("unlock_command", False, pin)
