@@ -5,7 +5,6 @@ import voluptuous as vol
 
 from homeassistant.config_entries import OptionsFlow
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import section
 from homeassistant.helpers.selector import (
     TextSelector,
     TextSelectorConfig,
@@ -44,7 +43,6 @@ from ..utils import (
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 SENSITIVE_OPTION_KEYS = {CONF_LOCK_PIN}
-SECTION_LOCK_PIN = "lock_pin_settings"
 
 
 def _redact_sensitive_options(
@@ -135,11 +133,6 @@ class OVMSOptionsFlow(OptionsFlow):
         )
 
         if user_input is not None:
-            if SECTION_LOCK_PIN in user_input:
-                lock_settings = user_input.pop(SECTION_LOCK_PIN) or {}
-                if isinstance(lock_settings, dict):
-                    user_input[CONF_LOCK_PIN] = lock_settings.get(CONF_LOCK_PIN)
-
             # Process port and SSL verification
             if "Port" in user_input:
                 port_selection = user_input["Port"]
@@ -305,20 +298,13 @@ class OVMSOptionsFlow(OptionsFlow):
         )
 
         if secure_pin_connection:
-            options[vol.Required(SECTION_LOCK_PIN)] = section(
-                vol.Schema(
-                    {
-                        vol.Optional(
-                            CONF_LOCK_PIN,
-                            default=current_config.get(CONF_LOCK_PIN, DEFAULT_LOCK_PIN)
-                            or DEFAULT_LOCK_PIN,
-                        ): TextSelector(
-                            TextSelectorConfig(type=TextSelectorType.PASSWORD)
-                        )
-                    }
-                ),
-                {"collapsed": False},
-            )
+            options[
+                vol.Optional(
+                    CONF_LOCK_PIN,
+                    default=current_config.get(CONF_LOCK_PIN, DEFAULT_LOCK_PIN)
+                    or DEFAULT_LOCK_PIN,
+                )
+            ] = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
         # Entity Staleness Management options
         current_staleness_hours = entry_options.get(
