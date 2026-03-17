@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional, Set, List
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.util import dt as dt_util
 
 from ..const import (
     CONF_CLIENT_ID,

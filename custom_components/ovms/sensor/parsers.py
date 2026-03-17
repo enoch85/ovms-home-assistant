@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+from homeassistant.util import dt as dt_util
 
 from ..const import LOGGER_NAME, MAX_STATE_LENGTH, truncate_state_value
 from ..metrics.common.tire import TIRE_POSITIONS
