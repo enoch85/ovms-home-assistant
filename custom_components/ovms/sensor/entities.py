@@ -120,7 +120,6 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
-            "last_updated": dt_util.utcnow().isoformat(),
         }
         self.hass: Optional[HomeAssistant] = hass
 
@@ -283,6 +282,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                         "state_class",
                         "unit_of_measurement",
                         "unit",
+                        "last_updated",
                     ]
                 }
 
@@ -323,10 +323,6 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                 self._attr_extra_state_attributes,
             )
 
-            # Update timestamp
-            self._attr_extra_state_attributes["last_updated"] = (
-                dt_util.utcnow().isoformat()
-            )
             self.async_write_ha_state()
 
         # Subscribe to updates
@@ -383,7 +379,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
-            "last_updated": dt_util.utcnow().isoformat(),
         }
         self.hass: Optional[HomeAssistant] = hass
 
@@ -619,6 +614,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                         "state_class",
                         "unit_of_measurement",
                         "unit",
+                        "last_updated",
                         "full_topic",
                     ]
                 }
@@ -654,11 +650,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 self._parsed_value,
                 device_class_for_parsing,
                 self._attr_extra_state_attributes,
-            )
-
-            # Update timestamp
-            self._attr_extra_state_attributes["last_updated"] = (
-                dt_util.utcnow().isoformat()
             )
 
             # Process the payload for attributes

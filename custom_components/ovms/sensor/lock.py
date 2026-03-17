@@ -11,7 +11,6 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.util import dt as dt_util
 
 from ..const import (
     CONF_LOCK_PIN,
@@ -147,7 +146,6 @@ class OVMSLock(LockEntity, RestoreEntity):
         self._attr_extra_state_attributes = {
             **filtered_attributes,
             "topic": topic,
-            "last_updated": dt_util.utcnow().isoformat(),
         }
         self._command_function = command_function
         self._lock_config = lock_config or {}
@@ -170,7 +168,7 @@ class OVMSLock(LockEntity, RestoreEntity):
                 saved_attributes = {
                     key: value
                     for key, value in state.attributes.items()
-                    if key not in ["icon", "invert_state"]
+                    if key not in ["icon", "invert_state", "last_updated"]
                 }
                 self._attr_extra_state_attributes.update(saved_attributes)
 
@@ -178,9 +176,6 @@ class OVMSLock(LockEntity, RestoreEntity):
         def update_state(payload: str) -> None:
             """Update the lock state."""
             self._attr_is_locked = self._parse_state(payload)
-            self._attr_extra_state_attributes["last_updated"] = (
-                dt_util.utcnow().isoformat()
-            )
             update_attributes_from_json(payload, self._attr_extra_state_attributes)
             self.async_write_ha_state()
 

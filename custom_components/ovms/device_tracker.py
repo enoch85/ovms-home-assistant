@@ -14,7 +14,6 @@ from homeassistant.helpers.dispatcher import (
 )
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
@@ -115,13 +114,9 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         # Process attributes
         self._attr_extra_state_attributes = attributes.copy() if attributes else {}
 
-        # Ensure topic and last_updated are present
+        # Ensure topic is present
         if topic:
             self._attr_extra_state_attributes["topic"] = topic
-        if "last_updated" not in self._attr_extra_state_attributes:
-            self._attr_extra_state_attributes["last_updated"] = (
-                dt_util.utcnow().isoformat()
-            )
 
         self.hass = hass
         self._latitude = None
@@ -158,7 +153,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                         pass
 
                 # Only restore our own custom attributes (inclusion list)
-                _restorable = {"topic", "last_updated"}
+                _restorable = {"topic"}
                 for key in _restorable:
                     if key in state.attributes:
                         self._attr_extra_state_attributes[key] = state.attributes[key]
@@ -167,11 +162,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         def update_state(payload: Any) -> None:
             """Update the tracker state."""
             self._process_payload(payload)
-
-            # Update timestamp attribute
-            self._attr_extra_state_attributes["last_updated"] = (
-                dt_util.utcnow().isoformat()
-            )
 
             # Process any JSON attributes if applicable
             if isinstance(payload, str):
@@ -219,7 +209,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                                         ),
                                         "latitude": self.latitude,
                                         "longitude": self.longitude,
-                                        "last_updated": dt_util.utcnow().isoformat(),
                                     }
 
                                     async_dispatcher_send(
@@ -240,7 +229,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                     location_payload = {
                         "latitude": self.latitude,
                         "longitude": self.longitude,
-                        "last_updated": dt_util.utcnow().isoformat(),
                     }
 
                     # Dispatch to latitude/longitude sensors based on their name pattern
@@ -327,15 +315,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                                 except (ValueError, TypeError):
                                     pass
 
-                            # Also update last_updated even if coordinates haven't changed
-                            if "last_updated" in payload:
-                                self._attr_extra_state_attributes["last_updated"] = (
-                                    payload["last_updated"]
-                                )
-                            else:
-                                self._attr_extra_state_attributes["last_updated"] = (
-                                    dt_util.utcnow().isoformat()
-                                )
                     except (ValueError, TypeError):
                         _LOGGER.debug("Invalid coordinates in payload: %s", payload)
 
@@ -379,12 +358,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
 
             if coordinates_changed or time_since_last_update > 30:
                 self._last_update_time = current_time
-                # Update timestamp attribute if not already done
-                if isinstance(payload, dict) and "last_updated" not in payload:
-                    self._attr_extra_state_attributes["last_updated"] = (
-                        dt_util.utcnow().isoformat()
-                    )
-
                 if coordinates_changed:
                     _LOGGER.debug("Updated device tracker coordinates.")
 

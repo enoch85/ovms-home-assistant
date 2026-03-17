@@ -193,9 +193,6 @@
         "state_attributes": {
           "category": {
             "name": "Category"
-          },
-          "last_updated": {
-            "name": "Last Updated"
           }
         }
       },

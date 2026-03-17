@@ -6,7 +6,6 @@ from typing import Any, Dict, Optional, Set, List
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.util import dt as dt_util
 
 from ..const import (
     CONF_CLIENT_ID,
@@ -300,7 +299,6 @@ class UpdateDispatcher:
                         quality_payload = {
                             "gps_accuracy": attributes["gps_accuracy"],
                             "gps_accuracy_unit": "m",  # Add proper unit
-                            "last_updated": dt_util.utcnow().isoformat(),
                         }
                         self._update_entity(tracker_id, quality_payload)
 
@@ -373,7 +371,6 @@ class UpdateDispatcher:
             payload = {
                 "latitude": self.location_values.get("latitude"),
                 "longitude": self.location_values.get("longitude"),
-                "last_updated": dt_util.utcnow().isoformat(),
             }
 
             # Add accuracy if available
@@ -429,7 +426,6 @@ class UpdateDispatcher:
             payload = {
                 "latitude": self.location_values.get("latitude"),
                 "longitude": self.location_values.get("longitude"),
-                "last_updated": dt_util.utcnow().isoformat(),
             }
 
             # Add accuracy if available

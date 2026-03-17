@@ -5,7 +5,6 @@ import logging
 from typing import Dict, Any, Optional, List
 
 from homeassistant.const import EntityCategory
-from homeassistant.util import dt as dt_util
 
 from .const import (
     LOGGER_NAME,
@@ -37,7 +36,6 @@ class AttributeManager:
                 "topic": topic,
                 "category": category,
                 "parts": parts,
-                "last_updated": dt_util.utcnow().isoformat(),
             }
 
             # Add additional attributes from metric definition
@@ -75,9 +73,6 @@ class AttributeManager:
                 # If there's a timestamp in the JSON, use it
                 if "timestamp" in json_data:
                     attributes["device_timestamp"] = json_data["timestamp"]
-
-            # Update timestamp attribute
-            attributes["last_updated"] = dt_util.utcnow().isoformat()
 
         except (ValueError, json.JSONDecodeError):
             # Not JSON, that's fine

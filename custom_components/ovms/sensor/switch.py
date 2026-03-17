@@ -10,7 +10,6 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.const import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.util import dt as dt_util
 
 from ..const import (
     DOMAIN,
@@ -122,7 +121,6 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
-            "last_updated": dt_util.utcnow().isoformat(),
         }
         self._command_function = command_function
         # Store switch configuration for controllable metrics
@@ -152,7 +150,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
                 saved_attributes = {
                     k: v
                     for k, v in state.attributes.items()
-                    if k not in ["icon", "entity_category"]
+                    if k not in ["icon", "entity_category", "last_updated"]
                 }
                 self._attr_extra_state_attributes.update(saved_attributes)
 
@@ -160,10 +158,6 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         def update_state(payload: str) -> None:
             """Update the switch state."""
             self._attr_is_on = self._parse_state(payload)
-
-            # Update timestamp attribute
-            now = dt_util.utcnow()
-            self._attr_extra_state_attributes["last_updated"] = now.isoformat()
 
             # Try to extract additional attributes if it's JSON
             self._process_json_payload(payload)

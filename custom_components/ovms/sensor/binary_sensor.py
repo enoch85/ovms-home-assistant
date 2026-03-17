@@ -13,7 +13,6 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.const import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.util import dt as dt_util
 
 from ..const import (
     LOGGER_NAME,
@@ -138,7 +137,6 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
-            "last_updated": dt_util.utcnow().isoformat(),
         }
 
         # Try to determine device class (needs to be before _parse_state)
@@ -164,7 +162,7 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                     saved_attributes = {
                         k: v
                         for k, v in state.attributes.items()
-                        if k not in ["device_class", "icon"]
+                        if k not in ["device_class", "icon", "last_updated"]
                     }
                     self._attr_extra_state_attributes.update(saved_attributes)
 
@@ -182,10 +180,6 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
                         )
 
                     self._attr_is_on = self._parse_state(payload)
-
-                    # Update timestamp attribute
-                    now = dt_util.utcnow()
-                    self._attr_extra_state_attributes["last_updated"] = now.isoformat()
 
                     self.async_write_ha_state()
                 except Exception as ex:
