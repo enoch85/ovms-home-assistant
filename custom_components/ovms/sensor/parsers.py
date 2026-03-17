@@ -19,6 +19,7 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 NUMERIC_DEVICE_CLASSES = [
     SensorDeviceClass.BATTERY,
     SensorDeviceClass.CURRENT,
+    SensorDeviceClass.DATA_SIZE,
     SensorDeviceClass.ENERGY,
     SensorDeviceClass.HUMIDITY,
     SensorDeviceClass.POWER,
@@ -303,6 +304,8 @@ def process_json_payload(
     updated_attributes = attributes.copy()
 
     try:
+        updated_attributes.pop("full_topic", None)
+
         # If it's a cell sensor and the payload is a comma-separated string,
         # parse it for individual values and statistics to add as attributes.
         if is_cell_sensor and isinstance(payload, str) and "," in payload:
@@ -381,10 +384,6 @@ def process_json_payload(
 
         # Update timestamp
         updated_attributes["last_updated"] = dt_util.utcnow().isoformat()
-
-        # Add full topic path for debugging
-        if "topic" in attributes:
-            updated_attributes["full_topic"] = attributes["topic"]
 
     except Exception as ex:
         _LOGGER.exception("Error processing attributes: %s", ex)

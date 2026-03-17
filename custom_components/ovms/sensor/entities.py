@@ -401,6 +401,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_suggested_display_precision = sensor_type[
             "suggested_display_precision"
         ]
+        self._attr_suggested_unit_of_measurement = sensor_type.get(
+            "suggested_unit_of_measurement"
+        )
 
         # For timestamp sensors, set explicit metadata values
         if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
@@ -616,6 +619,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                         "state_class",
                         "unit_of_measurement",
                         "unit",
+                        "full_topic",
                     ]
                 }
 
