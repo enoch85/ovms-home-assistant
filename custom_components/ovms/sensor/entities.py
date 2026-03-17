@@ -431,15 +431,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_state_class = None
             self._attr_native_unit_of_measurement = None
 
-        # Add unit to attributes
-        if (
-            self._attr_native_unit_of_measurement
-            and "unit" not in self._attr_extra_state_attributes
-        ):
-            self._attr_extra_state_attributes["unit"] = (
-                self._attr_native_unit_of_measurement
-            )
-
         # Cell sensor configuration - detect by topic patterns and known cell data metrics
         self._is_cell_sensor = (
             (
