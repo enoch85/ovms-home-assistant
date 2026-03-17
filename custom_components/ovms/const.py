@@ -97,6 +97,7 @@ LOCK_TYPES = {
 
 # System topic blacklist patterns - these are always applied and cannot be modified by users
 SYSTEM_TOPIC_BLACKLIST = [
+    "event",
     "log",
     "gear",
     "notify",

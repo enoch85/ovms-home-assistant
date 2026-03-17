@@ -212,7 +212,7 @@ async def _migrate_blacklist_patterns(
     )  # Start with current system patterns
     updated_blacklist = list(dict.fromkeys(updated_blacklist))  # Remove any duplicates
 
-    # Check if update is needed (for version 1->2, only update if changed; for version 2->3, always update)
+    # Check if update is needed: always update from v2, otherwise only if the list actually changed
     should_update = (from_version == 2) or (updated_blacklist != existing_blacklist)
 
     if should_update:
@@ -329,7 +329,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         )
 
         # Perform migrations based on version
-        if version in [1, 2]:
+        if version in [1, 2, 3, 4]:
             # Migrate blacklist patterns to clean format
             await _migrate_blacklist_patterns(hass, config_entry, version)
 

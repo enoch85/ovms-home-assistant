@@ -85,10 +85,6 @@ class TopicParser:
                     "attributes": attributes,
                 }
 
-            # Skip event topics - we don't need entities for these
-            if topic.endswith("/event"):
-                return None
-
             # Skip blacklisted topics
             if self.topic_blacklist:
                 for pattern in self.topic_blacklist:

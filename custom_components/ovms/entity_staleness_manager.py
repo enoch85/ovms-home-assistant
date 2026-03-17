@@ -290,15 +290,16 @@ class EntityStalenessManager:
             current_time = dt_util.utcnow()
             stale_entities = []
 
-            # Iterate through entity registry entries directly for better performance
-            for entity_id, entity_entry in entity_registry.entities.items():
-                if not _is_ovms_entity(entity_id):
-                    continue
+            # Use HA's built-in API to get entities for this config entry
+            if self._config_entry_id:
+                registry_entries = er.async_entries_for_config_entry(
+                    entity_registry, self._config_entry_id
+                )
+            else:
+                registry_entries = []
 
-                if (
-                    self._config_entry_id
-                    and entity_entry.config_entry_id != self._config_entry_id
-                ):
+            for entity_entry in registry_entries:
+                if not _is_ovms_entity(entity_entry.entity_id):
                     continue
 
                 # Skip the staleness diagnostic sensor itself
@@ -308,10 +309,23 @@ class EntityStalenessManager:
                 ):
                     continue
 
-                state = self.hass.states.get(entity_id)
+                state = self.hass.states.get(entity_entry.entity_id)
+
+                # Entity in registry with no state object = orphaned (no
+                # backing platform entity, e.g. topic was blacklisted).
+                # These will never recover on their own.
+                if state is None:
+                    friendly_name = (
+                        entity_entry.name
+                        if entity_entry.name
+                        else entity_entry.entity_id
+                    )
+                    if len(stale_entities) < 40:
+                        stale_entities.append(f"{friendly_name} (eligible for removal)")
+                    continue
+
                 if (
-                    state
-                    and state.state in ["unavailable", "unknown"]
+                    state.state in ["unavailable", "unknown"]
                     and hasattr(state, "last_updated")
                     and state.last_updated
                 ):
@@ -319,12 +333,12 @@ class EntityStalenessManager:
                         current_time - state.last_updated
                     ).total_seconds() / 3600
 
-                    # Use friendly name from entity registry entry (already have it from the loop)
                     friendly_name = (
-                        entity_entry.name if entity_entry.name else entity_id
+                        entity_entry.name
+                        if entity_entry.name
+                        else entity_entry.entity_id
                     )
 
-                    # Cap at 40 entities for clean display
                     if len(stale_entities) < 40:
                         if hours_stale > self._staleness_hours:
                             stale_entities.append(
@@ -415,16 +429,16 @@ class EntityStalenessManager:
             unavailable_entities = []
             current_time = dt_util.utcnow()
 
-            # Find OVMS entities that are unavailable
-            for entity_id, entity_entry in entity_registry.entities.items():
-                # Only process OVMS entities
-                if not _is_ovms_entity(entity_id):
-                    continue
+            # Use HA's built-in API to get entities for this config entry
+            if self._config_entry_id:
+                registry_entries = er.async_entries_for_config_entry(
+                    entity_registry, self._config_entry_id
+                )
+            else:
+                registry_entries = []
 
-                if (
-                    self._config_entry_id
-                    and entity_entry.config_entry_id != self._config_entry_id
-                ):
+            for entity_entry in registry_entries:
+                if not _is_ovms_entity(entity_entry.entity_id):
                     continue
 
                 # Never clean up the staleness diagnostic sensor itself
@@ -434,10 +448,17 @@ class EntityStalenessManager:
                 ):
                     continue
 
-                # Check if entity is unavailable in Home Assistant's state machine
-                state = self.hass.states.get(entity_id)
-                if state and state.state in ["unavailable", "unknown"]:
-                    # Use Home Assistant's built-in state.last_updated to determine staleness
+                state = self.hass.states.get(entity_entry.entity_id)
+
+                # Entity in registry with no state object = orphaned (no
+                # backing platform entity).  Immediately eligible for cleanup.
+                if state is None:
+                    unavailable_entities.append(
+                        (entity_entry.entity_id, self._staleness_hours + 1, None)
+                    )
+                    continue
+
+                if state.state in ["unavailable", "unknown"]:
                     if hasattr(state, "last_updated") and state.last_updated:
                         hours_unavailable = (
                             current_time - state.last_updated
@@ -445,7 +466,11 @@ class EntityStalenessManager:
 
                         if hours_unavailable > self._staleness_hours:
                             unavailable_entities.append(
-                                (entity_id, hours_unavailable, state.last_updated)
+                                (
+                                    entity_entry.entity_id,
+                                    hours_unavailable,
+                                    state.last_updated,
+                                )
                             )
 
             if unavailable_entities:
@@ -459,10 +484,15 @@ class EntityStalenessManager:
                     )
                     # Log details for debugging
                     for entity_id, hours, last_updated in unavailable_entities:
+                        updated_str = (
+                            last_updated.isoformat()
+                            if last_updated
+                            else "orphaned (no state)"
+                        )
                         _LOGGER.debug(
                             "Removing %s: last updated %s (%.1f hours ago)",
                             entity_id,
-                            last_updated.isoformat(),
+                            updated_str,
                             hours,
                         )
                     await self._async_remove_entities(entity_ids)
@@ -474,10 +504,15 @@ class EntityStalenessManager:
                     )
                     # Log details for debugging
                     for entity_id, hours, last_updated in unavailable_entities:
+                        updated_str = (
+                            last_updated.isoformat()
+                            if last_updated
+                            else "orphaned (no state)"
+                        )
                         _LOGGER.debug(
                             "Hiding %s: last updated %s (%.1f hours ago)",
                             entity_id,
-                            last_updated.isoformat(),
+                            updated_str,
                             hours,
                         )
                     await self._async_hide_entities(entity_ids)
