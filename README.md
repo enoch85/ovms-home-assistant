@@ -257,16 +257,6 @@ The default blacklist now also includes `event`, which blocks high-frequency eve
 - `gps.log` - Blocks GPS log specific topics
 - `xrt.log` - Blocks Renault Twizy specific log topics
 
-### Breaking Changes in v1.6.0
-
-If you are upgrading from an earlier version, please note:
-
-- **`last_updated` attribute removed**: All OVMS entities previously carried a custom `last_updated` attribute. This has been removed because Home Assistant already tracks `state.last_updated` natively. If you have automations or templates using `state_attr('sensor.ovms_xxx', 'last_updated')`, replace them with `states.sensor.ovms_xxx.last_updated`.
-- **`full_topic` and `unit` attributes removed**: These duplicated information already available in HA's native entity properties.
-- **Entity unique IDs namespaced**: Unique IDs are now scoped per config entry to support multiple OVMS entries. Existing entities are migrated automatically.
-- **Device model string changed**: The device model now reads "OVMS Module" (previously "OVMS v3" for some entities). This is cosmetic only.
-- **PIN stored in config entry**: The lock PIN is stored in Home Assistant's config entry storage (`.storage/core.config_entries`). Home Assistant does not encrypt config entries at rest. The PIN is masked in the UI and redacted in logs, but be aware it is stored in plaintext on disk, as is standard for all HA integration credentials.
-
 ### Lock PIN Behavior
 
 The native Home Assistant lock entity supports OVMS lock and unlock commands.
@@ -276,6 +266,7 @@ The native Home Assistant lock entity supports OVMS lock and unlock commands.
 - If you do not save a stored lock PIN, Home Assistant will require you to enter one when using the lock entity.
 - OVMS itself registers `lock` and `unlock` as commands that take one PIN argument. Some vehicle modules validate that PIN, while others ignore it. If your vehicle does not actually validate the PIN, you may still need to configure a simple placeholder value so the command has the required argument. A value like `nopin` is a safe example.
 - PIN values cannot contain spaces or other whitespace.
+- The lock PIN is stored in Home Assistant's config entry storage (`.storage/core.config_entries`). Home Assistant does not encrypt config entries at rest. The PIN is masked in the UI and redacted in logs, but be aware it is stored in plaintext on disk, as is standard for all HA integration credentials.
 
 ### Testing Configuration
 
