@@ -15,6 +15,14 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from ..const import (
     CONF_LOCK_PIN,
     DOMAIN,
+    LOCK_CODE_FORMAT_OPTIONAL,
+    LOCK_CODE_FORMAT_REQUIRED,
+    LOCK_COMMAND_ERROR_PREFIX,
+    LOCK_COMMAND_SUCCESS_RESPONSES,
+    LOCK_COMMAND_USAGE_PREFIX,
+    LOCK_PIN_FORMAT_ERROR,
+    LOCK_PIN_REQUIRED_ERROR,
+    LOCK_PIN_SECURITY_ERROR,
     LOGGER_NAME,
     SIGNAL_UPDATE_ENTITY,
     get_add_entities_signal,
@@ -37,20 +45,6 @@ from ..utils import (
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 DiscoveryData = dict[str, object]
-
-LOCK_COMMAND_ERROR_PREFIX = "Error: "
-LOCK_COMMAND_USAGE_PREFIX = "Usage:"
-LOCK_COMMAND_SUCCESS_RESPONSES = {
-    True: "vehicle locked",
-    False: "vehicle unlocked",
-}
-LOCK_CODE_FORMAT_OPTIONAL = r"^\S*$"
-LOCK_CODE_FORMAT_REQUIRED = r"^\S+$"
-LOCK_PIN_SECURITY_ERROR = (
-    "PIN codes require a verified secure MQTT connection (mqtts:// or wss://)."
-)
-LOCK_PIN_FORMAT_ERROR = "PIN codes cannot contain spaces or other whitespace."
-LOCK_PIN_REQUIRED_ERROR = "A PIN code is required for lock and unlock commands."
 
 
 def _normalize_lock_command_response(response: object) -> str | None:
@@ -223,6 +217,7 @@ class OVMSLock(LockEntity, RestoreEntity):
         response = _normalize_lock_command_response(result.get("response"))
 
         if result.get("success"):
+            # Known success confirmation from OVMS
             if response and _is_successful_lock_command_response(
                 response, locked_state
             ):
@@ -230,6 +225,7 @@ class OVMSLock(LockEntity, RestoreEntity):
                 self.async_write_ha_state()
                 return
 
+            # Known error patterns — OVMS returned a usage hint or explicit error
             if response and response.startswith(LOCK_COMMAND_USAGE_PREFIX):
                 _LOGGER.error(
                     "Error response received when executing %s for %s: %s",
@@ -242,26 +238,38 @@ class OVMSLock(LockEntity, RestoreEntity):
 
                 raise HomeAssistantError("OVMS command seems to be malformed.")
 
-            if response is None:
+            if response and response.startswith(LOCK_COMMAND_ERROR_PREFIX):
+                error = response[len(LOCK_COMMAND_ERROR_PREFIX) :]
                 _LOGGER.error(
-                    "Missing response when executing %s for %s despite success status",
+                    "Error response received when executing %s for %s: %s",
+                    command_key,
+                    self.name,
+                    response,
+                )
+                raise HomeAssistantError(f"OVMS reported {error}")
+
+            # Unknown or missing response but OVMS reported success.
+            # Optimistically accept the state change — firmware wording
+            # varies across vehicle modules and versions.
+            if response:
+                _LOGGER.warning(
+                    "Unrecognised success response for %s on %s: %s — "
+                    "accepting state change optimistically",
+                    command_key,
+                    self.name,
+                    response,
+                )
+            else:
+                _LOGGER.warning(
+                    "Empty response for %s on %s despite success status — "
+                    "accepting state change optimistically",
                     command_key,
                     self.name,
                 )
-                raise HomeAssistantError("OVMS did not confirm the lock state change.")
 
-            _LOGGER.error(
-                "Error response received when executing %s for %s: %s",
-                command_key,
-                self.name,
-                response,
-            )
-            error = (
-                response[len(LOCK_COMMAND_ERROR_PREFIX) :]
-                if response.startswith(LOCK_COMMAND_ERROR_PREFIX)
-                else response
-            )
-            raise HomeAssistantError(f"OVMS reported {error}")
+            self._attr_is_locked = locked_state
+            self.async_write_ha_state()
+            return
 
         error_message = result.get("error") or "Unknown error"
         _LOGGER.error(
@@ -274,13 +282,15 @@ class OVMSLock(LockEntity, RestoreEntity):
 
     def _resolve_lock_pin(self, code: object) -> str:
         """Resolve and validate the lock PIN for a command invocation."""
+        # Security gate first — reject immediately on insecure transports
+        if not self._pin_allowed:
+            raise HomeAssistantError(LOCK_PIN_SECURITY_ERROR)
+
         pin = normalize_lock_pin(code) or self._default_pin
         if pin is None:
             raise HomeAssistantError(LOCK_PIN_REQUIRED_ERROR)
         if lock_pin_contains_whitespace(pin):
             raise HomeAssistantError(LOCK_PIN_FORMAT_ERROR)
-        if not self._pin_allowed:
-            raise HomeAssistantError(LOCK_PIN_SECURITY_ERROR)
 
         return pin
 

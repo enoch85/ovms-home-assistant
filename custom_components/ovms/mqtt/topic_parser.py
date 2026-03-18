@@ -51,9 +51,9 @@ class TopicParser:
             vehicle_id = self.config.get("vehicle_id", "")
             mqtt_username = self.config.get("mqtt_username", "")
 
-            # Strip whitespace to guard against config entries saved with
-            # accidental leading/trailing spaces (observed in issue #199).
-            structure_prefix = structure.strip().format(
+            # Whitespace is stripped at config-entry load time
+            # (see _sanitize_persisted_topic_structure in __init__.py).
+            structure_prefix = structure.format(
                 prefix=prefix,
                 vehicle_id=vehicle_id,
                 mqtt_username=mqtt_username,

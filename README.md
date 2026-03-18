@@ -257,6 +257,16 @@ The default blacklist now also includes `event`, which blocks high-frequency eve
 - `gps.log` - Blocks GPS log specific topics
 - `xrt.log` - Blocks Renault Twizy specific log topics
 
+### Breaking Changes in v1.6.0
+
+If you are upgrading from an earlier version, please note:
+
+- **`last_updated` attribute removed**: All OVMS entities previously carried a custom `last_updated` attribute. This has been removed because Home Assistant already tracks `state.last_updated` natively. If you have automations or templates using `state_attr('sensor.ovms_xxx', 'last_updated')`, replace them with `states.sensor.ovms_xxx.last_updated`.
+- **`full_topic` and `unit` attributes removed**: These duplicated information already available in HA's native entity properties.
+- **Entity unique IDs namespaced**: Unique IDs are now scoped per config entry to support multiple OVMS entries. Existing entities are migrated automatically.
+- **Device model string changed**: The device model now reads "OVMS Module" (previously "OVMS v3" for some entities). This is cosmetic only.
+- **PIN stored in config entry**: The lock PIN is stored in Home Assistant's config entry storage (`.storage/core.config_entries`). Home Assistant does not encrypt config entries at rest. The PIN is masked in the UI and redacted in logs, but be aware it is stored in plaintext on disk, as is standard for all HA integration credentials.
+
 ### Lock PIN Behavior
 
 The native Home Assistant lock entity supports OVMS lock and unlock commands.
@@ -846,7 +856,7 @@ This allows the integration to work even when the exact topic structure isn't kn
 
 The integration implements stable MQTT client ID management:
 
-- **Stable Client IDs**: Generates unique, persistent client IDs based on broker host and vehicle ID
+- **Stable Client IDs**: Generates unique, persistent client IDs based on broker host, OVMS topic username, and vehicle ID
 - **Format**: `ha_ovms_xxxxxxxxxxxx` (20 characters total)
 - **Compatibility**: Works with all MQTT versions (3.1, 3.1.1, and 5.0)
 - **Collision Resistance**: Uses SHA-256 hash with 281 trillion possible combinations
@@ -991,7 +1001,7 @@ A: Updates happen in real-time as the OVMS module publishes new data, typically 
 A: The integration includes automatic reconnection with exponential backoff, online/offline status tracking, and will resume normal operation when connection is restored.
 
 **Q: Is my data secure?**  
-A: Yes, the integration supports TLS/SSL encryption for MQTT connections and follows secure coding practices for handling sensitive data.
+A: The integration supports TLS/SSL encryption for MQTT connections and follows secure coding practices for handling sensitive data.
 
 **Q: What happens if I lose connection to my vehicle?**  
 A: The integration maintains the last known state of all entities and marks the vehicle as offline. When connection is restored, all entity states are updated with the latest data.

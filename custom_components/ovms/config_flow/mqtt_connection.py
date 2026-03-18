@@ -33,6 +33,7 @@ from ..const import (
     ERROR_TLS_ERROR,
     ERROR_UNKNOWN,
 )
+from ..utils import uses_tls_transport, uses_websocket_transport
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -90,7 +91,9 @@ async def test_mqtt_connection(
         debug_info["mqtt_protocol_version"],
     )
 
-    mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
+    transport = "websockets" if uses_websocket_transport(config) else "tcp"
+    mqttc = mqtt.Client(client_id=client_id, protocol=protocol, transport=transport)
+    debug_info["transport"] = transport
 
     # Set up connection status for debugging
     connection_status = {"connected": False, "rc": None, "flags": None}
@@ -140,8 +143,10 @@ async def test_mqtt_connection(
             password=config[CONF_PASSWORD] if CONF_PASSWORD in config else None,
         )
 
-    if config[CONF_PORT] == 8883:
-        _LOGGER.debug("%s - Enabling SSL/TLS for port 8883", log_prefix)
+    if uses_tls_transport(config):
+        _LOGGER.debug(
+            "%s - Enabling SSL/TLS for configured secure transport", log_prefix
+        )
         verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
         try:
             # Use executor to avoid blocking the event loop

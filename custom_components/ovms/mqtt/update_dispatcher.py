@@ -38,7 +38,11 @@ class UpdateDispatcher:
         self.attribute_manager = attribute_manager
         self.last_location_update = {}  # Track when location was last updated
         self.location_values = {}  # Store current location values
-        self._last_combined_location_dispatch = 0.0
+        self._coordinate_generation = {"latitude": 0, "longitude": 0}
+        self._last_dispatched_coordinate_generation = {
+            "latitude": 0,
+            "longitude": 0,
+        }
         self._config = config or {}
         self._device_identifier = get_ovms_device_identifier(
             self._config.get(CONF_CLIENT_ID),
@@ -174,13 +178,24 @@ class UpdateDispatcher:
                 for keyword in ["longitude", "long", "lon", "lng"]
             )
 
+            coordinate = self._parse_coordinate(payload)
+            if coordinate is None:
+                _LOGGER.debug(
+                    "Ignoring invalid coordinate payload for topic %s: %s",
+                    topic,
+                    payload,
+                )
+                return
+
             # Update our location values cache
             if is_latitude:
-                self.location_values["latitude"] = self._parse_coordinate(payload)
+                self.location_values["latitude"] = coordinate
                 self.last_location_update["latitude"] = now
+                self._coordinate_generation["latitude"] += 1
             elif is_longitude:
-                self.location_values["longitude"] = self._parse_coordinate(payload)
+                self.location_values["longitude"] = coordinate
                 self.last_location_update["longitude"] = now
+                self._coordinate_generation["longitude"] += 1
 
             # Only update device trackers if we have both latitude and longitude
             if (
@@ -385,9 +400,8 @@ class UpdateDispatcher:
                 if topic == "combined_location":
                     self._update_entity(tracker_id, payload)
 
-            self._last_combined_location_dispatch = max(
-                self.last_location_update.get("latitude", 0.0),
-                self.last_location_update.get("longitude", 0.0),
+            self._last_dispatched_coordinate_generation = (
+                self._coordinate_generation.copy()
             )
 
         except Exception as ex:
@@ -395,16 +409,11 @@ class UpdateDispatcher:
 
     def _has_fresh_coordinate_pair(self) -> bool:
         """Return True when both coordinates have arrived since the last dispatch."""
-        latitude_updated = self.last_location_update.get("latitude", 0.0)
-        longitude_updated = self.last_location_update.get("longitude", 0.0)
-
         return (
-            latitude_updated >= self._last_combined_location_dispatch
-            and longitude_updated >= self._last_combined_location_dispatch
-            and (
-                latitude_updated > self._last_combined_location_dispatch
-                or longitude_updated > self._last_combined_location_dispatch
-            )
+            self._coordinate_generation["latitude"]
+            > self._last_dispatched_coordinate_generation["latitude"]
+            and self._coordinate_generation["longitude"]
+            > self._last_dispatched_coordinate_generation["longitude"]
         )
 
     def _update_combined_tracker(self, tracker_id: str) -> None:

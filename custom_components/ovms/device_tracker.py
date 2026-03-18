@@ -80,7 +80,6 @@ async def async_setup_entry(
 class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     """OVMS Device Tracker Entity."""
 
-    _attr_has_entity_name = True
     _attr_icon = "mdi:car-connected"
 
     def __init__(
@@ -104,9 +103,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         self.naming_service = naming_service or EntityNamingService({})
         self.attribute_manager = attribute_manager or AttributeManager({})
 
-        # With has_entity_name=True, HA auto-prepends the device name.
-        # So we just set "Location" and HA displays "OVMS - MYCAR Location".
-        self._attr_name = "Location"
+        self._attr_name = friendly_name or name.replace("_", " ").title()
 
         self._topic = topic
         self._attr_device_info = device_info if device_info else None

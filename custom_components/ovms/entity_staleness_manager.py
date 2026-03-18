@@ -29,14 +29,13 @@ from .const import (
     STALENESS_CLEANUP_START_DELAY,
     STALENESS_CLEANUP_INTERVAL,
     STALENESS_FIRST_RUN_EXTRA_WAIT,
+    STALENESS_MAX_DISPLAY_ENTITIES,
+    STALENESS_UNIQUE_ID_MARKER,
     get_add_entities_signal,
 )
 from .utils import get_namespaced_ovms_unique_id, get_ovms_device_info
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
-
-
-_STALENESS_UNIQUE_ID_MARKER = "staleness_status"
 
 
 class OVMSStalenessStatusSensor(SensorEntity, RestoreEntity):
@@ -207,7 +206,7 @@ class EntityStalenessManager:
         sensor = OVMSStalenessStatusSensor(
             self,
             get_namespaced_ovms_unique_id(
-                f"ovms_{_STALENESS_UNIQUE_ID_MARKER}",
+                f"ovms_{STALENESS_UNIQUE_ID_MARKER}",
                 self._config_entry_id,
             ),
             device_info,
@@ -298,7 +297,7 @@ class EntityStalenessManager:
                 # Skip the staleness diagnostic sensor itself
                 if (
                     entity_entry.unique_id
-                    and _STALENESS_UNIQUE_ID_MARKER in entity_entry.unique_id
+                    and STALENESS_UNIQUE_ID_MARKER in entity_entry.unique_id
                 ):
                     continue
 
@@ -313,7 +312,7 @@ class EntityStalenessManager:
                         if entity_entry.name
                         else entity_entry.entity_id
                     )
-                    if len(stale_entities) < 40:
+                    if len(stale_entities) < STALENESS_MAX_DISPLAY_ENTITIES:
                         stale_entities.append(f"{friendly_name} (eligible for removal)")
                     continue
 
@@ -332,7 +331,7 @@ class EntityStalenessManager:
                         else entity_entry.entity_id
                     )
 
-                    if len(stale_entities) < 40:
+                    if len(stale_entities) < STALENESS_MAX_DISPLAY_ENTITIES:
                         if hours_stale > self._staleness_hours:
                             stale_entities.append(
                                 f"{friendly_name} (eligible for removal)"
@@ -354,8 +353,10 @@ class EntityStalenessManager:
                 }
             )
 
-            if len(stale_entities) >= 40:
-                self._cache["entities_note"] = f"Showing first 40 entities"
+            if len(stale_entities) >= STALENESS_MAX_DISPLAY_ENTITIES:
+                self._cache["entities_note"] = (
+                    f"Showing first {STALENESS_MAX_DISPLAY_ENTITIES} entities"
+                )
             else:
                 self._cache.pop("entities_note", None)
 
@@ -439,7 +440,7 @@ class EntityStalenessManager:
                 # Never clean up the staleness diagnostic sensor itself
                 if (
                     entity_entry.unique_id
-                    and _STALENESS_UNIQUE_ID_MARKER in entity_entry.unique_id
+                    and STALENESS_UNIQUE_ID_MARKER in entity_entry.unique_id
                 ):
                     continue
 

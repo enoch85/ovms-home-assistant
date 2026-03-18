@@ -160,7 +160,7 @@ class CommandHandler:
                 "success": False,
                 "error": f"Rate limit exceeded. Try again in {time_to_next:.1f} seconds",
                 "command": command,
-                "parameters": parameters,
+                "parameters": _redact_command_parameters(command, parameters),
             }
 
         if command_id is None:
@@ -190,12 +190,14 @@ class CommandHandler:
             loop = asyncio.get_running_loop()
             future = loop.create_future()
 
-            # Store the future for the response handler
+            # Store the future for the response handler.
+            # Only keep the redacted form of parameters to avoid holding
+            # sensitive values (e.g. lock PINs) in memory longer than needed.
             self.pending_commands[command_id] = {
                 "future": future,
                 "timestamp": time.time(),
                 "command": command,
-                "parameters": parameters,
+                "parameters": logged_parameters,
             }
 
             # Send the command
@@ -212,7 +214,7 @@ class CommandHandler:
                     "error": "Failed to publish command",
                     "command_id": command_id,
                     "command": command,
-                    "parameters": parameters,
+                    "parameters": logged_parameters,
                 }
 
             # Wait for the response with timeout
@@ -248,7 +250,7 @@ class CommandHandler:
                 "success": True,
                 "command_id": command_id,
                 "command": command,
-                "parameters": parameters,
+                "parameters": logged_parameters,
                 "response": response_data,
             }
 
@@ -274,7 +276,7 @@ class CommandHandler:
                 "error": "Timeout waiting for response",
                 "command_id": command_id,
                 "command": command,
-                "parameters": parameters,
+                "parameters": logged_parameters,
             }
 
         except Exception as ex:  # pylint: disable=broad-except
@@ -288,7 +290,7 @@ class CommandHandler:
                 "error": str(ex),
                 "command_id": command_id,
                 "command": command,
-                "parameters": parameters,
+                "parameters": logged_parameters,
             }
 
     def process_response(self, topic: str, payload: str) -> None:

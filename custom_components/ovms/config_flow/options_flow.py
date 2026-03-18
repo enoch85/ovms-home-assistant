@@ -1,10 +1,10 @@
 """Options flow handler for OVMS."""
 
 import logging
+
 import voluptuous as vol
 
 from homeassistant.config_entries import OptionsFlow
-from homeassistant.core import callback
 from homeassistant.helpers.selector import (
     TextSelector,
     TextSelectorConfig,
@@ -27,7 +27,6 @@ from ..const import (
     DEFAULT_TOPIC_STRUCTURE,
     DEFAULT_VERIFY_SSL,
     DEFAULT_TOPIC_BLACKLIST,
-    DEFAULT_ENTITY_STALENESS_MANAGEMENT,
     DEFAULT_DELETE_STALE_HISTORY,
     DEFAULT_LOCK_PIN,
     TOPIC_STRUCTURES,
@@ -255,7 +254,6 @@ class OVMSOptionsFlow(OptionsFlow):
         # Create options schema with port selection and place SSL verification right after ports
         current_verify_ssl = current_config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
         secure_pin_connection = is_secure_pin_connection(current_config)
-
         options = {
             vol.Required("Port", default=port_selection): vol.In(
                 {

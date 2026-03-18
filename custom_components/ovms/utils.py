@@ -5,7 +5,7 @@ import json
 import logging
 import re
 import hashlib
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -18,7 +18,11 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_HOST,
+    CONF_MQTT_USERNAME,
     CONF_PROTOCOL,
+    CONF_USERNAME,
+    CONF_VEHICLE_ID,
     CONF_VERIFY_SSL,
     DOMAIN,
     LOGGER_NAME,
@@ -48,6 +52,53 @@ def get_merged_config(entry: ConfigEntry) -> Dict[str, Any]:
     if entry.options:
         config.update(entry.options)
     return config
+
+
+def get_ovms_topic_username(config: Mapping[str, Any]) -> str:
+    """Return the OVMS topic-namespace username for a config."""
+    mqtt_username = config.get(CONF_MQTT_USERNAME)
+    if isinstance(mqtt_username, str) and mqtt_username.strip():
+        return mqtt_username.strip()
+
+    username = config.get(CONF_USERNAME)
+    if isinstance(username, str) and username.strip():
+        return username.strip()
+
+    return ""
+
+
+def _get_ovms_identity_base(config: Mapping[str, Any]) -> str:
+    """Build the stable identity tuple for an OVMS config entry."""
+    host = str(config.get(CONF_HOST, "")).strip()
+    topic_username = get_ovms_topic_username(config)
+    vehicle_id = str(config.get(CONF_VEHICLE_ID, "")).strip()
+    return "|".join((host, topic_username, vehicle_id))
+
+
+def generate_ovms_config_entry_unique_id(config: Mapping[str, Any]) -> str:
+    """Generate a stable Home Assistant config-entry unique ID for OVMS."""
+    identity_base = _get_ovms_identity_base(config)
+    return f"ovms_{hashlib.sha256(identity_base.encode()).hexdigest()[:16]}"
+
+
+def generate_ovms_client_id(config: Mapping[str, Any]) -> str:
+    """Generate a stable MQTT client ID for OVMS.
+
+    MQTT 3.1/3.1.1 client identifiers must remain short for compatibility, so the
+    derived hash is capped at 12 hex characters: `ha_ovms_` + 12 = 20 chars.
+    """
+    identity_base = _get_ovms_identity_base(config)
+    return f"ha_ovms_{hashlib.sha256(identity_base.encode()).hexdigest()[:12]}"
+
+
+def uses_websocket_transport(config: Mapping[str, Any]) -> bool:
+    """Return True when the configured MQTT transport uses websockets."""
+    return config.get(CONF_PROTOCOL) in ("ws", "wss")
+
+
+def uses_tls_transport(config: Mapping[str, Any]) -> bool:
+    """Return True when the configured MQTT transport uses TLS."""
+    return config.get(CONF_PROTOCOL) in ("mqtts", "wss")
 
 
 def get_entry_command_function(
@@ -138,6 +189,20 @@ def lock_pin_contains_whitespace(pin: str | None) -> bool:
         return False
 
     return any(character.isspace() for character in pin)
+
+
+def sanitize_topic_structure(value: Any) -> Optional[str]:
+    """Strip leading/trailing whitespace from a topic structure string.
+
+    Returns the stripped value, or None if the input is not a non-empty string.
+    Guards against config entries saved with accidental whitespace
+    (observed in issue #199).
+    """
+    if not isinstance(value, str):
+        return None
+
+    stripped = value.strip()
+    return stripped if stripped else None
 
 
 def convert_temperature(value: float, to_unit: str) -> float:
