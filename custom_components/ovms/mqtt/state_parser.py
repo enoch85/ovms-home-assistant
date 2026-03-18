@@ -15,6 +15,7 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 NUMERIC_DEVICE_CLASSES = [
     SensorDeviceClass.BATTERY,
     SensorDeviceClass.CURRENT,
+    SensorDeviceClass.DATA_SIZE,
     SensorDeviceClass.ENERGY,
     SensorDeviceClass.HUMIDITY,
     SensorDeviceClass.POWER,

@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform, CONF_HOST
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
@@ -12,14 +12,24 @@ from .const import (
     DOMAIN,
     LOGGER_NAME,
     CONFIG_VERSION,
-    SIGNAL_PLATFORMS_LOADED,
+    CONF_CONFIG_ENTRY_ID,
+    CONF_TOPIC_STRUCTURE,
     CONF_TOPIC_BLACKLIST,
+    get_platforms_loaded_signal,
 )
 
 from .mqtt import OVMSMQTTClient
-from .migrations import async_migrate_lock_entities
+from .migrations import (
+    async_cleanup_stale_device_associations,
+    async_migrate_entity_identity,
+    async_migrate_lock_entities,
+)
 from .services import async_setup_services, async_unload_services
-from .utils import get_merged_config
+from .utils import (
+    generate_ovms_client_id,
+    get_merged_config,
+    sanitize_topic_structure,
+)
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -32,12 +42,39 @@ PLATFORMS = [
 ]
 
 
-def _get_merged_config(entry: ConfigEntry) -> dict:
-    """Get merged configuration from entry.data and entry.options.
+async def _sanitize_persisted_topic_structure(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Strip whitespace from persisted topic_structure in data and options."""
+    updated_data = None
+    updated_options = None
 
-    Options take precedence over data.
-    """
-    return get_merged_config(entry)
+    raw_data = entry.data.get(CONF_TOPIC_STRUCTURE)
+    clean_data = sanitize_topic_structure(raw_data)
+    if clean_data and clean_data != raw_data:
+        updated_data = {**entry.data, CONF_TOPIC_STRUCTURE: clean_data}
+        _LOGGER.info(
+            "Stripped whitespace from stored topic_structure in data: %r -> %r",
+            raw_data,
+            clean_data,
+        )
+
+    raw_options = entry.options.get(CONF_TOPIC_STRUCTURE)
+    clean_options = sanitize_topic_structure(raw_options)
+    if clean_options and clean_options != raw_options:
+        updated_options = {**entry.options, CONF_TOPIC_STRUCTURE: clean_options}
+        _LOGGER.info(
+            "Stripped whitespace from stored topic_structure in options: %r -> %r",
+            raw_options,
+            clean_options,
+        )
+
+    if updated_data is not None or updated_options is not None:
+        hass.config_entries.async_update_entry(
+            entry,
+            data=updated_data or entry.data,
+            options=updated_options or entry.options,
+        )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -48,19 +85,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         # Always check for missing client_id (critical for MQTT stability)
-        await _migrate_client_id(hass, entry, entry.version)
+        client_id_changed = await _migrate_client_id(hass, entry, entry.version)
 
         # Check if we need to migrate the config entry
-        if entry.version < CONFIG_VERSION:
+        migrated = entry.version < CONFIG_VERSION
+        if migrated:
             _LOGGER.info(
                 "Migrating config entry from version %s to %s",
                 entry.version,
                 CONFIG_VERSION,
             )
-            await async_migrate_entry(hass, entry)
+            if not await async_migrate_entry(hass, entry):
+                _LOGGER.error(
+                    "Failed to migrate OVMS config entry %s; aborting setup",
+                    entry.entry_id,
+                )
+                return False
+
+        # Fix persisted topic_structure with leading/trailing whitespace
+        # (observed in issue #199 from config flow saving with a leading space)
+        await _sanitize_persisted_topic_structure(hass, entry)
+
+        if client_id_changed and not migrated:
+            await async_migrate_entity_identity(hass, entry, entry.version)
+
+        # Remove stale device associations only after a migration just ran.
+        # Also run after a current-version entry gains a stable client_id,
+        # because device_info will switch from vehicle_id to client_id.
+        if migrated or client_id_changed:
+            await async_cleanup_stale_device_associations(hass, entry)
 
         # Merge entry.data with entry.options, giving priority to options
-        config = _get_merged_config(entry)
+        config = get_merged_config(entry)
+        config[CONF_CONFIG_ENTRY_ID] = entry.entry_id
 
         # Debug: Check if client_id is present in the merged config
         from .const import CONF_CLIENT_ID
@@ -103,7 +160,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Signal that all platforms are loaded
         _LOGGER.info("All platforms loaded, notifying MQTT client")
-        async_dispatcher_send(hass, SIGNAL_PLATFORMS_LOADED)
+        async_dispatcher_send(hass, get_platforms_loaded_signal(entry.entry_id))
 
         return True
     except Exception as ex:
@@ -164,7 +221,7 @@ async def _migrate_blacklist_patterns(
     )  # Start with current system patterns
     updated_blacklist = list(dict.fromkeys(updated_blacklist))  # Remove any duplicates
 
-    # Check if update is needed (for version 1->2, only update if changed; for version 2->3, always update)
+    # Check if update is needed: always update from v2, otherwise only if the list actually changed
     should_update = (from_version == 2) or (updated_blacklist != existing_blacklist)
 
     if should_update:
@@ -203,65 +260,42 @@ async def _migrate_blacklist_patterns(
 
 async def _migrate_client_id(
     hass: HomeAssistant, config_entry: ConfigEntry, from_version: int
-) -> None:
+) -> bool:
     """Generate and store stable MQTT client ID for existing installations."""
-    import hashlib
-    from .const import CONF_CLIENT_ID, CONF_VEHICLE_ID
+    from .const import CONF_CLIENT_ID
 
     current_data = dict(config_entry.data)
 
-    # Check if client_id already exists
-    if CONF_CLIENT_ID in current_data and current_data[CONF_CLIENT_ID]:
+    expected_client_id = generate_ovms_client_id(current_data)
+    current_client_id = current_data.get(CONF_CLIENT_ID)
+
+    if current_client_id == expected_client_id:
         _LOGGER.debug(
-            "V%d Migration: Client ID already exists: %s",
+            "V%d Migration: Client ID already up to date: %s",
             from_version,
-            current_data[CONF_CLIENT_ID],
+            current_client_id,
         )
-        return
+        return False
 
     _LOGGER.info(
-        "V%d Migration: Client ID missing, generating new stable client ID",
+        "V%d Migration: Updating stable MQTT client ID to %s",
         from_version,
-    )
-
-    # Generate stable client ID including username to prevent collisions
-    # Multiple users can have same vehicle_id, but username must be unique on broker
-    from homeassistant.const import CONF_USERNAME
-
-    host = current_data.get(CONF_HOST, "unknown")
-    username = current_data.get(CONF_USERNAME, "unknown")
-    vehicle_id = current_data.get(CONF_VEHICLE_ID, "unknown")
-
-    # Debug logging to understand what values we're working with
-    _LOGGER.debug(
-        "V%d Migration: Raw config values - host: %s, username: %s, vehicle_id: %s",
-        from_version,
-        repr(host),
-        repr(username),
-        repr(vehicle_id),
-    )
-
-    client_id_base = f"{host}_{username}_{vehicle_id}"
-    client_id = f"ha_ovms_{hashlib.sha256(client_id_base.encode()).hexdigest()[:12]}"
-
-    # Debug: Log the hash input and output
-    _LOGGER.debug("V%d Migration: Hash input: %s", from_version, repr(client_id_base))
-    _LOGGER.debug(
-        "V%d Migration: Generated hash: %s",
-        from_version,
-        hashlib.sha256(client_id_base.encode()).hexdigest()[:12],
+        expected_client_id,
     )
 
     # Update the config entry data
-    current_data[CONF_CLIENT_ID] = client_id
+    current_data[CONF_CLIENT_ID] = expected_client_id
     hass.config_entries.async_update_entry(config_entry, data=current_data)
 
     _LOGGER.info(
-        "V%d Migration: Generated stable MQTT client ID: %s", from_version, client_id
+        "V%d Migration: Generated stable MQTT client ID: %s",
+        from_version,
+        expected_client_id,
     )
     _LOGGER.debug(
         "V%d Migration: Updated config entry data with client_id", from_version
     )
+    return True
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
@@ -281,12 +315,15 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         )
 
         # Perform migrations based on version
-        if version in [1, 2]:
+        if version in [1, 2, 3, 4]:
             # Migrate blacklist patterns to clean format
             await _migrate_blacklist_patterns(hass, config_entry, version)
 
         if version <= 3:
             await async_migrate_lock_entities(hass, config_entry, version)
+
+        if version <= 4:
+            await async_migrate_entity_identity(hass, config_entry, version)
 
         # Update the config entry version
         hass.config_entries.async_update_entry(config_entry, version=CONFIG_VERSION)

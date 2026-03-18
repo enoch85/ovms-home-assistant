@@ -52,6 +52,7 @@ from ..const import (
 )
 from ..metrics import METRIC_DEFINITIONS
 from ..metrics.vehicles import VEHICLE_TYPE_PREFIXES, VEHICLE_TYPE_NAMES
+from ..utils import uses_tls_transport, uses_websocket_transport
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -182,7 +183,8 @@ def format_structure_prefix(config):
         vehicle_id = config.get(CONF_VEHICLE_ID, "")
         mqtt_username = config.get(CONF_MQTT_USERNAME, "")
 
-        # Replace the variables in the structure
+        # Whitespace is stripped at config-entry load time
+        # (see _sanitize_persisted_topic_structure in __init__.py).
         structure_prefix = structure.format(
             prefix=prefix, vehicle_id=vehicle_id, mqtt_username=mqtt_username
         )
@@ -366,7 +368,8 @@ async def discover_topics(hass: HomeAssistant, config):
     protocol = mqtt.MQTTv5 if hasattr(mqtt, "MQTTv5") else mqtt.MQTTv311
 
     _LOGGER.debug("%s - Creating client with ID: %s", log_prefix, client_id)
-    mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
+    transport = "websockets" if uses_websocket_transport(config) else "tcp"
+    mqttc = mqtt.Client(client_id=client_id, protocol=protocol, transport=transport)
 
     discovered_topics = set()
     retained_topics = set()  # Track topics received with retain flag
@@ -436,7 +439,7 @@ async def discover_topics(hass: HomeAssistant, config):
             password=config[CONF_PASSWORD] if CONF_PASSWORD in config else None,
         )
 
-    if config[CONF_PORT] == 8883:
+    if uses_tls_transport(config):
         verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
         try:
             # Use executor to avoid blocking the event loop
@@ -793,7 +796,8 @@ async def test_topic_availability(hass: HomeAssistant, config):
     protocol = mqtt.MQTTv5 if hasattr(mqtt, "MQTTv5") else mqtt.MQTTv311
 
     _LOGGER.debug("%s - Creating client with ID: %s", log_prefix, client_id)
-    mqttc = mqtt.Client(client_id=client_id, protocol=protocol)
+    transport = "websockets" if uses_websocket_transport(config) else "tcp"
+    mqttc = mqtt.Client(client_id=client_id, protocol=protocol, transport=transport)
 
     messages_received = []
     topics_found = set()
@@ -913,8 +917,10 @@ async def test_topic_availability(hass: HomeAssistant, config):
         )
 
     # Configure TLS if needed
-    if config[CONF_PROTOCOL] == "mqtts":
-        _LOGGER.debug("%s - Enabling SSL/TLS for port 8883", log_prefix)
+    if uses_tls_transport(config):
+        _LOGGER.debug(
+            "%s - Enabling SSL/TLS for configured secure transport", log_prefix
+        )
         verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
 
         try:

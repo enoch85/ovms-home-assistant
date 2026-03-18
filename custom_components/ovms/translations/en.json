@@ -77,18 +77,22 @@
           "Port": "Connection Port",
           "verify_ssl_certificate": "Verify SSL/TLS Certificate",
           "topic_blacklist": "Topic Blacklist",
-          "lock_pin": "Stored Lock PIN",
+          "lock_pin_mode": "Stored Lock PIN",
+          "lock_pin": "PIN Code",
           "entity_staleness_management": "Entity Staleness Management",
           "delete_stale_history": "Delete History"
         },
         "data_description": {
           "verify_ssl_certificate": "SSL/TLS certificate verification only applies to secure ports (8883, 8084). Lock PIN support requires verified TLS.",
           "topic_blacklist": "A comma-separated list of topic patterns to filter out. This prevents unwanted entities from being created. Any topic containing these patterns will be ignored. Use this to filter high-frequency log topics that create too many entities.",
-          "lock_pin": "Optional fallback PIN to send when lock or unlock is called without a code. This field is only available on verified secure MQTT connections. Some OVMS vehicle adapters still do not validate the PIN server-side.",
+          "lock_pin": "Store your PIN here so you don't have to enter it every time you lock or unlock. Without a stored PIN, Home Assistant will prompt for one each time. Only available on verified secure MQTT connections.",
           "entity_staleness_management": "Automatically hide inactive sensors after a period without updates to reduce UI clutter and improve performance",
           "delete_stale_history": "Delete history when hiding stale sensors (unchecked = hide only, preserves history)"
         }
       }
+    },
+    "error": {
+      "invalid_lock_pin": "PIN codes cannot contain spaces or other whitespace."
     }
   },
   "services": {
@@ -188,9 +192,6 @@
         "state_attributes": {
           "category": {
             "name": "Category"
-          },
-          "last_updated": {
-            "name": "Last Updated"
           }
         }
       },

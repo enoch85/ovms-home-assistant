@@ -15,13 +15,12 @@ from homeassistant.helpers.dispatcher import (
     async_dispatcher_send,
 )
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 from ..const import (
     LOGGER_NAME,
-    SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY,
+    get_add_entities_signal,
     truncate_state_value,
 )
 from .parsers import (
@@ -94,7 +93,11 @@ def format_sensor_value(value, device_class, attributes):
                 return f"{date_part} at {time_part}"
             return formatted
         return str(value)
-    # Normal handling
+    # Normal handling - preserve numeric types for HA unit conversion
+    # HA requires native_value to be int/float for device_class unit conversion
+    # (e.g., suggested_unit_of_measurement) to work correctly
+    if isinstance(value, (int, float)):
+        return value
     return truncate_state_value(value)
 
 
@@ -121,7 +124,6 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
-            "last_updated": dt_util.utcnow().isoformat(),
         }
         self.hass: Optional[HomeAssistant] = hass
 
@@ -199,14 +201,6 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             device_class_for_formatting,
             self._attr_extra_state_attributes,
         )
-
-        # Set entity_id
-        if hass:
-            self.entity_id = async_generate_entity_id(
-                "sensor.{}",
-                name.lower(),
-                hass=hass,
-            )
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates."""
@@ -292,6 +286,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                         "state_class",
                         "unit_of_measurement",
                         "unit",
+                        "last_updated",
                     ]
                 }
 
@@ -332,10 +327,6 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
                 self._attr_extra_state_attributes,
             )
 
-            # Update timestamp
-            self._attr_extra_state_attributes["last_updated"] = (
-                dt_util.utcnow().isoformat()
-            )
             self.async_write_ha_state()
 
         # Subscribe to updates
@@ -380,27 +371,20 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         attributes: Dict[str, Any],
         friendly_name: Optional[str] = None,
         hass: Optional[HomeAssistant] = None,
+        config_entry_id: Optional[str] = None,
     ) -> None:
         """Initialize the sensor."""
         self._attr_unique_id = unique_id
         self._internal_name = name
         self._attr_name = friendly_name or name.replace("_", " ").title()
         self._topic = topic
+        self._config_entry_id = config_entry_id
         self._attr_device_info = device_info or {}
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
-            "last_updated": dt_util.utcnow().isoformat(),
         }
         self.hass: Optional[HomeAssistant] = hass
-
-        # Set entity_id
-        if hass:
-            self.entity_id = async_generate_entity_id(
-                "sensor.{}",
-                name.lower(),
-                hass=hass,
-            )
 
         # Determine sensor type
         sensor_type = determine_sensor_type(
@@ -416,6 +400,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._attr_suggested_display_precision = sensor_type[
             "suggested_display_precision"
         ]
+        self._attr_suggested_unit_of_measurement = sensor_type.get(
+            "suggested_unit_of_measurement"
+        )
 
         # For timestamp sensors, set explicit metadata values
         if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
@@ -447,15 +434,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_device_class = None
             self._attr_state_class = None
             self._attr_native_unit_of_measurement = None
-
-        # Add unit to attributes
-        if (
-            self._attr_native_unit_of_measurement
-            and "unit" not in self._attr_extra_state_attributes
-        ):
-            self._attr_extra_state_attributes["unit"] = (
-                self._attr_native_unit_of_measurement
-            )
 
         # Cell sensor configuration - detect by topic patterns and known cell data metrics
         self._is_cell_sensor = (
@@ -631,6 +609,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                         "state_class",
                         "unit_of_measurement",
                         "unit",
+                        "last_updated",
+                        "full_topic",
                     ]
                 }
 
@@ -665,11 +645,6 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 self._parsed_value,
                 device_class_for_parsing,
                 self._attr_extra_state_attributes,
-            )
-
-            # Update timestamp
-            self._attr_extra_state_attributes["last_updated"] = (
-                dt_util.utcnow().isoformat()
             )
 
             # Process the payload for attributes
@@ -845,6 +820,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             cell_values,
             vehicle_id,
             self.unique_id or "unknown",
+            self._config_entry_id,
             device_info_dict,
             {
                 "name": self.name,
@@ -865,7 +841,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         if sensor_configs:
             async_dispatcher_send(
                 self.hass,
-                SIGNAL_ADD_ENTITIES,
+                get_add_entities_signal(self._config_entry_id),
                 {
                     "entity_type": "sensor",
                     "cell_sensors": sensor_configs,

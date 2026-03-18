@@ -18,10 +18,31 @@ from ..const import (
     DEFAULT_QOS,
     COMMAND_TOPIC_TEMPLATE,
     RESPONSE_TOPIC_TEMPLATE,
+    PIN_SENSITIVE_COMMANDS,
+    SENSITIVE_LOG_REDACTION,
 )
 from ..rate_limiter import CommandRateLimiter
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
+
+def _redact_command_parameters(command: str, parameters: str) -> str:
+    """Redact sensitive OVMS command parameters before logging."""
+    if not parameters:
+        return parameters
+
+    if command.lower() in PIN_SENSITIVE_COMMANDS:
+        return SENSITIVE_LOG_REDACTION
+
+    return parameters
+
+
+def _redact_command_payload(command: str, parameters: str) -> str:
+    """Build a log-safe command payload representation."""
+    if not parameters:
+        return command
+
+    return f"{command} {_redact_command_parameters(command, parameters)}"
 
 
 class CommandHandler:
@@ -139,16 +160,18 @@ class CommandHandler:
                 "success": False,
                 "error": f"Rate limit exceeded. Try again in {time_to_next:.1f} seconds",
                 "command": command,
-                "parameters": parameters,
+                "parameters": _redact_command_parameters(command, parameters),
             }
 
         if command_id is None:
             command_id = uuid.uuid4().hex[:8]
 
+        logged_parameters = _redact_command_parameters(command, parameters)
+
         _LOGGER.debug(
             "Sending command: %s, parameters: %s, command_id: %s",
             command,
-            parameters,
+            logged_parameters,
             command_id,
         )
 
@@ -167,16 +190,22 @@ class CommandHandler:
             loop = asyncio.get_running_loop()
             future = loop.create_future()
 
-            # Store the future for the response handler
+            # Store the future for the response handler.
+            # Only keep the redacted form of parameters to avoid holding
+            # sensitive values (e.g. lock PINs) in memory longer than needed.
             self.pending_commands[command_id] = {
                 "future": future,
                 "timestamp": time.time(),
                 "command": command,
-                "parameters": parameters,
+                "parameters": logged_parameters,
             }
 
             # Send the command
-            _LOGGER.debug("Publishing command to %s: %s", command_topic, payload)
+            _LOGGER.debug(
+                "Publishing command to %s: %s",
+                command_topic,
+                _redact_command_payload(command, parameters),
+            )
             if not await mqtt_client.async_publish(
                 command_topic, payload, qos=self.config.get(CONF_QOS, DEFAULT_QOS)
             ):
@@ -185,7 +214,7 @@ class CommandHandler:
                     "error": "Failed to publish command",
                     "command_id": command_id,
                     "command": command,
-                    "parameters": parameters,
+                    "parameters": logged_parameters,
                 }
 
             # Wait for the response with timeout
@@ -199,7 +228,7 @@ class CommandHandler:
             _LOGGER.info(
                 "Command response for '%s %s' (ID: %s): %s",
                 command,
-                parameters,
+                logged_parameters,
                 command_id,
                 (
                     response_payload[:200] + "..."
@@ -221,7 +250,7 @@ class CommandHandler:
                 "success": True,
                 "command_id": command_id,
                 "command": command,
-                "parameters": parameters,
+                "parameters": logged_parameters,
                 "response": response_data,
             }
 
@@ -234,7 +263,7 @@ class CommandHandler:
                 "3) OVMS device configuration issue. "
                 "Try updating OVMS firmware or check OVMS MQTT configuration.",
                 command,
-                parameters,
+                logged_parameters,
                 command_id,
                 timeout,
             )
@@ -247,7 +276,7 @@ class CommandHandler:
                 "error": "Timeout waiting for response",
                 "command_id": command_id,
                 "command": command,
-                "parameters": parameters,
+                "parameters": logged_parameters,
             }
 
         except Exception as ex:  # pylint: disable=broad-except
@@ -261,7 +290,7 @@ class CommandHandler:
                 "error": str(ex),
                 "command_id": command_id,
                 "command": command,
-                "parameters": parameters,
+                "parameters": logged_parameters,
             }
 
     def process_response(self, topic: str, payload: str) -> None:

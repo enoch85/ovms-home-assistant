@@ -247,12 +247,26 @@ After initial setup, additional options can be configured via the integration op
 
 The Topic Blacklist feature is particularly useful to prevent high-frequency log topics from creating hundreds of unwanted entities. The integration comes with default filters for common log topics, but you may need to add additional patterns based on your specific OVMS module and vehicle.
 
+The default blacklist now also includes `event`, which blocks high-frequency event topics from creating entities unless you explicitly remove that pattern in the options flow.
+
 **Common patterns to blacklist:**
+- `event` - Blocks event topics published by OVMS
 - `.log` - Blocks all log topics (matches any topic containing ".log")
 - `battery.log` - Blocks battery log specific topics
 - `power.log` - Blocks power log specific topics
 - `gps.log` - Blocks GPS log specific topics
 - `xrt.log` - Blocks Renault Twizy specific log topics
+
+### Lock PIN Behavior
+
+The native Home Assistant lock entity supports OVMS lock and unlock commands.
+
+- The stored lock PIN option is only shown when using a verified secure MQTT connection (`mqtts://` or `wss://` with certificate verification enabled).
+- If you save a stored lock PIN in the integration options, the Home Assistant lock dialog can be left blank and the stored value will be used as a fallback.
+- If you do not save a stored lock PIN, Home Assistant will require you to enter one when using the lock entity.
+- OVMS itself registers `lock` and `unlock` as commands that take one PIN argument. Some vehicle modules validate that PIN, while others ignore it. If your vehicle does not actually validate the PIN, you may still need to configure a simple placeholder value so the command has the required argument. A value like `nopin` is a safe example.
+- PIN values cannot contain spaces or other whitespace.
+- The lock PIN is stored in Home Assistant's config entry storage (`.storage/core.config_entries`). Home Assistant does not encrypt config entries at rest. The PIN is masked in the UI and redacted in logs, but be aware it is stored in plaintext on disk, as is standard for all HA integration credentials.
 
 ### Testing Configuration
 
@@ -833,7 +847,7 @@ This allows the integration to work even when the exact topic structure isn't kn
 
 The integration implements stable MQTT client ID management:
 
-- **Stable Client IDs**: Generates unique, persistent client IDs based on broker host and vehicle ID
+- **Stable Client IDs**: Generates unique, persistent client IDs based on broker host, OVMS topic username, and vehicle ID
 - **Format**: `ha_ovms_xxxxxxxxxxxx` (20 characters total)
 - **Compatibility**: Works with all MQTT versions (3.1, 3.1.1, and 5.0)
 - **Collision Resistance**: Uses SHA-256 hash with 281 trillion possible combinations
@@ -978,7 +992,7 @@ A: Updates happen in real-time as the OVMS module publishes new data, typically 
 A: The integration includes automatic reconnection with exponential backoff, online/offline status tracking, and will resume normal operation when connection is restored.
 
 **Q: Is my data secure?**  
-A: Yes, the integration supports TLS/SSL encryption for MQTT connections and follows secure coding practices for handling sensitive data.
+A: The integration supports TLS/SSL encryption for MQTT connections and follows secure coding practices for handling sensitive data.
 
 **Q: What happens if I lose connection to my vehicle?**  
 A: The integration maintains the last known state of all entities and marks the vehicle as offline. When connection is restored, all entity states are updated with the latest data.

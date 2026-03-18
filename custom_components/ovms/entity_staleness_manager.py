@@ -3,7 +3,6 @@
 import asyncio
 import logging
 from typing import Dict, Optional, List, Any
-from datetime import datetime
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -16,46 +15,47 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_CLIENT_ID,
+    CONF_CONFIG_ENTRY_ID,
     CONF_ENTITY_STALENESS_MANAGEMENT,
     CONF_DELETE_STALE_HISTORY,
+    DOMAIN,
     CONF_VEHICLE_ID,
     DEFAULT_ENTITY_STALENESS_MANAGEMENT,
     DEFAULT_DELETE_STALE_HISTORY,
     LOGGER_NAME,
-    SIGNAL_ADD_ENTITIES,
-    DOMAIN,
     STALENESS_INITIAL_CACHE_DELAY,
     STALENESS_DIAGNOSTIC_SENSOR_DELAY,
     STALENESS_CLEANUP_START_DELAY,
     STALENESS_CLEANUP_INTERVAL,
     STALENESS_FIRST_RUN_EXTRA_WAIT,
+    STALENESS_MAX_DISPLAY_ENTITIES,
+    STALENESS_UNIQUE_ID_MARKER,
+    get_add_entities_signal,
 )
+from .utils import get_namespaced_ovms_unique_id, get_ovms_device_info
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
-
-
-def _is_ovms_entity(entity_id: str) -> bool:
-    """Return True if the entity belongs to the OVMS integration."""
-    return entity_id.startswith(
-        ("sensor.ovms_", "binary_sensor.ovms_", "switch.ovms_", "device_tracker.ovms_")
-    )
 
 
 class OVMSStalenessStatusSensor(SensorEntity, RestoreEntity):
     """Diagnostic sensor showing count of entities scheduled for removal."""
 
     _attr_name = "OVMS Staleness Status"
-    _attr_unique_id = "ovms_staleness_status"
     _attr_icon = "mdi:clock-alert-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_unit_of_measurement = "entities"
-    _attr_entity_registry_enabled_default = False  # Hidden by default in UI
+    _attr_entity_registry_enabled_default = True
 
     def __init__(
-        self, staleness_manager: "EntityStalenessManager", device_info: Dict[str, Any]
+        self,
+        staleness_manager: "EntityStalenessManager",
+        unique_id: str,
+        device_info: Dict[str, Any],
     ) -> None:
         """Initialize the sensor."""
         self._manager = staleness_manager
+        self._attr_unique_id = unique_id
         self._attr_device_info = device_info
         self._restored_data: Dict[str, Any] = {}
 
@@ -112,6 +112,10 @@ class EntityStalenessManager:
         self.config = config
         self._cleanup_task: Optional[asyncio.Task] = None
         self._shutting_down = False
+        self._client_id = config.get(CONF_CLIENT_ID)
+        self._config_entry_id = config.get(CONF_CONFIG_ENTRY_ID)
+        self._vehicle_id = config.get(CONF_VEHICLE_ID, "unknown")
+        self._add_entities_signal = get_add_entities_signal(self._config_entry_id)
 
         # Simple cache - gets populated immediately when enabled
         self._cache = {
@@ -191,22 +195,27 @@ class EntityStalenessManager:
     async def _async_create_diagnostic_sensor(self) -> None:
         """Create a simple diagnostic sensor asynchronously."""
         # No additional delay needed here since call_later already handled the timing
+        # Do NOT pass sw_version here — the staleness sensor is created ~30s
+        # after startup, by which time the firmware topic has already set the
+        # correct version on the device.  Passing "Unknown" would overwrite it.
+        device_info = get_ovms_device_info(
+            self._client_id,
+            self._vehicle_id,
+        )
 
-        # Create device info for the diagnostic sensor
-        vehicle_id = self.config.get(CONF_VEHICLE_ID, "unknown")
-        device_info = {
-            "identifiers": {(DOMAIN, vehicle_id)},
-            "name": f"OVMS - {vehicle_id}",
-            "manufacturer": "Open Vehicles",
-            "model": "OVMS v3",
-        }
-
-        sensor = OVMSStalenessStatusSensor(self, device_info)
+        sensor = OVMSStalenessStatusSensor(
+            self,
+            get_namespaced_ovms_unique_id(
+                f"ovms_{STALENESS_UNIQUE_ID_MARKER}",
+                self._config_entry_id,
+            ),
+            device_info,
+        )
 
         sensor_data = {"entity_type": "sensor", "diagnostic_sensor": sensor}
 
         # Send to sensor platform
-        async_dispatcher_send(self.hass, SIGNAL_ADD_ENTITIES, sensor_data)
+        async_dispatcher_send(self.hass, self._add_entities_signal, sensor_data)
         _LOGGER.debug("Diagnostic sensor creation signal sent")
 
     def _start_cleanup_task(self) -> None:
@@ -273,15 +282,42 @@ class EntityStalenessManager:
             current_time = dt_util.utcnow()
             stale_entities = []
 
-            # Iterate through entity registry entries directly for better performance
-            for entity_id, entity_entry in entity_registry.entities.items():
-                if not _is_ovms_entity(entity_id):
+            # Use HA's built-in API to get entities for this config entry
+            if self._config_entry_id:
+                registry_entries = er.async_entries_for_config_entry(
+                    entity_registry, self._config_entry_id
+                )
+            else:
+                registry_entries = []
+
+            for entity_entry in registry_entries:
+                if entity_entry.platform != DOMAIN:
                     continue
 
-                state = self.hass.states.get(entity_id)
+                # Skip the staleness diagnostic sensor itself
                 if (
-                    state
-                    and state.state in ["unavailable", "unknown"]
+                    entity_entry.unique_id
+                    and STALENESS_UNIQUE_ID_MARKER in entity_entry.unique_id
+                ):
+                    continue
+
+                state = self.hass.states.get(entity_entry.entity_id)
+
+                # Entity in registry with no state object = orphaned (no
+                # backing platform entity, e.g. topic was blacklisted).
+                # These will never recover on their own.
+                if state is None:
+                    friendly_name = (
+                        entity_entry.name
+                        if entity_entry.name
+                        else entity_entry.entity_id
+                    )
+                    if len(stale_entities) < STALENESS_MAX_DISPLAY_ENTITIES:
+                        stale_entities.append(f"{friendly_name} (eligible for removal)")
+                    continue
+
+                if (
+                    state.state in ["unavailable", "unknown"]
                     and hasattr(state, "last_updated")
                     and state.last_updated
                 ):
@@ -289,13 +325,13 @@ class EntityStalenessManager:
                         current_time - state.last_updated
                     ).total_seconds() / 3600
 
-                    # Use friendly name from entity registry entry (already have it from the loop)
                     friendly_name = (
-                        entity_entry.name if entity_entry.name else entity_id
+                        entity_entry.name
+                        if entity_entry.name
+                        else entity_entry.entity_id
                     )
 
-                    # Cap at 40 entities for clean display
-                    if len(stale_entities) < 40:
+                    if len(stale_entities) < STALENESS_MAX_DISPLAY_ENTITIES:
                         if hours_stale > self._staleness_hours:
                             stale_entities.append(
                                 f"{friendly_name} (eligible for removal)"
@@ -317,8 +353,12 @@ class EntityStalenessManager:
                 }
             )
 
-            if len(stale_entities) >= 40:
-                self._cache["entities_note"] = f"Showing first 40 entities"
+            if len(stale_entities) >= STALENESS_MAX_DISPLAY_ENTITIES:
+                self._cache["entities_note"] = (
+                    f"Showing first {STALENESS_MAX_DISPLAY_ENTITIES} entities"
+                )
+            else:
+                self._cache.pop("entities_note", None)
 
             return self._cache
 
@@ -385,16 +425,36 @@ class EntityStalenessManager:
             unavailable_entities = []
             current_time = dt_util.utcnow()
 
-            # Find OVMS entities that are unavailable
-            for entity_id, entity_entry in entity_registry.entities.items():
-                # Only process OVMS entities
-                if not _is_ovms_entity(entity_id):
+            # Use HA's built-in API to get entities for this config entry
+            if self._config_entry_id:
+                registry_entries = er.async_entries_for_config_entry(
+                    entity_registry, self._config_entry_id
+                )
+            else:
+                registry_entries = []
+
+            for entity_entry in registry_entries:
+                if entity_entry.platform != DOMAIN:
                     continue
 
-                # Check if entity is unavailable in Home Assistant's state machine
-                state = self.hass.states.get(entity_id)
-                if state and state.state in ["unavailable", "unknown"]:
-                    # Use Home Assistant's built-in state.last_updated to determine staleness
+                # Never clean up the staleness diagnostic sensor itself
+                if (
+                    entity_entry.unique_id
+                    and STALENESS_UNIQUE_ID_MARKER in entity_entry.unique_id
+                ):
+                    continue
+
+                state = self.hass.states.get(entity_entry.entity_id)
+
+                # Entity in registry with no state object = orphaned (no
+                # backing platform entity).  Immediately eligible for cleanup.
+                if state is None:
+                    unavailable_entities.append(
+                        (entity_entry.entity_id, self._staleness_hours + 1, None)
+                    )
+                    continue
+
+                if state.state in ["unavailable", "unknown"]:
                     if hasattr(state, "last_updated") and state.last_updated:
                         hours_unavailable = (
                             current_time - state.last_updated
@@ -402,7 +462,11 @@ class EntityStalenessManager:
 
                         if hours_unavailable > self._staleness_hours:
                             unavailable_entities.append(
-                                (entity_id, hours_unavailable, state.last_updated)
+                                (
+                                    entity_entry.entity_id,
+                                    hours_unavailable,
+                                    state.last_updated,
+                                )
                             )
 
             if unavailable_entities:
@@ -416,10 +480,15 @@ class EntityStalenessManager:
                     )
                     # Log details for debugging
                     for entity_id, hours, last_updated in unavailable_entities:
+                        updated_str = (
+                            last_updated.isoformat()
+                            if last_updated
+                            else "orphaned (no state)"
+                        )
                         _LOGGER.debug(
                             "Removing %s: last updated %s (%.1f hours ago)",
                             entity_id,
-                            last_updated.isoformat(),
+                            updated_str,
                             hours,
                         )
                     await self._async_remove_entities(entity_ids)
@@ -431,10 +500,15 @@ class EntityStalenessManager:
                     )
                     # Log details for debugging
                     for entity_id, hours, last_updated in unavailable_entities:
+                        updated_str = (
+                            last_updated.isoformat()
+                            if last_updated
+                            else "orphaned (no state)"
+                        )
                         _LOGGER.debug(
                             "Hiding %s: last updated %s (%.1f hours ago)",
                             entity_id,
-                            last_updated.isoformat(),
+                            updated_str,
                             hours,
                         )
                     await self._async_hide_entities(entity_ids)

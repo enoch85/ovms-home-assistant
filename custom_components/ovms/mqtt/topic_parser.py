@@ -51,7 +51,8 @@ class TopicParser:
             vehicle_id = self.config.get("vehicle_id", "")
             mqtt_username = self.config.get("mqtt_username", "")
 
-            # Replace the variables in the structure
+            # Whitespace is stripped at config-entry load time
+            # (see _sanitize_persisted_topic_structure in __init__.py).
             structure_prefix = structure.format(
                 prefix=prefix,
                 vehicle_id=vehicle_id,
@@ -83,10 +84,6 @@ class TopicParser:
                     "friendly_name": friendly_name,
                     "attributes": attributes,
                 }
-
-            # Skip event topics - we don't need entities for these
-            if topic.endswith("/event"):
-                return None
 
             # Skip blacklisted topics
             if self.topic_blacklist:
@@ -139,10 +136,11 @@ class TopicParser:
             if len(parts) < 2:
                 return None
 
-            # Check if this is a command/response topic - don't create entities for these
+            # Check if this is a command/response/request topic - don't create entities for these
             if (
                 "client/rr/command" in topic_suffix
                 or "client/rr/response" in topic_suffix
+                or "/request/" in topic_suffix
             ):
                 return None
 

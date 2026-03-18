@@ -10,7 +10,10 @@ from homeassistant.const import (  # noqa: W0611
 )
 
 DOMAIN = "ovms"
-CONFIG_VERSION = 4
+CONFIG_VERSION = 5
+
+OVMS_DEVICE_MANUFACTURER = "Open Vehicles"
+OVMS_DEVICE_MODEL = "OVMS Module"
 
 # Configuration
 CONF_VEHICLE_ID = "vehicle_id"
@@ -23,6 +26,7 @@ CONF_MQTT_USERNAME = "mqtt_username"
 CONF_TOPIC_STRUCTURE = "topic_structure"
 CONF_VERIFY_SSL = "verify_ssl"
 CONF_ORIGINAL_VEHICLE_ID = "original_vehicle_id"
+CONF_CONFIG_ENTRY_ID = "config_entry_id"
 CONF_LOCK_PIN = "lock_pin"
 CONF_CREATE_CELL_SENSORS = (
     "create_cell_sensors"  # Option to create individual cell sensors
@@ -47,6 +51,30 @@ DEFAULT_CREATE_CELL_SENSORS = False  # Never create individual cell sensors by d
 
 # PIN-based lock commands are only allowed on verified secure transports.
 PIN_SECURE_PROTOCOLS = ("mqtts", "wss")
+PIN_SENSITIVE_COMMANDS = ("lock", "unlock", "valet", "unvalet")
+SENSITIVE_LOG_REDACTION = "***"
+
+# Lock command response parsing constants.
+# OVMS returns simple textual confirmations for lock/unlock commands.
+LOCK_COMMAND_ERROR_PREFIX = "Error: "
+LOCK_COMMAND_USAGE_PREFIX = "Usage:"
+LOCK_COMMAND_SUCCESS_RESPONSES = {
+    True: "vehicle locked",
+    False: "vehicle unlocked",
+}
+
+# Regex patterns for the HA lock code_format property.
+# Optional: user may leave the HA PIN dialog blank when a default PIN is stored.
+# Required: user must enter a non-empty PIN every time.
+LOCK_CODE_FORMAT_OPTIONAL = r"^\S*$"
+LOCK_CODE_FORMAT_REQUIRED = r"^\S+$"
+
+# User-facing error messages for lock PIN validation.
+LOCK_PIN_SECURITY_ERROR = (
+    "PIN codes require a verified secure MQTT connection (mqtts:// or wss://)."
+)
+LOCK_PIN_FORMAT_ERROR = "PIN codes cannot contain spaces or other whitespace."
+LOCK_PIN_REQUIRED_ERROR = "A PIN code is required for lock and unlock commands."
 
 # Switch types configuration - maps metrics to their control commands.
 # These metrics automatically create switch entities alongside their sensors.
@@ -91,8 +119,10 @@ LOCK_TYPES = {
     }
 }
 
-# System topic blacklist patterns - these are always applied and cannot be modified by users
+# System topic blacklist patterns used as defaults for new users and migrations.
+# Users can still edit or remove these patterns from the saved blacklist.
 SYSTEM_TOPIC_BLACKLIST = [
+    "event",
     "log",
     "gear",
     "notify",
@@ -144,8 +174,15 @@ STALENESS_CLEANUP_START_DELAY = 120
 STALENESS_CLEANUP_INTERVAL = 1800  # 30 minutes
 STALENESS_FIRST_RUN_EXTRA_WAIT = 180  # 3 minutes
 
+# Staleness diagnostic sensor identity marker (used to skip itself during scans)
+STALENESS_UNIQUE_ID_MARKER = "staleness_status"
+
+# Maximum stale entities shown in the diagnostic sensor attributes.
+# Keeps the state machine payload manageable for the HA frontend.
+STALENESS_MAX_DISPLAY_ENTITIES = 40
+
 # Options
-PROTOCOLS = ["mqtt", "mqtts"]
+PROTOCOLS = ["mqtt", "mqtts", "ws", "wss"]
 UNIT_SYSTEMS = ["metric", "imperial"]
 
 # Topic structure templates
@@ -223,12 +260,37 @@ CATEGORY_MG_ZS_EV = "mg_zs_ev"
 CATEGORY_NISSAN_LEAF = "nissan_leaf"
 CATEGORY_RENAULT_TWIZY = "renault_twizy"
 
-# Signal constants
+# Base dispatcher signals.
+# Multi-entry flows derive config-entry-scoped names from these helpers so
+# separate OVMS config entries do not receive each other's discovery events.
 SIGNAL_ENTITY_DISCOVERY = f"{DOMAIN}_entity_discovery"
 SIGNAL_TOPIC_UPDATE = f"{DOMAIN}_topic_update"
 SIGNAL_ADD_ENTITIES = f"{DOMAIN}_add_entities"
 SIGNAL_UPDATE_ENTITY = f"{DOMAIN}_update_entity"
 SIGNAL_PLATFORMS_LOADED = f"{DOMAIN}_platforms_loaded"
+
+
+def get_add_entities_signal(config_entry_id: str | None = None) -> str:
+    """Return the add-entities signal.
+
+    Falls back to the canonical base signal when no config entry is available.
+    """
+    if not config_entry_id:
+        return SIGNAL_ADD_ENTITIES
+
+    return f"{SIGNAL_ADD_ENTITIES}_{config_entry_id}"
+
+
+def get_platforms_loaded_signal(config_entry_id: str | None = None) -> str:
+    """Return the platforms-loaded signal.
+
+    Falls back to the canonical base signal when no config entry is available.
+    """
+    if not config_entry_id:
+        return SIGNAL_PLATFORMS_LOADED
+
+    return f"{SIGNAL_PLATFORMS_LOADED}_{config_entry_id}"
+
 
 # Error codes
 ERROR_CANNOT_CONNECT = "cannot_connect"

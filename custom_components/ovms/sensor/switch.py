@@ -8,17 +8,15 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.const import EntityCategory
-from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.util import dt as dt_util
 
 from ..const import (
     DOMAIN,
     LOGGER_NAME,
     SWITCH_TYPES,
-    SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY,
+    get_add_entities_signal,
 )
 from ..entity_state import (
     SWITCH_FALSE_STATES,
@@ -71,7 +69,9 @@ async def async_setup_entry(
 
     # Subscribe to discovery events
     entry.async_on_unload(
-        async_dispatcher_connect(hass, SIGNAL_ADD_ENTITIES, async_add_switch)
+        async_dispatcher_connect(
+            hass, get_add_entities_signal(entry.entry_id), async_add_switch
+        )
     )
 
 
@@ -121,17 +121,10 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         self._attr_extra_state_attributes = {
             **attributes,
             "topic": topic,
-            "last_updated": dt_util.utcnow().isoformat(),
         }
         self._command_function = command_function
         # Store switch configuration for controllable metrics
         self._switch_config = switch_config or {}
-
-        # Explicitly set entity_id - this ensures consistent naming
-        if hass:
-            self.entity_id = async_generate_entity_id(
-                "switch.{}", name.lower(), hass=hass
-            )
 
         # Determine switch type and attributes
         self._determine_switch_type()
@@ -157,7 +150,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
                 saved_attributes = {
                     k: v
                     for k, v in state.attributes.items()
-                    if k not in ["icon", "entity_category"]
+                    if k not in ["icon", "entity_category", "last_updated"]
                 }
                 self._attr_extra_state_attributes.update(saved_attributes)
 
@@ -165,10 +158,6 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         def update_state(payload: str) -> None:
             """Update the switch state."""
             self._attr_is_on = self._parse_state(payload)
-
-            # Update timestamp attribute
-            now = dt_util.utcnow()
-            self._attr_extra_state_attributes["last_updated"] = now.isoformat()
 
             # Try to extract additional attributes if it's JSON
             self._process_json_payload(payload)

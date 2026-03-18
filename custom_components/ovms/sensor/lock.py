@@ -9,17 +9,23 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.util import dt as dt_util
 
 from ..const import (
     CONF_LOCK_PIN,
     DOMAIN,
+    LOCK_CODE_FORMAT_OPTIONAL,
+    LOCK_CODE_FORMAT_REQUIRED,
+    LOCK_COMMAND_ERROR_PREFIX,
+    LOCK_COMMAND_SUCCESS_RESPONSES,
+    LOCK_COMMAND_USAGE_PREFIX,
+    LOCK_PIN_FORMAT_ERROR,
+    LOCK_PIN_REQUIRED_ERROR,
+    LOCK_PIN_SECURITY_ERROR,
     LOGGER_NAME,
-    SIGNAL_ADD_ENTITIES,
     SIGNAL_UPDATE_ENTITY,
+    get_add_entities_signal,
 )
 from ..entity_state import (
     LOCK_FALSE_STATES,
@@ -27,23 +33,18 @@ from ..entity_state import (
     parse_boolean_state,
     update_attributes_from_json,
 )
-from ..utils import CommandFunction, get_entry_command_function, get_merged_config
-from ..utils import is_secure_pin_connection
+from ..utils import (
+    CommandFunction,
+    get_entry_command_function,
+    get_merged_config,
+    is_secure_pin_connection,
+    lock_pin_contains_whitespace,
+    normalize_lock_pin,
+)
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 DiscoveryData = dict[str, object]
-
-LOCK_COMMAND_ERROR_PREFIX = "Error: "
-LOCK_COMMAND_USAGE_PREFIX = "Usage:"
-LOCK_COMMAND_SUCCESS_RESPONSES = {
-    True: "vehicle locked",
-    False: "vehicle unlocked",
-}
-LOCK_CODE_FORMAT = r"^\d+$"
-LOCK_PIN_SECURITY_ERROR = (
-    "PIN codes require a verified secure MQTT connection (mqtts:// or wss://)."
-)
 
 
 def _normalize_lock_command_response(response: object) -> str | None:
@@ -54,15 +55,6 @@ def _normalize_lock_command_response(response: object) -> str | None:
     normalized = (
         response.strip() if isinstance(response, str) else str(response).strip()
     )
-    return normalized or None
-
-
-def _normalize_lock_pin(pin: object) -> str | None:
-    """Normalize a configured or user-supplied lock PIN."""
-    if pin is None:
-        return None
-
-    normalized = str(pin).strip()
     return normalized or None
 
 
@@ -83,7 +75,7 @@ async def async_setup_entry(
     """Set up OVMS locks based on a config entry."""
     command_function = get_entry_command_function(hass, entry)
     config = get_merged_config(entry)
-    default_lock_pin = _normalize_lock_pin(config.get(CONF_LOCK_PIN))
+    default_lock_pin = normalize_lock_pin(config.get(CONF_LOCK_PIN))
     pin_allowed = is_secure_pin_connection(config)
 
     @callback
@@ -112,7 +104,9 @@ async def async_setup_entry(
         async_add_entities([lock])
 
     entry.async_on_unload(
-        async_dispatcher_connect(hass, SIGNAL_ADD_ENTITIES, async_add_lock)
+        async_dispatcher_connect(
+            hass, get_add_entities_signal(entry.entry_id), async_add_lock
+        )
     )
 
 
@@ -146,19 +140,13 @@ class OVMSLock(LockEntity, RestoreEntity):
         self._attr_extra_state_attributes = {
             **filtered_attributes,
             "topic": topic,
-            "last_updated": dt_util.utcnow().isoformat(),
         }
         self._command_function = command_function
         self._lock_config = lock_config or {}
-        self._default_pin = _normalize_lock_pin(default_pin)
+        self._default_pin = normalize_lock_pin(default_pin)
         self._pin_allowed = pin_allowed
         self._attr_icon = self._lock_config.get("icon")
         self._attr_is_locked = self._parse_state(initial_state)
-
-        if hass:
-            self.entity_id = async_generate_entity_id(
-                "lock.{}", name.lower(), hass=hass
-            )
 
         update_attributes_from_json(initial_state, self._attr_extra_state_attributes)
 
@@ -174,7 +162,7 @@ class OVMSLock(LockEntity, RestoreEntity):
                 saved_attributes = {
                     key: value
                     for key, value in state.attributes.items()
-                    if key not in ["icon", "invert_state"]
+                    if key not in ["icon", "invert_state", "last_updated"]
                 }
                 self._attr_extra_state_attributes.update(saved_attributes)
 
@@ -182,9 +170,6 @@ class OVMSLock(LockEntity, RestoreEntity):
         def update_state(payload: str) -> None:
             """Update the lock state."""
             self._attr_is_locked = self._parse_state(payload)
-            self._attr_extra_state_attributes["last_updated"] = (
-                dt_util.utcnow().isoformat()
-            )
             update_attributes_from_json(payload, self._attr_extra_state_attributes)
             self.async_write_ha_state()
 
@@ -206,7 +191,13 @@ class OVMSLock(LockEntity, RestoreEntity):
     @property
     def code_format(self) -> str | None:
         """Return the expected lock PIN format for Home Assistant."""
-        return LOCK_CODE_FORMAT if self._pin_allowed else None
+        if not self._pin_allowed:
+            return None
+
+        if self._default_pin:
+            return LOCK_CODE_FORMAT_OPTIONAL
+
+        return LOCK_CODE_FORMAT_REQUIRED
 
     async def _execute_command(
         self,
@@ -226,6 +217,7 @@ class OVMSLock(LockEntity, RestoreEntity):
         response = _normalize_lock_command_response(result.get("response"))
 
         if result.get("success"):
+            # Known success confirmation from OVMS
             if response and _is_successful_lock_command_response(
                 response, locked_state
             ):
@@ -233,6 +225,7 @@ class OVMSLock(LockEntity, RestoreEntity):
                 self.async_write_ha_state()
                 return
 
+            # Known error patterns — OVMS returned a usage hint or explicit error
             if response and response.startswith(LOCK_COMMAND_USAGE_PREFIX):
                 _LOGGER.error(
                     "Error response received when executing %s for %s: %s",
@@ -245,26 +238,38 @@ class OVMSLock(LockEntity, RestoreEntity):
 
                 raise HomeAssistantError("OVMS command seems to be malformed.")
 
-            if response is None:
+            if response and response.startswith(LOCK_COMMAND_ERROR_PREFIX):
+                error = response[len(LOCK_COMMAND_ERROR_PREFIX) :]
                 _LOGGER.error(
-                    "Missing response when executing %s for %s despite success status",
+                    "Error response received when executing %s for %s: %s",
+                    command_key,
+                    self.name,
+                    response,
+                )
+                raise HomeAssistantError(f"OVMS reported {error}")
+
+            # Unknown or missing response but OVMS reported success.
+            # Optimistically accept the state change — firmware wording
+            # varies across vehicle modules and versions.
+            if response:
+                _LOGGER.warning(
+                    "Unrecognised success response for %s on %s: %s — "
+                    "accepting state change optimistically",
+                    command_key,
+                    self.name,
+                    response,
+                )
+            else:
+                _LOGGER.warning(
+                    "Empty response for %s on %s despite success status — "
+                    "accepting state change optimistically",
                     command_key,
                     self.name,
                 )
-                raise HomeAssistantError("OVMS did not confirm the lock state change.")
 
-            _LOGGER.error(
-                "Error response received when executing %s for %s: %s",
-                command_key,
-                self.name,
-                response,
-            )
-            error = (
-                response[len(LOCK_COMMAND_ERROR_PREFIX) :]
-                if response.startswith(LOCK_COMMAND_ERROR_PREFIX)
-                else response
-            )
-            raise HomeAssistantError(f"OVMS reported {error}")
+            self._attr_is_locked = locked_state
+            self.async_write_ha_state()
+            return
 
         error_message = result.get("error") or "Unknown error"
         _LOGGER.error(
@@ -275,16 +280,26 @@ class OVMSLock(LockEntity, RestoreEntity):
         )
         raise HomeAssistantError(f"Failed to execute {command}: {error_message}")
 
+    def _resolve_lock_pin(self, code: object) -> str:
+        """Resolve and validate the lock PIN for a command invocation."""
+        # Security gate first — reject immediately on insecure transports
+        if not self._pin_allowed:
+            raise HomeAssistantError(LOCK_PIN_SECURITY_ERROR)
+
+        pin = normalize_lock_pin(code) or self._default_pin
+        if pin is None:
+            raise HomeAssistantError(LOCK_PIN_REQUIRED_ERROR)
+        if lock_pin_contains_whitespace(pin):
+            raise HomeAssistantError(LOCK_PIN_FORMAT_ERROR)
+
+        return pin
+
     async def async_lock(self, **kwargs: object) -> None:
         """Lock the vehicle."""
-        pin = _normalize_lock_pin(kwargs.get(ATTR_CODE)) or self._default_pin
-        if pin and not self._pin_allowed:
-            raise HomeAssistantError(LOCK_PIN_SECURITY_ERROR)
+        pin = self._resolve_lock_pin(kwargs.get(ATTR_CODE))
         await self._execute_command("lock_command", True, pin)
 
     async def async_unlock(self, **kwargs: object) -> None:
         """Unlock the vehicle."""
-        pin = _normalize_lock_pin(kwargs.get(ATTR_CODE)) or self._default_pin
-        if pin and not self._pin_allowed:
-            raise HomeAssistantError(LOCK_PIN_SECURITY_ERROR)
+        pin = self._resolve_lock_pin(kwargs.get(ATTR_CODE))
         await self._execute_command("unlock_command", False, pin)

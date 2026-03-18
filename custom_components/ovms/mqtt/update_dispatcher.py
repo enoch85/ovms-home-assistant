@@ -9,11 +9,15 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util import dt as dt_util
 
 from ..const import (
+    CONF_CLIENT_ID,
+    CONF_CONFIG_ENTRY_ID,
+    CONF_VEHICLE_ID,
     LOGGER_NAME,
     SIGNAL_UPDATE_ENTITY,
     DOMAIN,
 )
 from ..attribute_manager import AttributeManager
+from ..utils import get_ovms_device_identifier
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -22,7 +26,11 @@ class UpdateDispatcher:
     """Dispatcher for coordinating updates between related entities."""
 
     def __init__(
-        self, hass: HomeAssistant, entity_registry, attribute_manager: AttributeManager
+        self,
+        hass: HomeAssistant,
+        entity_registry,
+        attribute_manager: AttributeManager,
+        config: Optional[Dict[str, Any]] = None,
     ):
         """Initialize the update dispatcher."""
         self.hass = hass
@@ -30,6 +38,16 @@ class UpdateDispatcher:
         self.attribute_manager = attribute_manager
         self.last_location_update = {}  # Track when location was last updated
         self.location_values = {}  # Store current location values
+        self._coordinate_generation = {"latitude": 0, "longitude": 0}
+        self._last_dispatched_coordinate_generation = {
+            "latitude": 0,
+            "longitude": 0,
+        }
+        self._config = config or {}
+        self._device_identifier = get_ovms_device_identifier(
+            self._config.get(CONF_CLIENT_ID),
+            self._config.get(CONF_VEHICLE_ID),
+        )
 
     def dispatch_update(self, topic: str, payload: Any) -> None:
         """Dispatch update to entities subscribed to a topic.
@@ -76,8 +94,10 @@ class UpdateDispatcher:
                         # Direct pass-through for location sensor pairs
                         self._update_entity(related_id, payload)
                     elif relationship_type == "combined_tracker":
-                        # For combined trackers, we need to update with all location data
-                        self._update_combined_tracker(related_id)
+                        # Coordinate topics are batched via _handle_location_update().
+                        # Updating the combined tracker here would emit a mixed pair
+                        # after the first coordinate message arrives.
+                        continue
                     else:
                         # Default behavior for other relationships
                         self._update_entity(related_id, payload)
@@ -158,18 +178,30 @@ class UpdateDispatcher:
                 for keyword in ["longitude", "long", "lon", "lng"]
             )
 
+            coordinate = self._parse_coordinate(payload)
+            if coordinate is None:
+                _LOGGER.debug(
+                    "Ignoring invalid coordinate payload for topic %s: %s",
+                    topic,
+                    payload,
+                )
+                return
+
             # Update our location values cache
             if is_latitude:
-                self.location_values["latitude"] = self._parse_coordinate(payload)
+                self.location_values["latitude"] = coordinate
                 self.last_location_update["latitude"] = now
+                self._coordinate_generation["latitude"] += 1
             elif is_longitude:
-                self.location_values["longitude"] = self._parse_coordinate(payload)
+                self.location_values["longitude"] = coordinate
                 self.last_location_update["longitude"] = now
+                self._coordinate_generation["longitude"] += 1
 
             # Only update device trackers if we have both latitude and longitude
             if (
                 "latitude" in self.location_values
                 and "longitude" in self.location_values
+                and self._has_fresh_coordinate_pair()
             ):
                 self._update_all_device_trackers()
 
@@ -210,33 +242,23 @@ class UpdateDispatcher:
 
                 # Only update the device firmware version if this is the main module version
                 if is_main_version:
-                    # Get the vehicle_id from config
-                    vehicle_id = None
-                    for entry_id, data in self.hass.data[DOMAIN].items():
-                        if "mqtt_client" in data:
-                            config = data["mqtt_client"].config
-                            if "vehicle_id" in config:
-                                vehicle_id = config["vehicle_id"]
-                                _LOGGER.debug(
-                                    "Found vehicle_id '%s' in config", vehicle_id
-                                )
-                                break
-
-                    # Find the device in the registry
                     from homeassistant.helpers import device_registry as dr
 
                     device_registry = dr.async_get(self.hass)
 
-                    # Find OVMS device
-                    device = None
-                    for dev in device_registry.devices.values():
-                        for identifier in dev.identifiers:
-                            if identifier[0] == DOMAIN:
-                                device = dev
-                                _LOGGER.debug("Found OVMS device: %s", dev.name)
-                                break
-                        if device:
-                            break
+                    # Look up device by its identifier directly
+                    device = device_registry.async_get_device(
+                        identifiers={(DOMAIN, self._device_identifier)}
+                    )
+
+                    if device is None:
+                        # Fallback: try legacy identifier (vehicle_id) for
+                        # setups that haven't restarted since migration.
+                        vehicle_id = self._config.get(CONF_VEHICLE_ID)
+                        if vehicle_id:
+                            device = device_registry.async_get_device(
+                                identifiers={(DOMAIN, str(vehicle_id).lower())}
+                            )
 
                     # Update device with version information
                     if device:
@@ -253,14 +275,10 @@ class UpdateDispatcher:
                             _LOGGER.error(
                                 "Failed to update device with version: %s", ex
                             )
-                            # Try an alternative approach
                             try:
-                                # Use a simpler update call as a fallback
                                 device_registry.async_update_device(
                                     device.id,
-                                    sw_version=payload[
-                                        :100
-                                    ],  # Use just first 100 chars as a fallback
+                                    sw_version=payload[:100],
                                 )
                             except Exception:
                                 _LOGGER.error(
@@ -297,7 +315,6 @@ class UpdateDispatcher:
                         quality_payload = {
                             "gps_accuracy": attributes["gps_accuracy"],
                             "gps_accuracy_unit": "m",  # Add proper unit
-                            "last_updated": dt_util.utcnow().isoformat(),
                         }
                         self._update_entity(tracker_id, quality_payload)
 
@@ -370,7 +387,6 @@ class UpdateDispatcher:
             payload = {
                 "latitude": self.location_values.get("latitude"),
                 "longitude": self.location_values.get("longitude"),
-                "last_updated": dt_util.utcnow().isoformat(),
             }
 
             # Add accuracy if available
@@ -384,8 +400,21 @@ class UpdateDispatcher:
                 if topic == "combined_location":
                     self._update_entity(tracker_id, payload)
 
+            self._last_dispatched_coordinate_generation = (
+                self._coordinate_generation.copy()
+            )
+
         except Exception as ex:
             _LOGGER.exception("Error updating device trackers: %s", ex)
+
+    def _has_fresh_coordinate_pair(self) -> bool:
+        """Return True when both coordinates have arrived since the last dispatch."""
+        return (
+            self._coordinate_generation["latitude"]
+            > self._last_dispatched_coordinate_generation["latitude"]
+            and self._coordinate_generation["longitude"]
+            > self._last_dispatched_coordinate_generation["longitude"]
+        )
 
     def _update_combined_tracker(self, tracker_id: str) -> None:
         """Update a combined device tracker with current location data."""
@@ -407,7 +436,6 @@ class UpdateDispatcher:
             payload = {
                 "latitude": self.location_values.get("latitude"),
                 "longitude": self.location_values.get("longitude"),
-                "last_updated": dt_util.utcnow().isoformat(),
             }
 
             # Add accuracy if available

@@ -1,9 +1,8 @@
 """Support for OVMS location tracking."""
 
 import logging
-import re
 import time
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional
 
 from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
@@ -14,11 +13,14 @@ from homeassistant.helpers.dispatcher import (
     async_dispatcher_send,
 )
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, LOGGER_NAME, SIGNAL_ADD_ENTITIES, SIGNAL_UPDATE_ENTITY
+from .const import (
+    DOMAIN,
+    LOGGER_NAME,
+    SIGNAL_UPDATE_ENTITY,
+    get_add_entities_signal,
+)
 from .naming_service import EntityNamingService
 from .attribute_manager import AttributeManager
 from .utils import get_merged_config
@@ -67,12 +69,18 @@ async def async_setup_entry(
 
     # Subscribe to discovery events
     entry.async_on_unload(
-        async_dispatcher_connect(hass, SIGNAL_ADD_ENTITIES, async_add_device_tracker)
+        async_dispatcher_connect(
+            hass,
+            get_add_entities_signal(entry.entry_id),
+            async_add_device_tracker,
+        )
     )
 
 
 class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     """OVMS Device Tracker Entity."""
+
+    _attr_icon = "mdi:car-connected"
 
     def __init__(
         self,
@@ -95,49 +103,22 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         self.naming_service = naming_service or EntityNamingService({})
         self.attribute_manager = attribute_manager or AttributeManager({})
 
-        # Extract vehicle ID
-        vehicle_id = None
-
-        # Try to extract from device info identifiers
-        vehicle_id = self.naming_service.extract_vehicle_id_from_device_info(
-            device_info
-        )
-
-        # If not found in device info, try extracting from name
-        if not vehicle_id:
-            vehicle_id = self.naming_service.extract_vehicle_id_from_name(name)
-
-        # Set the device tracker friendly name per requirements
-        if vehicle_id:
-            self._attr_name = self.naming_service.create_device_tracker_name(vehicle_id)
-        else:
-            self._attr_name = friendly_name or name.replace("_", " ").title()
+        self._attr_name = friendly_name or name.replace("_", " ").title()
 
         self._topic = topic
-        self._attr_device_info = device_info or {}
+        self._attr_device_info = device_info if device_info else None
 
         # Process attributes
         self._attr_extra_state_attributes = attributes.copy() if attributes else {}
 
-        # Add GPS attributes if needed
-        if "gps_accuracy" not in self._attr_extra_state_attributes:
-            gps_attributes = self.attribute_manager.get_gps_attributes(
-                topic, initial_payload
-            )
-            self._attr_extra_state_attributes.update(gps_attributes)
-
-        # Ensure topic and last_updated are present
+        # Ensure topic is present
         if topic:
             self._attr_extra_state_attributes["topic"] = topic
-        if "last_updated" not in self._attr_extra_state_attributes:
-            self._attr_extra_state_attributes["last_updated"] = (
-                dt_util.utcnow().isoformat()
-            )
 
         self.hass = hass
         self._latitude = None
         self._longitude = None
-        self._source_type = SourceType.GPS
+        self._attr_location_accuracy = 0
         self._last_update_time = 0
         self._prev_latitude = None
         self._prev_longitude = None
@@ -146,51 +127,38 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         if initial_payload:
             self._process_payload(initial_payload)
 
-        # Explicitly set entity_id - this ensures consistent naming
-        if hass:
-            self.entity_id = async_generate_entity_id(
-                "device_tracker.{}",
-                name.lower(),
-                hass=hass,
-            )
-
     async def async_added_to_hass(self) -> None:
         """Subscribe to updates and sync with related sensors."""
         await super().async_added_to_hass()
 
         # Restore previous state if available
         if (state := await self.async_get_last_state()) is not None:
-            # Restore attributes if available
             if state.attributes:
-                # Keep specific attributes that are relevant
-                for attr in ["latitude", "longitude", "source_type", "gps_accuracy"]:
-                    if attr in state.attributes:
-                        if attr == "latitude":
-                            self._latitude = state.attributes[attr]
-                            self._prev_latitude = state.attributes[attr]
-                        elif attr == "longitude":
-                            self._longitude = state.attributes[attr]
-                            self._prev_longitude = state.attributes[attr]
-                        else:
-                            setattr(self, f"_{attr}", state.attributes[attr])
+                # Restore coordinates
+                if "latitude" in state.attributes:
+                    self._latitude = state.attributes["latitude"]
+                    self._prev_latitude = state.attributes["latitude"]
+                if "longitude" in state.attributes:
+                    self._longitude = state.attributes["longitude"]
+                    self._prev_longitude = state.attributes["longitude"]
+                if "gps_accuracy" in state.attributes:
+                    try:
+                        self._attr_location_accuracy = int(
+                            state.attributes["gps_accuracy"]
+                        )
+                    except (ValueError, TypeError):
+                        pass
 
-                # Don't overwrite entity attributes like unit, etc.
-                saved_attributes = {
-                    k: v
-                    for k, v in state.attributes.items()
-                    if k not in ["latitude", "longitude", "source_type", "gps_accuracy"]
-                }
-                self._attr_extra_state_attributes.update(saved_attributes)
+                # Only restore our own custom attributes (inclusion list)
+                _restorable = {"topic"}
+                for key in _restorable:
+                    if key in state.attributes:
+                        self._attr_extra_state_attributes[key] = state.attributes[key]
 
         @callback
         def update_state(payload: Any) -> None:
             """Update the tracker state."""
             self._process_payload(payload)
-
-            # Update timestamp attribute
-            self._attr_extra_state_attributes["last_updated"] = (
-                dt_util.utcnow().isoformat()
-            )
 
             # Process any JSON attributes if applicable
             if isinstance(payload, str):
@@ -238,7 +206,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                                         ),
                                         "latitude": self.latitude,
                                         "longitude": self.longitude,
-                                        "last_updated": dt_util.utcnow().isoformat(),
                                     }
 
                                     async_dispatcher_send(
@@ -259,7 +226,6 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                     location_payload = {
                         "latitude": self.latitude,
                         "longitude": self.longitude,
-                        "last_updated": dt_util.utcnow().isoformat(),
                     }
 
                     # Dispatch to latitude/longitude sensors based on their name pattern
@@ -337,30 +303,15 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                                 self._prev_latitude = lat
                                 self._prev_longitude = lon
 
-                            # Add accuracy if available
+                            # Wire GPS accuracy to TrackerEntity's native property
                             if "gps_accuracy" in payload:
-                                self._attr_extra_state_attributes["gps_accuracy"] = (
-                                    payload["gps_accuracy"]
-                                )
-                                # Also add unit
-                                if "gps_accuracy_unit" in payload:
-                                    self._attr_extra_state_attributes[
-                                        "gps_accuracy_unit"
-                                    ] = payload["gps_accuracy_unit"]
-                                else:
-                                    self._attr_extra_state_attributes[
-                                        "gps_accuracy_unit"
-                                    ] = "m"  # Default unit
+                                try:
+                                    self._attr_location_accuracy = int(
+                                        payload["gps_accuracy"]
+                                    )
+                                except (ValueError, TypeError):
+                                    pass
 
-                            # Also update last_updated even if coordinates haven't changed
-                            if "last_updated" in payload:
-                                self._attr_extra_state_attributes["last_updated"] = (
-                                    payload["last_updated"]
-                                )
-                            else:
-                                self._attr_extra_state_attributes["last_updated"] = (
-                                    dt_util.utcnow().isoformat()
-                                )
                     except (ValueError, TypeError):
                         _LOGGER.debug("Invalid coordinates in payload: %s", payload)
 
@@ -404,19 +355,8 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
 
             if coordinates_changed or time_since_last_update > 30:
                 self._last_update_time = current_time
-                # Update timestamp attribute if not already done
-                if isinstance(payload, dict) and "last_updated" not in payload:
-                    self._attr_extra_state_attributes["last_updated"] = (
-                        dt_util.utcnow().isoformat()
-                    )
-
                 if coordinates_changed:
                     _LOGGER.debug("Updated device tracker coordinates.")
-
-            # Add sensible default for gps_accuracy if necessary
-            if "gps_accuracy" not in self._attr_extra_state_attributes:
-                self._attr_extra_state_attributes["gps_accuracy"] = 0
-                self._attr_extra_state_attributes["gps_accuracy_unit"] = "m"  # Add unit
 
         except Exception as ex:
             _LOGGER.exception("Error processing payload: %s", ex)
@@ -434,9 +374,4 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     @property
     def source_type(self) -> SourceType:
         """Return the source type of the device tracker."""
-        return self._source_type
-
-    @property
-    def icon(self) -> str:
-        """Return the icon."""
-        return "mdi:car-connected"
+        return SourceType.GPS

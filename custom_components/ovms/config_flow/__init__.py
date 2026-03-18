@@ -1,7 +1,6 @@
 """Config flow for OVMS integration."""
 
 import asyncio
-import hashlib
 import logging
 import re
 import time
@@ -39,6 +38,11 @@ from ..const import (
     TOPIC_STRUCTURES,
     LOGGER_NAME,
 )
+from ..utils import (
+    generate_ovms_client_id,
+    generate_ovms_config_entry_unique_id,
+    get_ovms_topic_username,
+)
 
 from .mqtt_connection import test_mqtt_connection
 from .topic_discovery import (
@@ -69,6 +73,26 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Check if a host + vehicle_id combo is unique."""
         # Implement matching check
         return False
+
+    def _find_existing_entry_by_identity(self, config: dict[str, Any]):
+        """Find an existing OVMS config entry matching this topic identity."""
+        host = str(config.get(CONF_HOST, "")).strip()
+        topic_username = get_ovms_topic_username(config)
+        vehicle_id = str(config.get(CONF_VEHICLE_ID, "")).strip()
+
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            if str(entry.data.get(CONF_HOST, "")).strip() != host:
+                continue
+
+            if get_ovms_topic_username(entry.data) != topic_username:
+                continue
+
+            if str(entry.data.get(CONF_VEHICLE_ID, "")).strip() != vehicle_id:
+                continue
+
+            return entry
+
+        return None
 
     def _ensure_serializable(self, obj):
         """Convert MQTT objects to serializable types."""
@@ -278,7 +302,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LOGGER.debug(
                         "Custom structure validation successful: %s", test_format
                     )
-                    self.mqtt_config[CONF_TOPIC_STRUCTURE] = custom_structure
+                    self.mqtt_config[CONF_TOPIC_STRUCTURE] = custom_structure.strip()
                     return await self.async_step_topic_discovery()
                 except KeyError as ex:
                     errors["custom_structure"] = "invalid_placeholder"
@@ -466,23 +490,33 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Store original vehicle ID for maintaining entity ID consistency
                 self.mqtt_config[CONF_ORIGINAL_VEHICLE_ID] = user_input[CONF_VEHICLE_ID]
 
-                # Create a stable unique ID that won't change if vehicle_id changes
-                unique_id_base = (
-                    f"{self.mqtt_config[CONF_HOST]}_{user_input[CONF_VEHICLE_ID]}"
-                )
-                unique_id = (
-                    f"ovms_{hashlib.md5(unique_id_base.encode()).hexdigest()[:8]}"
-                )
+                unique_id = generate_ovms_config_entry_unique_id(self.mqtt_config)
                 _LOGGER.debug("Generated unique ID for config entry: %s", unique_id)
+
+                existing_entry = self._find_existing_entry_by_identity(self.mqtt_config)
+                if existing_entry is not None:
+                    unique_entry = (
+                        self.hass.config_entries.async_entry_for_domain_unique_id(
+                            DOMAIN, unique_id
+                        )
+                    )
+                    if existing_entry.unique_id != unique_id and (
+                        unique_entry is None
+                        or unique_entry.entry_id == existing_entry.entry_id
+                    ):
+                        self.hass.config_entries.async_update_entry(
+                            existing_entry,
+                            unique_id=unique_id,
+                        )
+                    return self.async_abort(reason="already_configured")
 
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
 
-                # Generate a stable MQTT client ID including username to prevent collisions
-                # Multiple users can have same vehicle_id, but username must be unique on broker
-                # Hash input combines all unique identifiers but keeps username private
-                client_id_base = f"{self.mqtt_config[CONF_HOST]}_{self.mqtt_config[CONF_USERNAME]}_{user_input[CONF_VEHICLE_ID]}"
-                client_id = f"ha_ovms_{hashlib.sha256(client_id_base.encode()).hexdigest()[:12]}"
+                # Generate a stable MQTT client ID for the OVMS topic namespace.
+                # This avoids collisions when multiple entries share a broker but
+                # use different topic usernames or vehicles.
+                client_id = generate_ovms_client_id(self.mqtt_config)
                 self.mqtt_config[CONF_CLIENT_ID] = client_id
                 _LOGGER.debug("Generated stable MQTT client ID: %s", client_id)
 

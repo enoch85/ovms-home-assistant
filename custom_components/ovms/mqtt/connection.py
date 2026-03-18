@@ -30,6 +30,11 @@ from ..const import (
     LOGGER_NAME,
     TOPIC_TEMPLATE,
 )
+from ..utils import (
+    generate_ovms_client_id,
+    uses_tls_transport,
+    uses_websocket_transport,
+)
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -102,7 +107,8 @@ class MQTTConnectionManager:
             vehicle_id = self.config.get(CONF_VEHICLE_ID)
             mqtt_username = self.config.get(CONF_MQTT_USERNAME, "")
 
-            # Replace the variables in the structure
+            # Whitespace is stripped at config-entry load time
+            # (see _sanitize_persisted_topic_structure in __init__.py).
             structure_prefix = structure.format(
                 prefix=prefix,
                 vehicle_id=vehicle_id,
@@ -141,23 +147,7 @@ class MQTTConnectionManager:
 
         # Fallback: generate stable client_id if missing (should not happen after migration)
         if not client_id:
-            import hashlib
-
-            host = self.config.get(CONF_HOST, "unknown")
-            username = self.config.get(CONF_USERNAME, "unknown")
-            vehicle_id = self.config.get(CONF_VEHICLE_ID, "unknown")
-            _LOGGER.debug(
-                "MQTT Connection: Fallback values - host=%s, username=%s, vehicle_id=%s",
-                host,
-                username,
-                vehicle_id,
-            )
-            # Include username to prevent collisions when multiple users have same vehicle_id
-            # Hash input combines unique identifiers while keeping username private in logs
-            client_id_base = f"{host}_{username}_{vehicle_id}"
-            client_id = (
-                f"ha_ovms_{hashlib.sha256(client_id_base.encode()).hexdigest()[:12]}"
-            )
+            client_id = generate_ovms_client_id(self.config)
             _LOGGER.warning(
                 "Client ID was missing, generated stable fallback: %s", client_id
             )
@@ -166,7 +156,13 @@ class MQTTConnectionManager:
 
         _LOGGER.debug("Creating MQTT client with ID: %s", client_id)
         try:
-            client = mqtt.Client(client_id=client_id, protocol=protocol)
+            transport = "websockets" if uses_websocket_transport(self.config) else "tcp"
+            _LOGGER.debug("Using MQTT transport: %s", transport)
+            client = mqtt.Client(
+                client_id=client_id,
+                protocol=protocol,
+                transport=transport,
+            )
         except Exception as ex:
             _LOGGER.error("Failed to create MQTT client: %s", ex)
             return None
@@ -182,8 +178,8 @@ class MQTTConnectionManager:
             )
 
         # Configure TLS if needed
-        if self.config.get(CONF_PORT) == 8883:
-            _LOGGER.debug("Enabling SSL/TLS for port 8883")
+        if uses_tls_transport(self.config):
+            _LOGGER.debug("Enabling SSL/TLS for configured secure transport")
             # pylint: disable=import-outside-toplevel
             import ssl
 
