@@ -23,6 +23,7 @@ SYSTEM_METRICS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfInformation.BYTES,
         "suggested_unit": UnitOfInformation.KIBIBYTES,
+        "suggested_display_precision": 2,
         "category": "system",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },

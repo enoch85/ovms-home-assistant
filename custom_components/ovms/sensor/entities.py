@@ -93,7 +93,11 @@ def format_sensor_value(value, device_class, attributes):
                 return f"{date_part} at {time_part}"
             return formatted
         return str(value)
-    # Normal handling
+    # Normal handling - preserve numeric types for HA unit conversion
+    # HA requires native_value to be int/float for device_class unit conversion
+    # (e.g., suggested_unit_of_measurement) to work correctly
+    if isinstance(value, (int, float)):
+        return value
     return truncate_state_value(value)
 
 

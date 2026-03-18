@@ -40,7 +40,8 @@ class AttributeManager:
 
             # Add additional attributes from metric definition
             if metric_info:
-                # Only add attributes that aren't already in the entity definition
+                # Only add attributes that are useful context for the user;
+                # filter out entity-level properties handled by HA natively
                 for key, value in metric_info.items():
                     if key not in [
                         "name",
