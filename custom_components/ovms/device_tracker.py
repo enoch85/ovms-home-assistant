@@ -81,6 +81,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     """OVMS Device Tracker Entity."""
 
     _attr_icon = "mdi:car-connected"
+    _attr_has_entity_name = True
 
     def __init__(
         self,

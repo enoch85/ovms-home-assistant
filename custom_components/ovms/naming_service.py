@@ -4,7 +4,7 @@ import logging
 import re
 from typing import Dict, Any, Optional, List
 
-from .const import LOGGER_NAME, DOMAIN
+from .const import DOMAIN, LOCATION_ENTITY_NAME, LOGGER_NAME, STATUS_ENTITY_NAME
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -20,10 +20,10 @@ class EntityNamingService:
     def create_friendly_name(
         self, parts: List[str], metric_info: Optional[Dict], topic: str, raw_name: str
     ) -> str:
-        """Create a friendly name based on topic parts and metric info."""
+        """Create an entity name based on topic parts and metric info."""
         # Handle status topics specially
         if topic and topic.endswith("/status"):
-            return f"{self.vehicle_id} Status"
+            return STATUS_ENTITY_NAME
 
         # For vehicle-specific metrics (like xvu/VW eUP!), prioritize the metric name exactly as defined
         # This preserves names like "VW eUP! Absolute Battery Capacity" without modification
@@ -107,10 +107,8 @@ class EntityNamingService:
         return raw_name.replace("_", " ").title() if raw_name else "Unknown"
 
     def create_device_tracker_name(self, vehicle_id: Optional[str] = None) -> str:
-        """Create a friendly name for device tracker."""
-        if not vehicle_id:
-            vehicle_id = self.vehicle_id
-        return f"{vehicle_id} Location"
+        """Create an entity name for the combined device tracker."""
+        return LOCATION_ENTITY_NAME
 
     def extract_vehicle_id_from_device_info(self, device_info: Dict) -> Optional[str]:
         """Extract vehicle ID from device info."""

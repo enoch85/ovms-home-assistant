@@ -108,6 +108,8 @@ async def async_setup_entry(
 class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
     """Representation of an OVMS binary sensor."""
 
+    _attr_has_entity_name = True
+
     # pylint: disable=too-many-arguments,too-many-instance-attributes
     def __init__(
         self,

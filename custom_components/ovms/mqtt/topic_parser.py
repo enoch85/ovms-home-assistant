@@ -5,8 +5,10 @@ import re
 
 from .. import metrics
 from ..const import (
+    LOCATION_ENTITY_NAME,
     LOGGER_NAME,
     CONF_TOPIC_BLACKLIST,
+    STATUS_ENTITY_NAME,
     LOCK_TYPES,
     SWITCH_TYPES,
     SYSTEM_TOPIC_BLACKLIST,
@@ -76,8 +78,7 @@ class TopicParser:
             if topic.endswith("/status"):
                 vehicle_id = self.config.get("vehicle_id", "")
                 attributes = {"topic": topic, "category": "diagnostic"}
-                # Ensure proper friendly name for status sensor
-                friendly_name = f"{vehicle_id} Status"
+                friendly_name = STATUS_ENTITY_NAME
                 return {
                     "entity_type": "binary_sensor",
                     "name": f"ovms_{vehicle_id}_status",
