@@ -85,7 +85,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         # Always check for missing client_id (critical for MQTT stability)
-        await _migrate_client_id(hass, entry, entry.version)
+        client_id_changed = await _migrate_client_id(hass, entry, entry.version)
 
         # Check if we need to migrate the config entry
         migrated = entry.version < CONFIG_VERSION
@@ -106,10 +106,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # (observed in issue #199 from config flow saving with a leading space)
         await _sanitize_persisted_topic_structure(hass, entry)
 
+        if client_id_changed and not migrated:
+            await async_migrate_entity_identity(hass, entry, entry.version)
+
         # Remove stale device associations only after a migration just ran.
-        # After first successful migration to CONFIG_VERSION the device
-        # registry is already clean, so this is unnecessary on every restart.
-        if migrated:
+        # Also run after a current-version entry gains a stable client_id,
+        # because device_info will switch from vehicle_id to client_id.
+        if migrated or client_id_changed:
             await async_cleanup_stale_device_associations(hass, entry)
 
         # Merge entry.data with entry.options, giving priority to options
@@ -257,7 +260,7 @@ async def _migrate_blacklist_patterns(
 
 async def _migrate_client_id(
     hass: HomeAssistant, config_entry: ConfigEntry, from_version: int
-) -> None:
+) -> bool:
     """Generate and store stable MQTT client ID for existing installations."""
     from .const import CONF_CLIENT_ID
 
@@ -272,7 +275,7 @@ async def _migrate_client_id(
             from_version,
             current_client_id,
         )
-        return
+        return False
 
     _LOGGER.info(
         "V%d Migration: Updating stable MQTT client ID to %s",
@@ -292,6 +295,7 @@ async def _migrate_client_id(
     _LOGGER.debug(
         "V%d Migration: Updated config entry data with client_id", from_version
     )
+    return True
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:

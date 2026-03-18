@@ -257,7 +257,7 @@ class UpdateDispatcher:
                         vehicle_id = self._config.get(CONF_VEHICLE_ID)
                         if vehicle_id:
                             device = device_registry.async_get_device(
-                                identifiers={(DOMAIN, str(vehicle_id))}
+                                identifiers={(DOMAIN, str(vehicle_id).lower())}
                             )
 
                     # Update device with version information
