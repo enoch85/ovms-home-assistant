@@ -4,7 +4,7 @@ This is what I used myself (@enoch85). I'm sure it works for other cars as well,
 
 ![image](https://github.com/user-attachments/assets/4aa80aa1-aad9-4f6b-a569-5d336b915324)
 
-```
+```yaml
 type: vertical-stack
 cards:
   - type: picture-elements
@@ -39,7 +39,7 @@ cards:
               "--mdi-icon-size": 24px
       - type: state-label
         entity: sensor.ovms_[car_name]_metric_xvu_v_t_emgcy
-        attribute: cell_1
+        attribute: pressure_FR
         suffix: " kPa"
         style:
           top: 5%
@@ -49,7 +49,7 @@ cards:
           color: black
       - type: state-label
         entity: sensor.ovms_[car_name]_metric_xvu_v_t_emgcy
-        attribute: cell_3
+        attribute: pressure_RR
         suffix: " kPa"
         style:
           top: 5%
@@ -59,7 +59,7 @@ cards:
           color: black
       - type: state-label
         entity: sensor.ovms_[car_name]_metric_xvu_v_t_emgcy
-        attribute: cell_2
+        attribute: pressure_FL
         suffix: " kPa"
         style:
           top: 96%
@@ -69,7 +69,7 @@ cards:
           color: black
       - type: state-label
         entity: sensor.ovms_[car_name]_metric_xvu_v_t_emgcy
-        attribute: cell_4
+        attribute: pressure_LR
         suffix: " kPa"
         style:
           top: 97%
@@ -77,7 +77,8 @@ cards:
           font-weight: bold
           font-size: 16px
           color: black
-    image: /api/image/serve/5a351bbcbcc82448b6cc121a7620c4bd/512x512
+    image: /api/image/serve/[your_image_id]/512x512
+    dark_mode_image: /api/image/serve/[your_dark_image_id]/512x512
   - type: entities
     title: OVMS Vehicle Status
     icon: mdi:car-electric
@@ -135,5 +136,6 @@ cards:
     default_zoom: 10
     entities:
       - entity: device_tracker.ovms_[car_name]_location
+    theme_mode: auto
     hours_to_show: 24
 ```
