@@ -94,19 +94,6 @@ def _get_desired_entity_name(
     return desired_name
 
 
-def _is_legacy_auto_entity_id(
-    registry_entry: entity_registry.RegistryEntry,
-    current_name: str | None,
-) -> bool:
-    """Return True when the entity_id still matches HA's old auto-generated form."""
-    if not current_name:
-        return False
-
-    domain = _get_entity_domain(registry_entry.entity_id)
-    legacy_entity_id = _generate_entity_id_from_name(domain, current_name, set())
-    return registry_entry.entity_id == legacy_entity_id
-
-
 def _is_legacy_lock_switch(entity_entry: entity_registry.RegistryEntry) -> bool:
     """Return True when an entity entry is the legacy OVMS lock switch."""
     return (
@@ -331,9 +318,17 @@ async def async_migrate_entity_naming(
 ) -> None:
     """Adopt Home Assistant's has_entity_name model for OVMS entities.
 
-    Existing user-customized entity_ids are preserved. Only registry entries that
-    still use the old auto-generated object_id based on the entity name alone are
-    renamed to the new device-scoped form.
+    All OVMS entities are renamed to the new device-scoped entity_id form
+    (e.g. sensor.ovms_myvehicle_battery_level).  Entities whose display name
+    was explicitly customised by the user (registry_entry.name is not None)
+    keep their current entity_id.
+
+    Known limitation: HA does not track whether an entity_id was manually
+    changed by the user.  We use ``registry_entry.name is None`` as a proxy
+    (no custom name ≈ no custom entity_id).  A user who customised *only*
+    their entity_id without also setting a custom name will have that
+    entity_id overwritten.  This is an acceptable tradeoff for a one-time
+    migration during a major version bump.
     """
     config = get_merged_config(config_entry)
     vehicle_id = str(config.get(CONF_VEHICLE_ID, "unknown"))
@@ -361,23 +356,20 @@ async def async_migrate_entity_naming(
             if desired_name != registry_entry.original_name:
                 update_kwargs["original_name"] = desired_name
 
-            # Check whether the entity_id was auto-generated from the old name.
-            # Only auto-generated IDs are renamed; user-customized IDs are preserved.
-            # The legacy check uses original_name (pre-migration) to reconstruct
-            # what HA would have generated, while the new ID is built from
-            # device_name + desired_name.  Collisions are prevented by tracking
-            # all current entity_ids in current_entity_ids.
-            if _is_legacy_auto_entity_id(registry_entry, registry_entry.original_name):
-                current_entity_ids.discard(registry_entry.entity_id)
-                desired_entity_id = _generate_entity_id_from_name(
-                    _get_entity_domain(registry_entry.entity_id),
-                    f"{device_name} {desired_name}",
-                    current_entity_ids,
-                )
-                current_entity_ids.add(desired_entity_id)
+            # Rename the entity_id to the new device-scoped form.
+            # The name-is-None guard above ensures we only touch entities
+            # the user has NOT manually renamed in the HA UI.
+            # Collisions are prevented by tracking all current entity_ids.
+            current_entity_ids.discard(registry_entry.entity_id)
+            desired_entity_id = _generate_entity_id_from_name(
+                _get_entity_domain(registry_entry.entity_id),
+                f"{device_name} {desired_name}",
+                current_entity_ids,
+            )
+            current_entity_ids.add(desired_entity_id)
 
-                if desired_entity_id != registry_entry.entity_id:
-                    update_kwargs["new_entity_id"] = desired_entity_id
+            if desired_entity_id != registry_entry.entity_id:
+                update_kwargs["new_entity_id"] = desired_entity_id
 
         if (
             update_kwargs == {"has_entity_name": True}
