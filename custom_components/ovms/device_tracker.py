@@ -8,10 +8,7 @@ from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import (
-    async_dispatcher_connect,
-    async_dispatcher_send,
-)
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.restore_state import RestoreEntity
 
@@ -81,6 +78,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     """OVMS Device Tracker Entity."""
 
     _attr_icon = "mdi:car-connected"
+    _attr_force_update = False
 
     def __init__(
         self,
@@ -158,7 +156,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
         @callback
         def update_state(payload: Any) -> None:
             """Update the tracker state."""
-            self._process_payload(payload)
+            state_changed = self._process_payload(payload)
 
             # Process any JSON attributes if applicable
             if isinstance(payload, str):
@@ -168,85 +166,11 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                     )
                 )
 
-            # Also update corresponding sensor entities
-            try:
-                # Signal sensor entities to update
-                if self.latitude is not None:
-                    async_dispatcher_send(
-                        self.hass,
-                        f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}_sensor",
-                        self.latitude,
-                    )
-
-                if self.longitude is not None:
-                    async_dispatcher_send(
-                        self.hass,
-                        f"{SIGNAL_UPDATE_ENTITY}_{self.unique_id}_sensor",
-                        self.longitude,
-                    )
-
-                # If there are related entities we should update them too
-                related_entities_sent = False
-                if hasattr(self.hass.data.get(DOMAIN, {}), "entity_registry"):
-                    # Try to get entity registry from domain data
-                    for entry_id, data in self.hass.data[DOMAIN].items():
-                        if hasattr(data, "entity_registry") and data.entity_registry:
-                            entity_registry = data.entity_registry
-                            if hasattr(entity_registry, "get_related_entities"):
-                                related_entities = entity_registry.get_related_entities(
-                                    self.unique_id
-                                )
-                                for related_id in related_entities:
-                                    # Create a location payload for sensors
-                                    sensor_payload = {
-                                        "value": (
-                                            self.latitude
-                                            if "latitude" in related_id
-                                            else self.longitude
-                                        ),
-                                        "latitude": self.latitude,
-                                        "longitude": self.longitude,
-                                    }
-
-                                    async_dispatcher_send(
-                                        self.hass,
-                                        f"{SIGNAL_UPDATE_ENTITY}_{related_id}",
-                                        sensor_payload,
-                                    )
-                                related_entities_sent = True
-                                break
-
-                # If we didn't update via entity registry, try a more direct approach
-                if (
-                    not related_entities_sent
-                    and self.latitude is not None
-                    and self.longitude is not None
-                ):
-                    # Create a coordinates payload
-                    location_payload = {
-                        "latitude": self.latitude,
-                        "longitude": self.longitude,
-                    }
-
-                    # Dispatch to latitude/longitude sensors based on their name pattern
-                    lat_sensor_id = f"{self.unique_id}_latitude"
-                    lon_sensor_id = f"{self.unique_id}_longitude"
-
-                    async_dispatcher_send(
-                        self.hass,
-                        f"{SIGNAL_UPDATE_ENTITY}_{lat_sensor_id}",
-                        location_payload,
-                    )
-
-                    async_dispatcher_send(
-                        self.hass,
-                        f"{SIGNAL_UPDATE_ENTITY}_{lon_sensor_id}",
-                        location_payload,
-                    )
-            except Exception as ex:
-                _LOGGER.exception("Error updating related entities: %s", ex)
-
-            self.async_write_ha_state()
+            # Only write state when something meaningful changed.
+            # The dispatcher already updates individual lat/lon sensor
+            # entities directly via their own topic subscriptions.
+            if state_changed:
+                self.async_write_ha_state()
 
         self.async_on_remove(
             async_dispatcher_connect(
@@ -256,11 +180,15 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
             )
         )
 
-    def _process_payload(self, payload: Any) -> None:
-        """Process the payload and update coordinates."""
+    def _process_payload(self, payload: Any) -> bool:
+        """Process the payload and update coordinates.
+
+        Returns True if state changed meaningfully (coordinates or accuracy).
+        """
         try:
             current_time = time.time()
             coordinates_changed = False
+            accuracy_changed = False
 
             # If payload is a dictionary, extract coordinates directly
             if isinstance(payload, dict):
@@ -280,7 +208,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                             _LOGGER.debug(
                                 "Skipping 0,0 coordinates in payload: %s", payload
                             )
-                            return
+                            return False
 
                         # Validate coordinates - skip if out of valid range
                         if (
@@ -303,17 +231,19 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                                 self._prev_latitude = lat
                                 self._prev_longitude = lon
 
-                            # Wire GPS accuracy to TrackerEntity's native property
-                            if "gps_accuracy" in payload:
-                                try:
-                                    self._attr_location_accuracy = int(
-                                        payload["gps_accuracy"]
-                                    )
-                                except (ValueError, TypeError):
-                                    pass
-
                     except (ValueError, TypeError):
                         _LOGGER.debug("Invalid coordinates in payload: %s", payload)
+
+                # Process GPS accuracy from any dict payload (including standalone).
+                # Maps to HA TrackerEntity.location_accuracy via _attr_location_accuracy.
+                if "gps_accuracy" in payload:
+                    try:
+                        new_accuracy = int(payload["gps_accuracy"])
+                        if new_accuracy != self._attr_location_accuracy:
+                            self._attr_location_accuracy = new_accuracy
+                            accuracy_changed = True
+                    except (ValueError, TypeError):
+                        pass
 
             # If topic is for a single coordinate
             elif "latitude" in self._topic.lower() or "lat" in self._topic.lower():
@@ -349,17 +279,16 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                 except (ValueError, TypeError):
                     _LOGGER.warning("Invalid longitude value: %s", payload)
 
-            # Only update the timestamp if coordinates have changed or
-            # sufficient time has passed (to avoid unnecessary state updates)
-            time_since_last_update = current_time - self._last_update_time
-
-            if coordinates_changed or time_since_last_update > 30:
+            # Only update the timestamp if coordinates have changed
+            if coordinates_changed:
                 self._last_update_time = current_time
-                if coordinates_changed:
-                    _LOGGER.debug("Updated device tracker coordinates.")
+                _LOGGER.debug("Updated device tracker coordinates.")
+
+            return coordinates_changed or accuracy_changed
 
         except Exception as ex:
             _LOGGER.exception("Error processing payload: %s", ex)
+            return False
 
     @property
     def latitude(self) -> Optional[float]:
