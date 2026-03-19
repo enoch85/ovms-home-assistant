@@ -19,6 +19,7 @@ from .const import (
     STATUS_ENTITY_NAME,
     STALENESS_STATUS_ENTITY_NAME,
     STALENESS_UNIQUE_ID_MARKER,
+    VEHICLE_TOPIC_PREFIXES,
 )
 from .utils import (
     get_merged_config,
@@ -64,6 +65,22 @@ def _strip_vehicle_prefix(name: str, vehicle_id: str) -> str:
     return name
 
 
+def _normalise_vehicle_label(name: str) -> str:
+    """Move a leading vehicle label to a parenthesized suffix.
+
+    Matches the naming_service convention so that migrated entity_ids are
+    identical to those created on a fresh install.  For example:
+      "VW eUP! Tire Emergency Values"  →  "Tire Emergency Values (VW eUP!)"
+    """
+    for vehicle_label in VEHICLE_TOPIC_PREFIXES.values():
+        prefix = f"{vehicle_label} "
+        if name.startswith(prefix):
+            remainder = name[len(prefix):]
+            if remainder:
+                return f"{remainder} ({vehicle_label})"
+    return name
+
+
 def _get_desired_entity_name(
     registry_entry: entity_registry.RegistryEntry,
     vehicle_id: str,
@@ -83,6 +100,8 @@ def _get_desired_entity_name(
         return None
 
     desired_name = _strip_vehicle_prefix(current_name, vehicle_id)
+    desired_name = _normalise_vehicle_label(desired_name)
+
     if desired_name.lower() == STATUS_ENTITY_NAME.lower():
         return STATUS_ENTITY_NAME
 
