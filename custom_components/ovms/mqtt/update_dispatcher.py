@@ -368,20 +368,19 @@ class UpdateDispatcher:
                 "device_tracker"
             )
 
-            # Get GPS accuracy if available
+            # Get GPS accuracy scoped to this config entry's mqtt_client
             accuracy = None
-            mqtt_client = None
-
-            # Try to get the MQTT client from hass.data
-            for entry_id, data in self.hass.data.get(DOMAIN, {}).items():
-                if "mqtt_client" in data:
-                    mqtt_client = data["mqtt_client"]
-                    break
-
-            if mqtt_client and hasattr(mqtt_client, "get_gps_accuracy"):
-                # Get vehicle_id with fallback to empty string
-                vehicle_id = getattr(mqtt_client, "config", {}).get("vehicle_id", "")
-                accuracy = mqtt_client.get_gps_accuracy(vehicle_id)
+            config_entry_id = self._config.get(CONF_CONFIG_ENTRY_ID)
+            entry_data = (
+                self.hass.data.get(DOMAIN, {}).get(config_entry_id)
+                if config_entry_id
+                else None
+            )
+            if entry_data and "mqtt_client" in entry_data:
+                mqtt_client = entry_data["mqtt_client"]
+                if hasattr(mqtt_client, "get_gps_accuracy"):
+                    vehicle_id = self._config.get(CONF_VEHICLE_ID, "")
+                    accuracy = mqtt_client.get_gps_accuracy(vehicle_id)
 
             # Create payload with current location data
             payload = {
@@ -415,36 +414,3 @@ class UpdateDispatcher:
             and self._coordinate_generation["longitude"]
             > self._last_dispatched_coordinate_generation["longitude"]
         )
-
-    def _update_combined_tracker(self, tracker_id: str) -> None:
-        """Update a combined device tracker with current location data."""
-        try:
-            # Get GPS accuracy if available
-            accuracy = None
-            mqtt_client = None
-
-            # Try to get the MQTT client from hass.data
-            for entry_id, data in self.hass.data.get(DOMAIN, {}).items():
-                if "mqtt_client" in data:
-                    mqtt_client = data["mqtt_client"]
-                    break
-
-            if mqtt_client and hasattr(mqtt_client, "get_gps_accuracy"):
-                accuracy = mqtt_client.get_gps_accuracy()
-
-            # Create payload with current location data
-            payload = {
-                "latitude": self.location_values.get("latitude"),
-                "longitude": self.location_values.get("longitude"),
-            }
-
-            # Add accuracy if available
-            if accuracy is not None:
-                payload["gps_accuracy"] = accuracy
-                payload["gps_accuracy_unit"] = "m"  # Add proper unit
-
-            # Update the tracker
-            self._update_entity(tracker_id, payload)
-
-        except Exception as ex:
-            _LOGGER.exception("Error updating combined tracker: %s", ex)
