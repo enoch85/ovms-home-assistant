@@ -65,7 +65,7 @@ OVMSMQTTClient (mqtt/__init__.py) - orchestrates all components
 
 ### Configuration Management
 
-- **Config Version**: Track in `const.py::CONFIG_VERSION` (currently 3)
+- **Config Version**: Track in `const.py::CONFIG_VERSION` (currently 6)
 - **Migration Pattern**: `__init__.py::async_migrate_entry()` handles version upgrades
 - **Config Merge**: Always use `get_merged_config(entry)` - options override data
 - **Stable Client IDs**: Generated as `ha_ovms_{sha256_hash[:12]}` from host+username+vehicle_id to prevent MQTT connection issues

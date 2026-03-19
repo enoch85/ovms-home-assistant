@@ -4,13 +4,15 @@ This is a sample dashboard card for the Renault Twizy. You can customize it to y
 
 ![image](https://github.com/user-attachments/assets/placeholder-for-image.png)
 
+Replace `[car_name]` with your vehicle ID as configured in OVMS (e.g. `mycar123`), and place a Renault Twizy image at `/local/images/renault_twizy.png` in your Home Assistant configuration.
+
 ```yaml
 type: vertical-stack
 cards:
   - type: picture-elements
     elements:
       - type: state-label
-        entity: sensor.ovms_[car_name]_metric_v_b_soc
+        entity: sensor.ovms_[car_name]_battery_level
         style:
           top: 45%
           left: 60%
@@ -18,7 +20,7 @@ cards:
           font-weight: bold
           color: black
       - type: state-label
-        entity: sensor.ovms_[car_name]_metric_v_b_range_est
+        entity: sensor.ovms_[car_name]_estimated_range
         suffix: " "
         style:
           top: 60%
@@ -27,7 +29,7 @@ cards:
           color: black
       - type: conditional
         conditions:
-          - entity: binary_sensor.ovms_[car_name]_metric_v_c_charging
+          - entity: binary_sensor.ovms_[car_name]_charging_status
             state: "on"
         elements:
           - type: icon
@@ -38,7 +40,7 @@ cards:
               color: green
               "--mdi-icon-size": 24px
       - type: state-label
-        entity: sensor.ovms_[car_name]_metric_xrt_b_energy_avail
+        entity: sensor.ovms_[car_name]_available_energy_renault_twizy
         prefix: "Available: "
         suffix: " kWh"
         style:
@@ -47,7 +49,7 @@ cards:
           font-size: 14px
           color: black
       - type: state-label
-        entity: sensor.ovms_[car_name]_metric_xrt_b_energy_full
+        entity: sensor.ovms_[car_name]_total_energy_renault_twizy
         prefix: "Total: "
         suffix: " kWh"
         style:
@@ -59,34 +61,32 @@ cards:
     aspect_ratio: 16:9
   - type: glance
     entities:
-      - entity: sensor.ovms_[car_name]_metric_v_p_odometer
+      - entity: sensor.ovms_[car_name]_odometer
         name: Odometer
-      - entity: sensor.ovms_[car_name]_metric_v_b_range_est
+      - entity: sensor.ovms_[car_name]_estimated_range
         name: Range
-      - entity: sensor.ovms_[car_name]_metric_v_b_consumption
+      - entity: sensor.ovms_[car_name]_battery_consumption
         name: Consumption
   - type: entities
     entities:
-      - entity: sensor.ovms_[car_name]_metric_v_b_soc
+      - entity: sensor.ovms_[car_name]_battery_level
         name: State of Charge
-      - entity: sensor.ovms_[car_name]_metric_v_b_current
+      - entity: sensor.ovms_[car_name]_battery_current
         name: Battery Current
-      - entity: sensor.ovms_[car_name]_metric_v_b_voltage
+      - entity: sensor.ovms_[car_name]_battery_voltage
         name: Battery Voltage
-      - entity: sensor.ovms_[car_name]_metric_v_b_temp
+      - entity: sensor.ovms_[car_name]_battery_temperature
         name: Battery Temperature
-      - entity: sensor.ovms_[car_name]_metric_v_b_power
+      - entity: sensor.ovms_[car_name]_battery_power
         name: Battery Power
     title: Battery
   - type: entities
     entities:
-      - entity: sensor.ovms_[car_name]_metric_xrt_i_trq_act
+      - entity: sensor.ovms_[car_name]_actual_torque_renault_twizy
         name: Actual Torque
-      - entity: sensor.ovms_[car_name]_metric_xrt_i_pwr_act
+      - entity: sensor.ovms_[car_name]_inverter_power_renault_twizy
         name: Inverter Power
-      - entity: sensor.ovms_[car_name]_metric_v_i_temp
+      - entity: sensor.ovms_[car_name]_inverter_temperature
         name: Inverter Temperature
     title: Motor
 ```
-
-Replace `[car_name]` with your vehicle ID as configured in OVMS, and place a Renault Twizy image at `/local/images/renault_twizy.png` in your Home Assistant configuration.

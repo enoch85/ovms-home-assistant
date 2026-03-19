@@ -1,8 +1,10 @@
-# VW e-UP 
+# VW e-UP
 
 This is what I used myself (@enoch85). I'm sure it works for other cars as well, but thought I'd post it here for inspiration.
 
 ![image](https://github.com/user-attachments/assets/4aa80aa1-aad9-4f6b-a569-5d336b915324)
+
+Replace `[car_name]` with your vehicle ID (e.g. `mycar123`).
 
 ```yaml
 type: vertical-stack
@@ -10,7 +12,7 @@ cards:
   - type: picture-elements
     elements:
       - type: state-label
-        entity: sensor.ovms_[car_name]_metric_v_b_soc
+        entity: sensor.ovms_[car_name]_battery_level
         style:
           top: 45%
           left: 60%
@@ -18,7 +20,7 @@ cards:
           font-weight: bold
           color: black
       - type: state-label
-        entity: sensor.ovms_[car_name]_metric_v_b_range_est
+        entity: sensor.ovms_[car_name]_estimated_range
         suffix: " "
         style:
           top: 60%
@@ -27,7 +29,7 @@ cards:
           color: black
       - type: conditional
         conditions:
-          - entity: binary_sensor.ovms_[car_name]_metric_v_c_charging
+          - entity: binary_sensor.ovms_[car_name]_charging_status
             state: "on"
         elements:
           - type: icon
@@ -38,7 +40,7 @@ cards:
               color: green
               "--mdi-icon-size": 24px
       - type: state-label
-        entity: sensor.ovms_[car_name]_metric_xvu_v_t_emgcy
+        entity: sensor.ovms_[car_name]_tire_emergency_values_vw_eup
         attribute: pressure_FR
         suffix: " kPa"
         style:
@@ -48,7 +50,7 @@ cards:
           font-size: 16px
           color: black
       - type: state-label
-        entity: sensor.ovms_[car_name]_metric_xvu_v_t_emgcy
+        entity: sensor.ovms_[car_name]_tire_emergency_values_vw_eup
         attribute: pressure_RR
         suffix: " kPa"
         style:
@@ -58,7 +60,7 @@ cards:
           font-size: 16px
           color: black
       - type: state-label
-        entity: sensor.ovms_[car_name]_metric_xvu_v_t_emgcy
+        entity: sensor.ovms_[car_name]_tire_emergency_values_vw_eup
         attribute: pressure_FL
         suffix: " kPa"
         style:
@@ -68,8 +70,8 @@ cards:
           font-size: 16px
           color: black
       - type: state-label
-        entity: sensor.ovms_[car_name]_metric_xvu_v_t_emgcy
-        attribute: pressure_LR
+        entity: sensor.ovms_[car_name]_tire_emergency_values_vw_eup
+        attribute: pressure_RL
         suffix: " kPa"
         style:
           top: 97%
@@ -86,10 +88,10 @@ cards:
       - entity: binary_sensor.ovms_[car_name]_status
         name: Status
         icon: mdi:information-outline
-      - entity: binary_sensor.ovms_[car_name]_metric_v_t_alert
+      - entity: binary_sensor.ovms_[car_name]_tire_alerts
         name: Tire status
         icon: mdi:tire
-      - entity: binary_sensor.ovms_[car_name]_metric_v_c_charging
+      - entity: binary_sensor.ovms_[car_name]_charging_status
         name: Charging Status
         icon: mdi:battery-charging
     state_color: true
@@ -99,7 +101,7 @@ cards:
     cards:
       - type: gauge
         name: Battery Level
-        entity: sensor.ovms_[car_name]_metric_v_b_soc
+        entity: sensor.ovms_[car_name]_battery_level
         min: 0
         max: 100
         severity:
@@ -108,11 +110,11 @@ cards:
           red: 0
       - type: entity
         name: Ambient Temp
-        entity: sensor.ovms_[car_name]_metric_v_e_temp
+        entity: sensor.ovms_[car_name]_ambient_temperature
         icon: mdi:thermometer
       - type: entity
         name: Power
-        entity: sensor.ovms_[car_name]_metric_v_c_power
+        entity: sensor.ovms_[car_name]_charge_power
         icon: mdi:flash
   - type: grid
     columns: 3
@@ -120,15 +122,15 @@ cards:
     cards:
       - type: entity
         name: Odometer
-        entity: sensor.ovms_[car_name]_metric_v_p_odometer
+        entity: sensor.ovms_[car_name]_odometer
         icon: mdi:counter
       - type: entity
         name: Speed
-        entity: sensor.ovms_[car_name]_metric_v_p_speed
+        entity: sensor.ovms_[car_name]_vehicle_speed
         icon: mdi:speedometer
       - type: entity
         name: Firmware
-        entity: sensor.ovms_[car_name]_metric_m_version
+        entity: sensor.ovms_[car_name]_firmware_version
         icon: mdi:package-up
   - type: map
     title: Vehicle Location

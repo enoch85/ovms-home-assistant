@@ -113,6 +113,8 @@ async def async_setup_entry(
 class OVMSLock(LockEntity, RestoreEntity):
     """Representation of an OVMS vehicle lock."""
 
+    _attr_has_entity_name = True
+
     def __init__(
         self,
         unique_id: str,

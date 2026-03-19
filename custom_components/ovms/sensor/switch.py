@@ -79,6 +79,8 @@ async def async_setup_entry(
 class OVMSSwitch(SwitchEntity, RestoreEntity):
     """Representation of an OVMS switch."""
 
+    _attr_has_entity_name = True
+
     def __init__(
         self,
         unique_id: str,

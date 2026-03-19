@@ -5,15 +5,21 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers import device_registry, entity_registry
 
 from .const import (
     CONF_CLIENT_ID,
     CONF_VEHICLE_ID,
     DOMAIN,
+    LOCATION_ENTITY_NAME,
     LOGGER_NAME,
     OVMS_DEVICE_MANUFACTURER,
     OVMS_DEVICE_MODEL,
+    STATUS_ENTITY_NAME,
+    STALENESS_STATUS_ENTITY_NAME,
+    STALENESS_UNIQUE_ID_MARKER,
+    VEHICLE_TOPIC_PREFIXES,
 )
 from .utils import (
     get_merged_config,
@@ -27,6 +33,84 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 _LEGACY_LOCK_METRIC_MARKER = "_v_e_locked_"
 _SWITCH_SUFFIX = "_switch"
 _LOCK_SUFFIX = "_lock"
+
+
+def _get_entity_domain(entity_id: str) -> str:
+    """Return the domain portion of an entity_id."""
+    return entity_id.split(".", 1)[0]
+
+
+def _generate_entity_id_from_name(
+    domain: str, name: str, current_ids: set[str] | None = None
+) -> str:
+    """Generate an entity_id from a display name using HA's slug rules."""
+    return async_generate_entity_id(
+        f"{domain}.{{}}",
+        name,
+        current_ids=current_ids,
+    )
+
+
+def _strip_vehicle_prefix(name: str, vehicle_id: str) -> str:
+    """Strip a leading vehicle_id prefix from an entity name when present."""
+    if not name or not vehicle_id:
+        return name
+
+    prefix = f"{vehicle_id} "
+    if name.lower().startswith(prefix.lower()):
+        stripped = name[len(prefix) :].strip()
+        if stripped:
+            return stripped
+
+    return name
+
+
+def _normalise_vehicle_label(name: str) -> str:
+    """Move a leading vehicle label to a parenthesized suffix.
+
+    Matches the naming_service convention so that migrated entity_ids are
+    identical to those created on a fresh install.  For example:
+      "VW eUP! Tire Emergency Values"  →  "Tire Emergency Values (VW eUP!)"
+    """
+    for vehicle_label in VEHICLE_TOPIC_PREFIXES.values():
+        prefix = f"{vehicle_label} "
+        if name.startswith(prefix):
+            remainder = name[len(prefix):]
+            if remainder:
+                return f"{remainder} ({vehicle_label})"
+    return name
+
+
+def _get_desired_entity_name(
+    registry_entry: entity_registry.RegistryEntry,
+    vehicle_id: str,
+) -> str | None:
+    """Return the integration-managed entity name for registry migration."""
+    if (
+        isinstance(registry_entry.unique_id, str)
+        and STALENESS_UNIQUE_ID_MARKER in registry_entry.unique_id
+    ):
+        return STALENESS_STATUS_ENTITY_NAME
+
+    if registry_entry.domain == Platform.DEVICE_TRACKER:
+        return LOCATION_ENTITY_NAME
+
+    current_name = registry_entry.original_name or registry_entry.name
+    if not current_name:
+        return None
+
+    desired_name = _strip_vehicle_prefix(current_name, vehicle_id)
+    desired_name = _normalise_vehicle_label(desired_name)
+
+    if desired_name.lower() == STATUS_ENTITY_NAME.lower():
+        return STATUS_ENTITY_NAME
+
+    # Guard: normalise casing for any non-device_tracker entity whose name
+    # resolves to "Location" after prefix stripping (defensive, unlikely path).
+    if desired_name.lower() == LOCATION_ENTITY_NAME.lower():
+        return LOCATION_ENTITY_NAME
+
+    return desired_name
 
 
 def _is_legacy_lock_switch(entity_entry: entity_registry.RegistryEntry) -> bool:
@@ -245,6 +329,81 @@ async def async_migrate_entity_identity(
                 "V%d Migration: removed legacy OVMS device %s",
                 from_version,
                 existing_device.id,
+            )
+
+
+async def async_migrate_entity_naming(
+    hass: HomeAssistant, config_entry: ConfigEntry, from_version: int
+) -> None:
+    """Adopt Home Assistant's has_entity_name model for OVMS entities.
+
+    All OVMS entities are renamed to the new device-scoped entity_id form
+    (e.g. sensor.ovms_myvehicle_battery_level).  Entities whose display name
+    was explicitly customised by the user (registry_entry.name is not None)
+    keep their current entity_id.
+
+    Known limitation: HA does not track whether an entity_id was manually
+    changed by the user.  We use ``registry_entry.name is None`` as a proxy
+    (no custom name ≈ no custom entity_id).  A user who customised *only*
+    their entity_id without also setting a custom name will have that
+    entity_id overwritten.  This is an acceptable tradeoff for a one-time
+    migration during a major version bump.
+    """
+    config = get_merged_config(config_entry)
+    vehicle_id = str(config.get(CONF_VEHICLE_ID, "unknown"))
+    device_name = get_ovms_device_name(vehicle_id)
+
+    entity_reg = entity_registry.async_get(hass)
+    registry_entries = entity_registry.async_entries_for_config_entry(
+        entity_reg,
+        config_entry.entry_id,
+    )
+
+    if not registry_entries:
+        return
+
+    current_entity_ids = set(entity_reg.entities)
+
+    for registry_entry in registry_entries:
+        if registry_entry.platform != DOMAIN:
+            continue
+
+        desired_name = _get_desired_entity_name(registry_entry, vehicle_id)
+        update_kwargs = {"has_entity_name": True}
+
+        if registry_entry.name is None and desired_name:
+            if desired_name != registry_entry.original_name:
+                update_kwargs["original_name"] = desired_name
+
+            # Rename the entity_id to the new device-scoped form.
+            # The name-is-None guard above ensures we only touch entities
+            # the user has NOT manually renamed in the HA UI.
+            # Collisions are prevented by tracking all current entity_ids.
+            current_entity_ids.discard(registry_entry.entity_id)
+            desired_entity_id = _generate_entity_id_from_name(
+                _get_entity_domain(registry_entry.entity_id),
+                f"{device_name} {desired_name}",
+                current_entity_ids,
+            )
+            current_entity_ids.add(desired_entity_id)
+
+            if desired_entity_id != registry_entry.entity_id:
+                update_kwargs["new_entity_id"] = desired_entity_id
+
+        if (
+            update_kwargs == {"has_entity_name": True}
+            and registry_entry.has_entity_name
+        ):
+            continue
+
+        entity_reg.async_update_entity(registry_entry.entity_id, **update_kwargs)
+
+        if "new_entity_id" in update_kwargs:
+            _LOGGER.info(
+                "V%d Migration: renamed entity_id from %s to %s",
+                from_version,
+                registry_entry.entity_id,
+                update_kwargs["new_entity_id"],
             )
 
 

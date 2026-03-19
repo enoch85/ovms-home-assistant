@@ -22,6 +22,7 @@ from .mqtt import OVMSMQTTClient
 from .migrations import (
     async_cleanup_stale_device_associations,
     async_migrate_entity_identity,
+    async_migrate_entity_naming,
     async_migrate_lock_entities,
 )
 from .services import async_setup_services, async_unload_services
@@ -324,6 +325,9 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
         if version <= 4:
             await async_migrate_entity_identity(hass, config_entry, version)
+
+        if version <= 5:
+            await async_migrate_entity_naming(hass, config_entry, version)
 
         # Update the config entry version
         hass.config_entries.async_update_entry(config_entry, version=CONFIG_VERSION)

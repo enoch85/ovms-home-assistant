@@ -104,6 +104,8 @@ def format_sensor_value(value, device_class, attributes):
 class CellVoltageSensor(SensorEntity, RestoreEntity):
     """Representation of a cell voltage sensor."""
 
+    _attr_has_entity_name = True
+
     def __init__(
         self,
         unique_id: str,
@@ -342,6 +344,8 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
 
 class OVMSSensor(SensorEntity, RestoreEntity):
     """Representation of an OVMS sensor."""
+
+    _attr_has_entity_name = True
 
     def _is_tire_sensor(self) -> bool:
         """Check if this sensor is a tire-related sensor by topic pattern."""
@@ -735,7 +739,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                         if key_parts[1].isdigit() or key_parts[1].lower() in [
                             "fl",
                             "fr",
-                            "lr",
+                            "rl",
                             "rr",
                             "1",
                             "2",

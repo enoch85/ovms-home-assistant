@@ -253,7 +253,7 @@ class EntityFactory:
             self.created_entities.add(tracker_id)
 
             # Create friendly name using the naming service
-            friendly_name = self.naming_service.create_device_tracker_name(vehicle_id)
+            friendly_name = self.naming_service.create_device_tracker_name()
 
             # Create device tracker attributes
             attributes = self.attribute_manager.prepare_attributes(

@@ -30,6 +30,7 @@ from .const import (
     STALENESS_CLEANUP_INTERVAL,
     STALENESS_FIRST_RUN_EXTRA_WAIT,
     STALENESS_MAX_DISPLAY_ENTITIES,
+    STALENESS_STATUS_ENTITY_NAME,
     STALENESS_UNIQUE_ID_MARKER,
     get_add_entities_signal,
 )
@@ -41,7 +42,8 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 class OVMSStalenessStatusSensor(SensorEntity, RestoreEntity):
     """Diagnostic sensor showing count of entities scheduled for removal."""
 
-    _attr_name = "OVMS Staleness Status"
+    _attr_has_entity_name = True
+    _attr_name = STALENESS_STATUS_ENTITY_NAME
     _attr_icon = "mdi:clock-alert-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_unit_of_measurement = "entities"
