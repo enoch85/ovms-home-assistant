@@ -5,7 +5,6 @@ import re
 
 from .. import metrics
 from ..const import (
-    LOCATION_ENTITY_NAME,
     LOGGER_NAME,
     CONF_TOPIC_BLACKLIST,
     STATUS_ENTITY_NAME,

@@ -39,7 +39,9 @@ def _get_entity_domain(entity_id: str) -> str:
     return entity_id.split(".", 1)[0]
 
 
-def _generate_entity_id_from_name(domain: str, name: str, current_ids=None) -> str:
+def _generate_entity_id_from_name(
+    domain: str, name: str, current_ids: set[str] | None = None
+) -> str:
     """Generate an entity_id from a display name using HA's slug rules."""
     return async_generate_entity_id(
         f"{domain}.{{}}",
@@ -84,6 +86,8 @@ def _get_desired_entity_name(
     if desired_name.lower() == STATUS_ENTITY_NAME.lower():
         return STATUS_ENTITY_NAME
 
+    # Guard: normalise casing for any non-device_tracker entity whose name
+    # resolves to "Location" after prefix stripping (defensive, unlikely path).
     if desired_name.lower() == LOCATION_ENTITY_NAME.lower():
         return LOCATION_ENTITY_NAME
 
@@ -357,6 +361,12 @@ async def async_migrate_entity_naming(
             if desired_name != registry_entry.original_name:
                 update_kwargs["original_name"] = desired_name
 
+            # Check whether the entity_id was auto-generated from the old name.
+            # Only auto-generated IDs are renamed; user-customized IDs are preserved.
+            # The legacy check uses original_name (pre-migration) to reconstruct
+            # what HA would have generated, while the new ID is built from
+            # device_name + desired_name.  Collisions are prevented by tracking
+            # all current entity_ids in current_entity_ids.
             if _is_legacy_auto_entity_id(registry_entry, registry_entry.original_name):
                 current_entity_ids.discard(registry_entry.entity_id)
                 desired_entity_id = _generate_entity_id_from_name(

@@ -4,7 +4,13 @@ import logging
 import re
 from typing import Dict, Any, Optional, List
 
-from .const import DOMAIN, LOCATION_ENTITY_NAME, LOGGER_NAME, STATUS_ENTITY_NAME
+from .const import (
+    DOMAIN,
+    LOCATION_ENTITY_NAME,
+    LOGGER_NAME,
+    STATUS_ENTITY_NAME,
+    VEHICLE_TOPIC_PREFIXES,
+)
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -25,25 +31,14 @@ class EntityNamingService:
         if topic and topic.endswith("/status"):
             return STATUS_ENTITY_NAME
 
-        # Vehicle make/model labels keyed by OVMS topic prefix.
-        # Used to move the make/model to the end of the name so the
-        # important metric name is visible first on narrow screens.
-        vehicle_prefixes = {
-            "xvu": "VW eUP!",
-            "xsq": "Smart ForTwo",
-            "xmg": "MG ZS-EV",
-            "xnl": "Nissan Leaf",
-            "xrt": "Renault Twizy",
-        }
-
         # For vehicle-specific metrics, prioritize the metric name from definitions
         if metric_info and "name" in metric_info:
             base_name = metric_info["name"]
 
             # Strip any leading vehicle prefix and move it to the end
-            for vehicle_label in vehicle_prefixes.values():
+            for vehicle_label in VEHICLE_TOPIC_PREFIXES.values():
                 if base_name.startswith(vehicle_label + " "):
-                    base_name = base_name[len(vehicle_label) + 1:]
+                    base_name = base_name[len(vehicle_label) + 1 :]
                     # If topic ends with a number (like /03), append it
                     if topic and topic.split("/")[-1].isdigit():
                         module_number = topic.split("/")[-1]
@@ -57,11 +52,9 @@ class EntityNamingService:
 
             return base_name
 
-        for prefix_key, vehicle_label in vehicle_prefixes.items():
+        for prefix_key, vehicle_label in VEHICLE_TOPIC_PREFIXES.items():
             has_prefix = (
-                any(p == prefix_key for p in parts)
-                if parts
-                else (prefix_key in topic)
+                any(p == prefix_key for p in parts) if parts else (prefix_key in topic)
             )
             if has_prefix:
                 if parts and len(parts) > 0:
@@ -82,7 +75,7 @@ class EntityNamingService:
         # Fallback to cleaned raw name
         return raw_name.replace("_", " ").title() if raw_name else "Unknown"
 
-    def create_device_tracker_name(self, vehicle_id: Optional[str] = None) -> str:
+    def create_device_tracker_name(self) -> str:
         """Create an entity name for the combined device tracker."""
         return LOCATION_ENTITY_NAME
 

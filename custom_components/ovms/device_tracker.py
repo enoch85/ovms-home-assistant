@@ -77,6 +77,7 @@ async def async_setup_entry(
 class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
     """OVMS Device Tracker Entity."""
 
+    _attr_has_entity_name = True
     _attr_icon = "mdi:car-connected"
     _attr_force_update = False
 

@@ -182,6 +182,19 @@ STATUS_ENTITY_NAME = "Status"
 LOCATION_ENTITY_NAME = "Location"
 STALENESS_STATUS_ENTITY_NAME = "Staleness Status"
 
+# Vehicle make/model labels keyed by OVMS topic prefix.
+# Used to move the make/model to the end of entity names so the
+# important metric name is visible first on narrow screens.
+# These labels must match the name prefixes in the metric definitions
+# at metrics/vehicles/*.py (e.g. "VW eUP! Absolute Battery Capacity").
+VEHICLE_TOPIC_PREFIXES = {
+    "xvu": "VW eUP!",
+    "xsq": "Smart ForTwo",
+    "xmg": "MG ZS-EV",
+    "xnl": "Nissan Leaf",
+    "xrt": "Renault Twizy",
+}
+
 # Maximum stale entities shown in the diagnostic sensor attributes.
 # Keeps the state machine payload manageable for the HA frontend.
 STALENESS_MAX_DISPLAY_ENTITIES = 40
