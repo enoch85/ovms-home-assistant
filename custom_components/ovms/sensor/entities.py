@@ -739,7 +739,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                         if key_parts[1].isdigit() or key_parts[1].lower() in [
                             "fl",
                             "fr",
-                            "lr",
+                            "rl",
                             "rr",
                             "1",
                             "2",
