@@ -19,14 +19,12 @@ cards:
           font-size: 36px
           font-weight: bold
           color: black
-      - type: state-label
-        entity: sensor.ovms_[car_name]_estimated_range
-        suffix: " "
+      - type: state-icon
+        entity: sensor.ovms_[car_name]_battery_level
         style:
-          top: 60%
-          left: 60%
-          font-size: 18px
-          color: black
+          top: 45%
+          left: 47%
+          "--mdi-icon-size": 24px
       - type: conditional
         conditions:
           - entity: binary_sensor.ovms_[car_name]_charging_status
@@ -39,6 +37,14 @@ cards:
               left: 47%
               color: green
               "--mdi-icon-size": 24px
+      - type: state-label
+        entity: sensor.ovms_[car_name]_estimated_range
+        suffix: " "
+        style:
+          top: 60%
+          left: 60%
+          font-size: 18px
+          color: black
       - type: state-label
         entity: sensor.ovms_[car_name]_tire_emergency_values_vw_eup
         attribute: pressure_FR

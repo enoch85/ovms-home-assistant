@@ -79,7 +79,21 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:car-connected"
-    _attr_force_update = False
+
+    @property
+    def force_update(self) -> bool:
+        """Disable force-update to suppress recorder writes on unchanged state.
+
+        TrackerEntity.force_update returns ``not self.should_poll`` (= True),
+        which forces every async_write_ha_state() call to fire a state_changed
+        event even when lat/lon haven't moved.  That creates redundant history
+        entries that make the map track appear blocky.
+
+        By returning False the state machine still updates its in-memory state
+        and attributes, but only fires state_changed when something actually
+        differs from the previous write.
+        """
+        return False
 
     def __init__(
         self,

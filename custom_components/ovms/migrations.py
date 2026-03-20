@@ -75,7 +75,7 @@ def _normalise_vehicle_label(name: str) -> str:
     for vehicle_label in VEHICLE_TOPIC_PREFIXES.values():
         prefix = f"{vehicle_label} "
         if name.startswith(prefix):
-            remainder = name[len(prefix):]
+            remainder = name[len(prefix) :]
             if remainder:
                 return f"{remainder} ({vehicle_label})"
     return name
