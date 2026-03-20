@@ -24,7 +24,7 @@ cards:
         style:
           top: 45%
           left: 47%
-          "--mdi-icon-size": 24px
+          "--mdc-icon-size": 24px
       - type: conditional
         conditions:
           - entity: binary_sensor.ovms_[car_name]_charging_status
@@ -35,8 +35,8 @@ cards:
             style:
               top: 45%
               left: 47%
-              color: green
-              "--mdi-icon-size": 24px
+              color: black
+              "--mdc-icon-size": 16px
       - type: state-label
         entity: sensor.ovms_[car_name]_estimated_range
         suffix: " "
