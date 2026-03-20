@@ -144,8 +144,13 @@ def get_ovms_device_identifier(
 
 
 def get_ovms_device_name(vehicle_id: Optional[str]) -> str:
-    """Return the Home Assistant device name for an OVMS vehicle."""
-    return f"OVMS - {vehicle_id or 'unknown'}"
+    """Return the Home Assistant device name for an OVMS vehicle.
+
+    The integration name ("OVMS") is already shown in the HA UI breadcrumb
+    and integration card, so the device name uses only the vehicle identifier
+    to avoid redundant "OVMS ▸ OVMS - …" display.
+    """
+    return vehicle_id or "unknown"
 
 
 def get_ovms_device_info(
