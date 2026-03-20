@@ -31,7 +31,7 @@ cards:
             state: "on"
         elements:
           - type: icon
-            icon: mdi:battery-charging
+            icon: mdi:flash
             style:
               top: 45%
               left: 47%
