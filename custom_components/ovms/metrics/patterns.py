@@ -95,7 +95,7 @@ TOPIC_PATTERNS = {
         "name": "Energy",
         "icon": "mdi:flash",
         "device_class": SensorDeviceClass.ENERGY,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "category": "battery",
     },

@@ -35,7 +35,7 @@ RENAULT_TWIZY_METRICS = {
         "name": "Renault Twizy Available Energy",
         "description": "Available energy in battery",
         "icon": "mdi:battery",
-        "device_class": SensorDeviceClass.ENERGY,
+        "device_class": SensorDeviceClass.ENERGY_STORAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "category": "renault_twizy",
