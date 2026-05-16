@@ -1,0 +1,1 @@
+At the start of every conversation, read [`.github/copilot-instructions.md`](../../.github/copilot-instructions.md) and follow it for project-specific guidance on conventions, constants usage, code-quality checks, formatting, and release workflow.
