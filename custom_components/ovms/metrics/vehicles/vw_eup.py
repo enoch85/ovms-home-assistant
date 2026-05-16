@@ -89,8 +89,8 @@ VW_EUP_METRICS = {
         "name": "VW eUP! Energy Available for Range",
         "description": "Energy available for driving range",
         "icon": "mdi:battery",
-        "device_class": SensorDeviceClass.ENERGY,
-        "state_class": SensorStateClass.TOTAL,  # Changed from MEASUREMENT to TOTAL
+        "device_class": SensorDeviceClass.ENERGY_STORAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "category": "vw_eup",
     },
