@@ -54,6 +54,19 @@ PIN_SECURE_PROTOCOLS = ("mqtts", "wss")
 PIN_SENSITIVE_COMMANDS = ("lock", "unlock", "valet", "unvalet")
 SENSITIVE_LOG_REDACTION = "***"
 
+# OVMS firmware registers lock/unlock/valet/unvalet with min=max=1 argument
+# (RegisterCommand("...", ..., "<pin>", 1, 1) in vehicle.cpp). The shell
+# rejects the command with "Usage: ..." if no argument is supplied, even on
+# vehicle modules that ignore the PIN value (e.g. Fiat 500e, where the
+# valet command is repurposed as a climate-control trigger). Switch entities
+# cannot prompt for a PIN per toggle, so when no stored PIN is configured we
+# send this neutral placeholder to satisfy the shell. Vehicle modules that
+# validate the PIN will reject it cleanly (logged as a warning); modules
+# that ignore the PIN will execute the command. README documents "nopin" as
+# the recommended user-supplied placeholder for the lock entity — reusing
+# the same string keeps the convention consistent.
+OVMS_PIN_PLACEHOLDER = "nopin"
+
 # Lock command response parsing constants.
 # OVMS returns simple textual confirmations for lock/unlock commands.
 LOCK_COMMAND_ERROR_PREFIX = "Error: "

@@ -12,8 +12,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from ..const import (
+    CONF_LOCK_PIN,
     DOMAIN,
+    LOCK_COMMAND_ERROR_PREFIX,
+    LOCK_COMMAND_USAGE_PREFIX,
     LOGGER_NAME,
+    OVMS_PIN_PLACEHOLDER,
+    PIN_SENSITIVE_COMMANDS,
     SWITCH_TYPES,
     SIGNAL_UPDATE_ENTITY,
     get_add_entities_signal,
@@ -25,7 +30,13 @@ from ..entity_state import (
     parse_boolean_state,
     update_attributes_from_json,
 )
-from ..utils import CommandFunction, get_entry_command_function
+from ..utils import (
+    CommandFunction,
+    get_entry_command_function,
+    get_merged_config,
+    is_secure_pin_connection,
+    normalize_lock_pin,
+)
 
 from ..metrics import get_metric_by_path, get_metric_by_pattern
 
@@ -39,6 +50,12 @@ async def async_setup_entry(
 ) -> None:
     """Set up OVMS switches based on a config entry."""
     command_function = get_entry_command_function(hass, entry)
+    # Reuse the same stored lock PIN for PIN-sensitive switch commands
+    # (valet/unvalet). OVMS firmware uses one device PIN for all
+    # PIN-sensitive commands; gating on verified TLS mirrors the lock entity.
+    config = get_merged_config(entry)
+    default_lock_pin = normalize_lock_pin(config.get(CONF_LOCK_PIN))
+    pin_allowed = is_secure_pin_connection(config)
 
     @callback
     def async_add_switch(data: DiscoveryData) -> None:
@@ -63,6 +80,8 @@ async def async_setup_entry(
             hass=hass,
             friendly_name=data.get("friendly_name"),
             switch_config=switch_config,
+            default_pin=default_lock_pin,
+            pin_allowed=pin_allowed,
         )
 
         async_add_entities([switch])
@@ -93,6 +112,8 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         hass: HomeAssistant | None = None,
         friendly_name: str | None = None,
         switch_config: dict[str, object] | None = None,
+        default_pin: str | None = None,
+        pin_allowed: bool = False,
     ) -> None:
         """Initialize the switch.
 
@@ -107,6 +128,10 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             hass: Home Assistant instance
             friendly_name: User-friendly display name
             switch_config: Configuration for controllable metrics (on/off commands)
+            default_pin: Stored OVMS device PIN, appended to PIN-sensitive
+                commands (e.g. valet/unvalet) when present
+            pin_allowed: Whether the configured MQTT transport is verified TLS,
+                gating PIN usage to avoid sending it over plaintext
         """
         self._attr_unique_id = unique_id
         # Use the entity_id compatible name for internal use
@@ -127,6 +152,8 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
         self._command_function = command_function
         # Store switch configuration for controllable metrics
         self._switch_config = switch_config or {}
+        self._default_pin = normalize_lock_pin(default_pin)
+        self._pin_allowed = pin_allowed
 
         # Determine switch type and attributes
         self._determine_switch_type()
@@ -303,14 +330,37 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
 
         if self._switch_config.get(command_key):
             command = self._switch_config[command_key]
-            _LOGGER.debug(
-                "Turning %s switch: %s using configured command: %s",
-                command_type,
-                self.name,
-                command,
-            )
-            # Configured commands are complete (e.g., "charge start")
-            result = await self._command_function(command=command)
+            # PIN-sensitive commands (lock/unlock/valet/unvalet) need an
+            # argument because the OVMS firmware shell registers them with
+            # min/max=1 and rejects argument-less calls with "Usage: ...".
+            # Use the stored PIN when present (and only over verified TLS, to
+            # match the lock entity's gate); otherwise fall back to a neutral
+            # placeholder so the shell accepts the command. Vehicle modules
+            # that ignore the PIN value (e.g. Fiat 500e for valet) will
+            # execute the command; modules that validate the PIN will reject
+            # it cleanly and we surface that via _warn_if_command_failed.
+            pin_parameter = self._resolve_command_pin(command)
+            if pin_parameter is not None:
+                _LOGGER.debug(
+                    "Turning %s switch: %s using configured command: %s "
+                    "(PIN parameter appended)",
+                    command_type,
+                    self.name,
+                    command,
+                )
+                result = await self._command_function(
+                    command=command,
+                    parameters=pin_parameter,
+                )
+            else:
+                _LOGGER.debug(
+                    "Turning %s switch: %s using configured command: %s",
+                    command_type,
+                    self.name,
+                    command,
+                )
+                # Configured commands are complete (e.g., "charge start")
+                result = await self._command_function(command=command)
         else:
             # Fallback to legacy behavior with derived command + parameter
             command = self._derive_command()
@@ -327,6 +377,7 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
             )
 
         if result["success"]:
+            self._warn_if_command_failed(command, result.get("response"))
             self._attr_is_on = command_type == "on"
             self.async_write_ha_state()
         else:
@@ -336,6 +387,61 @@ class OVMSSwitch(SwitchEntity, RestoreEntity):
                 self.name,
                 result.get("error"),
             )
+
+    def _resolve_command_pin(self, command: str) -> str | None:
+        """Return the PIN argument to append to the command, or None.
+
+        For PIN-sensitive commands (lock/unlock/valet/unvalet) the OVMS shell
+        requires exactly one argument. Prefer the user's stored PIN when one
+        is configured over verified TLS; otherwise fall back to a neutral
+        placeholder so the shell still accepts the command. Non-PIN commands
+        (charge/climate) get no parameter from here.
+        """
+        if not command:
+            return None
+
+        first_token = command.split(maxsplit=1)[0].lower()
+        if first_token not in PIN_SENSITIVE_COMMANDS:
+            return None
+
+        if self._pin_allowed and self._default_pin:
+            return self._default_pin
+
+        return OVMS_PIN_PLACEHOLDER
+
+    def _warn_if_command_failed(self, command: str, response: object) -> None:
+        """Log a hint when OVMS reports a failure for a PIN-sensitive command.
+
+        OVMS replies with "Usage: ..." when a required argument is missing
+        (should not happen now that we always send a PIN argument) or with
+        "Error: ..." when the vehicle module rejected the command — most
+        commonly a PIN mismatch. The MQTT round-trip is still reported as
+        success, so the switch toggles optimistically; this warning is the
+        only signal a user gets that the vehicle ignored the command.
+        """
+        if not isinstance(response, str):
+            return
+
+        normalized = response.strip()
+        if not (
+            normalized.startswith(LOCK_COMMAND_USAGE_PREFIX)
+            or normalized.startswith(LOCK_COMMAND_ERROR_PREFIX)
+        ):
+            return
+
+        first_token = command.split(maxsplit=1)[0].lower() if command else ""
+        if first_token not in PIN_SENSITIVE_COMMANDS:
+            return
+
+        _LOGGER.warning(
+            "OVMS rejected '%s' on switch %s: %s. The vehicle module likely "
+            "requires a valid PIN. Configure a stored PIN over a verified "
+            "TLS connection (mqtts:// or wss://) in the integration options "
+            "to enable PIN-protected commands.",
+            command,
+            self.name,
+            normalized,
+        )
 
     async def async_turn_on(self, **kwargs: object) -> None:
         """Turn the switch on."""

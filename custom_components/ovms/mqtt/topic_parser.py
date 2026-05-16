@@ -329,17 +329,12 @@ class TopicParser:
         if self._should_be_binary_sensor(parts, metric_path):
             return "binary_sensor"
 
-        # Check for commands/switches
-        if "command" in parts or any(
-            switch_pattern in "_".join(parts).lower()
-            for switch_pattern in [
-                "switch",
-                "toggle",
-                "set",
-                "enable",
-                "disable",
-            ]
-        ):
+        # Check for commands/switches.
+        # Match parts exactly rather than as substrings; otherwise topic
+        # names like "cabinsetpoint" or "reset" would falsely match "set"
+        # and be created as switches instead of numeric sensors.
+        switch_keywords = {"switch", "toggle", "set", "enable", "disable"}
+        if "command" in parts or any(part.lower() in switch_keywords for part in parts):
             return "switch"
 
         # GPS metrics should be sensors
