@@ -257,16 +257,25 @@ The default blacklist now also includes `event`, which blocks high-frequency eve
 - `gps.log` - Blocks GPS log specific topics
 - `xrt.log` - Blocks Renault Twizy specific log topics
 
-### Lock PIN Behavior
+### PIN Behavior
 
-The native Home Assistant lock entity supports OVMS lock and unlock commands.
+The native Home Assistant lock entity supports OVMS lock and unlock commands. The same stored PIN is also automatically applied to the valet/unvalet switch when present.
 
-- The stored lock PIN option is only shown when using a verified secure MQTT connection (`mqtts://` or `wss://` with certificate verification enabled).
-- If you save a stored lock PIN in the integration options, the Home Assistant lock dialog can be left blank and the stored value will be used as a fallback.
-- If you do not save a stored lock PIN, Home Assistant will require you to enter one when using the lock entity.
-- OVMS itself registers `lock` and `unlock` as commands that take one PIN argument. Some vehicle modules validate that PIN, while others ignore it. If your vehicle does not actually validate the PIN, you may still need to configure a simple placeholder value so the command has the required argument. A value like `nopin` is a safe example.
+OVMS firmware registers `lock`, `unlock`, `valet` and `unvalet` as commands that take **exactly one** PIN argument — the firmware shell rejects argument-less calls with `Usage: ...`. Some vehicle modules validate that argument as a real PIN, while others (notably Fiat 500e, where `valet` is repurposed as a climate-control trigger) ignore the value entirely.
+
+**Lock entity:**
+- The stored PIN option is only shown when using a verified secure MQTT connection (`mqtts://` or `wss://` with certificate verification enabled).
+- If you save a stored PIN in the integration options, the Home Assistant lock dialog can be left blank and the stored value will be used as a fallback.
+- If you do not save a stored PIN, Home Assistant will require you to enter one when using the lock entity.
+- If your vehicle does not actually validate the PIN, you can configure a simple placeholder value (e.g. `nopin`) so the command has the required argument.
+
+**Valet/unvalet switch:**
+- Home Assistant switches cannot prompt for a code per toggle, so the integration uses the stored PIN automatically when one is configured (over verified TLS).
+- If no stored PIN is configured, the integration sends the placeholder `nopin` so the OVMS shell accepts the command. This is enough for vehicles that ignore the PIN value (e.g. Fiat 500e — valet engages climate control). Vehicles that *validate* the PIN will reject the command; the integration logs a warning when OVMS replies with `Error: ...` or `Usage: ...` so the failure is visible in your Home Assistant log.
+
+**General:**
 - PIN values cannot contain spaces or other whitespace.
-- The lock PIN is stored in Home Assistant's config entry storage (`.storage/core.config_entries`). Home Assistant does not encrypt config entries at rest. The PIN is masked in the UI and redacted in logs, but be aware it is stored in plaintext on disk, as is standard for all HA integration credentials.
+- The PIN is stored in Home Assistant's config entry storage (`.storage/core.config_entries`). Home Assistant does not encrypt config entries at rest. The PIN is masked in the UI and redacted in logs, but be aware it is stored in plaintext on disk, as is standard for all HA integration credentials.
 
 ### Testing Configuration
 
