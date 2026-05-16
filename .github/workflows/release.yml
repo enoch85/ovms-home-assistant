@@ -12,6 +12,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          # Need full history + all tags so we can compute the previous tag
+          # for --notes-start-tag below.
+          fetch-depth: 0
 
       - name: Prepare Release Assets
         run: |
@@ -25,6 +29,61 @@ jobs:
           cd release
           zip -r ../ovms.zip .
 
+      - name: Build release notes
+        env:
+          tag: ${{ github.ref_name }}
+          repo: ${{ github.repository }}
+        run: |
+          # Pick the previous tag to diff against.
+          # - betas: most recent tag of any kind, so beta3 compares to beta2
+          #   instead of falling back to the last stable (which is what GH's
+          #   --generate-notes does by default, making every beta look the
+          #   same and miss the actual delta).
+          # - stables: most recent stable, so users see the full "what
+          #   shipped since v1.6.3" picture.
+          if [[ "$tag" == *-beta* ]]; then
+            prev=$(git tag --sort=-v:refname | grep -v "^${tag}$" | head -n 1)
+          else
+            prev=$(git tag --sort=-v:refname \
+              | grep -v "^${tag}$" \
+              | grep -vE -- '-(alpha|beta|rc)' \
+              | head -n 1)
+          fi
+          echo "Previous tag for diff: ${prev:-<none>}"
+
+          # Render the body via git log over prev..tag. This is the source
+          # of truth for what the tag actually contains, which matters for:
+          # - betas tagged from feature branches (still-open PRs)
+          # - direct-to-main commits (GH's PR-centric --generate-notes
+          #   silently drops these)
+          # Squash-merged PRs already carry "(#N)" in the subject and render
+          # as clickable references on GitHub.
+          {
+            if [[ "$tag" == *-beta* ]]; then
+              echo "🔬 **This is a beta release and may contain bugs or incomplete features**"
+              echo ""
+            fi
+            echo "## What's Changed"
+            echo ""
+            if [[ -n "$prev" ]]; then
+              git log --no-merges --pretty=format:"* %s (%h)" "${prev}..${tag}" \
+                | grep -v "Release.*of.*OVMS Home Assistant" \
+                | grep -v "Bump version" \
+                | head -n 30
+            else
+              git log --no-merges --pretty=format:"* %s (%h)" -n 10 "${tag}"
+            fi
+            echo ""
+            echo ""
+            if [[ -n "$prev" ]]; then
+              echo "**Full Changelog**: https://github.com/${repo}/compare/${prev}...${tag}"
+            fi
+          } > release_notes.md
+
+          echo "----- release_notes.md -----"
+          cat release_notes.md
+          echo "----------------------------"
+
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -34,14 +93,14 @@ jobs:
             gh release create "$tag" \
                 --repo="$GITHUB_REPOSITORY" \
                 --title="OVMS Home Assistant $tag" \
-                --generate-notes \
+                --notes-file release_notes.md \
                 --prerelease \
                 ovms.zip#"OVMS Home Assistant $tag"
           else
             gh release create "$tag" \
                 --repo="$GITHUB_REPOSITORY" \
                 --title="OVMS Home Assistant $tag" \
-                --generate-notes \
+                --notes-file release_notes.md \
                 --latest \
                 ovms.zip#"OVMS Home Assistant $tag"
           fi
