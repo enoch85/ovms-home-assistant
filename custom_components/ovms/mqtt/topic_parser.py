@@ -68,6 +68,28 @@ class TopicParser:
             vehicle_id = self.config.get("vehicle_id", "")
             return f"{prefix}/{vehicle_id}"
 
+    def is_per_client_topic(self, topic: str) -> bool:
+        """Return True if ``topic`` lives in the per-client subtree.
+
+        Per OVMS MQTT conventions the path after the structure prefix uses
+        ``client/`` for per-client state — commands, responses, requests, and
+        config queries. Other OVMS clients (mobile apps, second HA instances,
+        shared-vehicle users) publish under client/{their_client_id}/... and
+        must be excluded from entity discovery, cache, and dispatch. See
+        issue #216.
+        """
+        if topic.startswith(self.structure_prefix):
+            suffix = topic[len(self.structure_prefix) :].lstrip("/")
+        else:
+            vehicle_id = self.config.get("vehicle_id", "")
+            if not vehicle_id:
+                return False
+            marker = f"/{vehicle_id}/"
+            if marker not in topic:
+                return False
+            suffix = topic.split(marker, 1)[1]
+        return suffix.startswith("client/") or suffix == "client"
+
     def parse_topic(self, topic: str, payload: str) -> EntityData | None:
         """Parse a topic to determine the entity type and info."""
         try:
@@ -136,12 +158,14 @@ class TopicParser:
             if len(parts) < 2:
                 return None
 
-            # Check if this is a command/response/request topic - don't create entities for these
-            if (
-                "client/rr/command" in topic_suffix
-                or "client/rr/response" in topic_suffix
-                or "/request/" in topic_suffix
-            ):
+            # Skip the entire /client/ subtree - per OVMS MQTT conventions it is
+            # reserved for per-client state (commands at client/rr/command,
+            # responses at client/rr/response, and per-client request/config
+            # paths at client/{client_id}/...). Other OVMS clients (e.g. the
+            # OVMS Connect mobile app, a second HA instance, shared-vehicle
+            # users) publish under client/{their_client_id}/... and would
+            # otherwise be discovered as bogus entities. See issue #216.
+            if parts[0] == "client":
                 return None
 
             # Handle vendor-specific prefixes (like xvu, xsq, xmg, xnl)

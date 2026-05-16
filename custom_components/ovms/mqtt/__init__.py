@@ -129,6 +129,28 @@ class OVMSMQTTClient:
         """Handle message received from MQTT broker."""
         self.message_count += 1
 
+        # Check if this is a command response and route it to the command handler
+        # This ensures command responses (client/rr/response/*) are properly
+        # routed to complete pending command futures instead of being treated
+        # as regular entity data. Done before the per-client filter below so
+        # our own responses still reach the handler.
+        if "client/rr/response" in topic:
+            _LOGGER.debug("Routing command response topic: %s", topic)
+            self.command_handler.process_response(topic, payload)
+            return
+
+        # Drop the rest of the /client/ subtree before any state is recorded.
+        # Other OVMS clients (the OVMS Connect mobile app, a second HA
+        # instance, shared-vehicle users) publish presence and per-client
+        # state under client/{their_client_id}/... — these are not vehicle
+        # metrics and must not pollute topic_cache, discovered_topics, the
+        # GPS-quality scan, or entity discovery. Filtering here also keeps
+        # the startup metric-request gate in _async_platforms_loaded honest:
+        # `if not self.discovered_topics` must only see real vehicle data.
+        # See issue #216.
+        if self.topic_parser.is_per_client_topic(topic):
+            return
+
         # Store in topic cache
         self.topic_cache[topic] = {
             "payload": payload,
@@ -137,15 +159,6 @@ class OVMSMQTTClient:
 
         # Add to discovered topics
         self.discovered_topics.add(topic)
-
-        # Check if this is a command response and route it to the command handler
-        # This ensures command responses (client/rr/response/*) are properly
-        # routed to complete pending command futures instead of being treated
-        # as regular entity data
-        if "client/rr/response" in topic:
-            _LOGGER.debug("Routing command response topic: %s", topic)
-            self.command_handler.process_response(topic, payload)
-            return
 
         # Track GPS quality topics for location accuracy
         if any(
