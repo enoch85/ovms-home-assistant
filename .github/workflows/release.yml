@@ -12,6 +12,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          # Need full history + all tags so we can compute the previous tag
+          # for --notes-start-tag below.
+          fetch-depth: 0
 
       - name: Prepare Release Assets
         run: |
@@ -25,6 +29,79 @@ jobs:
           cd release
           zip -r ../ovms.zip .
 
+      - name: Build release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+          repo: ${{ github.repository }}
+        run: |
+          # Pick the previous tag to diff against.
+          # - betas: most recent tag of any kind, so beta3 compares to beta2
+          #   instead of falling back to the last stable (which is what GH's
+          #   --generate-notes does by default, making every beta look the
+          #   same and miss the actual delta).
+          # - stables: most recent stable, so users see the full "what
+          #   shipped since v1.6.3" picture for production upgrades.
+          if [[ "$tag" == *-beta* ]]; then
+            prev=$(git tag --sort=-v:refname | grep -v "^${tag}$" | head -n 1)
+          else
+            prev=$(git tag --sort=-v:refname \
+              | grep -v "^${tag}$" \
+              | grep -vE -- '-(alpha|beta|rc)' \
+              | head -n 1)
+          fi
+          echo "Previous tag for diff: ${prev:-<none>}"
+
+          if [[ "$tag" == *-beta* ]]; then
+            # Betas: render from git log directly. GH's PR-centric generator
+            # silently drops two cases that matter for betas:
+            # - direct-to-main commits (no PR)
+            # - feature-branch commits whose PR is still open
+            # Squash-merged PRs already carry "(#N)" in the subject and
+            # render as clickable references on GitHub.
+            {
+              echo "🔬 **This is a beta release and may contain bugs or incomplete features**"
+              echo ""
+              echo "## What's Changed"
+              echo ""
+              if [[ -n "$prev" ]]; then
+                git log --no-merges --pretty=format:"* %s (%h)" "${prev}..${tag}" \
+                  | grep -v "Release.*of.*OVMS Home Assistant" \
+                  | grep -v "Bump version" \
+                  | head -n 30
+              else
+                git log --no-merges --pretty=format:"* %s (%h)" -n 10 "${tag}"
+              fi
+              echo ""
+              echo ""
+              if [[ -n "$prev" ]]; then
+                echo "**Full Changelog**: https://github.com/${repo}/compare/${prev}...${tag}"
+              fi
+            } > release_notes.md
+          else
+            # Stable releases: ship GitHub's auto-generated notes (PR titles,
+            # @contributor attribution, "New Contributors" section, links).
+            # This is what users want to read for a production upgrade, and
+            # since stable releases only ever contain main-merged PRs the
+            # PR-centric generator is accurate here. We still anchor with
+            # --previous_tag_name so it compares to the previous *stable*
+            # instead of whatever GH's default heuristic picks.
+            if [[ -n "$prev" ]]; then
+              gh api -X POST "/repos/${repo}/releases/generate-notes" \
+                -f tag_name="${tag}" \
+                -f previous_tag_name="${prev}" \
+                --jq '.body' > release_notes.md
+            else
+              gh api -X POST "/repos/${repo}/releases/generate-notes" \
+                -f tag_name="${tag}" \
+                --jq '.body' > release_notes.md
+            fi
+          fi
+
+          echo "----- release_notes.md -----"
+          cat release_notes.md
+          echo "----------------------------"
+
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -34,14 +111,14 @@ jobs:
             gh release create "$tag" \
                 --repo="$GITHUB_REPOSITORY" \
                 --title="OVMS Home Assistant $tag" \
-                --generate-notes \
+                --notes-file release_notes.md \
                 --prerelease \
                 ovms.zip#"OVMS Home Assistant $tag"
           else
             gh release create "$tag" \
                 --repo="$GITHUB_REPOSITORY" \
                 --title="OVMS Home Assistant $tag" \
-                --generate-notes \
+                --notes-file release_notes.md \
                 --latest \
                 ovms.zip#"OVMS Home Assistant $tag"
           fi
