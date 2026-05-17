@@ -248,65 +248,37 @@ function generate_release_notes {
     # There are actual changes, generate meaningful release notes
     echo "## Changes" >> "$release_notes_file"
     echo "" >> "$release_notes_file"
-    
-    # Try to get meaningful changes using different methods
+
     local have_changes=false
-    
-    # 1. Try GitHub PR data if available
-    if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
-        debug_log "Attempting to get merged PRs using GitHub CLI"
-        
-        if [[ -n "$prev_tag" ]]; then
-            # Get previous tag commit date
-            local prev_date=$(git log -1 --format=%aI "$prev_tag")
-            debug_log "Previous tag ($prev_tag) date: $prev_date"
-            
-            # Get and process PRs merged since previous tag
-            if prs=$(gh pr list --state merged --base main --json number,title,mergedAt --limit 15 2>/dev/null); then
-                debug_log "Successfully retrieved PRs from GitHub"
-                
-                # Filter to PRs merged after previous tag
-                if [[ "$(command -v jq)" && -n "$prs" && "$prs" != "[]" ]]; then
-                    # Use jq if available
-                    local filtered_prs=$(echo "$prs" | jq -r --arg date "$prev_date" '.[] | select(.mergedAt > $date) | "* " + .title + " (#" + (.number|tostring) + ")"')
-                    
-                    if [[ -n "$filtered_prs" ]]; then
-                        echo "$filtered_prs" >> "$release_notes_file"
-                        have_changes=true
-                        debug_log "Added PR information to release notes"
-                    fi
-                fi
-            else
-                debug_log "Could not retrieve PRs from GitHub"
-            fi
-        fi
+
+    # Source of truth is git log over the range that the new tag will actually
+    # contain — `prev_tag..HEAD`. This is correct for both main-based releases
+    # (commits == squash-merged PRs since prev_tag) and beta releases tagged
+    # from a feature branch (commits include the branch's still-open work,
+    # which `gh pr list --state merged --base main` cannot see).
+    debug_log "Collecting commits via git log ${prev_tag:-(no previous tag)}..HEAD"
+    local commits
+    if [[ -n "$prev_tag" ]]; then
+        commits=$(git log --no-merges --pretty=format:"* %s (%h)" "$prev_tag..HEAD")
     else
-        debug_log "GitHub CLI not available or not authenticated"
+        commits=$(git log --no-merges --pretty=format:"* %s (%h)" -n 10)
     fi
-    
-    # 2. If we don't have changes yet, use git log to find meaningful commits
-    if [[ "$have_changes" != "true" ]]; then
-        debug_log "Using git log to find meaningful commits"
-        
-        # Get non-merge commits since previous tag (or all if no previous tag)
-        local commits
-        if [[ -n "$prev_tag" ]]; then
-            commits=$(git log --no-merges --pretty=format:"* %s (%h)" "$prev_tag..HEAD")
-        else
-            commits=$(git log --no-merges --pretty=format:"* %s (%h)" -n 10)
-        fi
-        
-        # Filter out automated version bump commits
-        local meaningful_commits=$(echo "$commits" | grep -v "Release.*of.*${MAIN_NAME}" | grep -v "Bump version" | head -n 10)
-        
-        if [[ -n "$meaningful_commits" ]]; then
-            echo "$meaningful_commits" >> "$release_notes_file"
-            have_changes=true
-            debug_log "Added commits to release notes"
-        fi
+
+    # Drop the automated version-bump commits this script writes on each
+    # release ("Release vX of OVMS Home Assistant") and any "Bump version"
+    # housekeeping, then cap at 10 lines so the notes stay readable.
+    local meaningful_commits=$(echo "$commits" \
+        | grep -v "Release.*of.*${MAIN_NAME}" \
+        | grep -v "Bump version" \
+        | head -n 10)
+
+    if [[ -n "$meaningful_commits" ]]; then
+        echo "$meaningful_commits" >> "$release_notes_file"
+        have_changes=true
+        debug_log "Added $(echo "$meaningful_commits" | wc -l) commit(s) to release notes"
     fi
-    
-    # 3. If still no changes found, add a fallback message
+
+    # Final fallback if we somehow have no usable commits
     if [[ "$have_changes" != "true" ]]; then
         echo "* Minor updates and improvements" >> "$release_notes_file"
         debug_log "No specific changes found, using generic message"
