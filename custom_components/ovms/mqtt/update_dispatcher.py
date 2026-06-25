@@ -1,17 +1,16 @@
 """Update dispatcher for OVMS integration."""
 
 import logging
-import time
-from typing import Any, Dict, Optional, Set, List
+from typing import Any, Dict, Optional
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.util import dt as dt_util
 
 from ..const import (
     CONF_CLIENT_ID,
     CONF_CONFIG_ENTRY_ID,
     CONF_VEHICLE_ID,
+    GPS_COALESCE_WINDOW,
     LOGGER_NAME,
     SIGNAL_UPDATE_ENTITY,
     DOMAIN,
@@ -36,13 +35,12 @@ class UpdateDispatcher:
         self.hass = hass
         self.entity_registry = entity_registry
         self.attribute_manager = attribute_manager
-        self.last_location_update = {}  # Track when location was last updated
         self.location_values = {}  # Store current location values
-        self._coordinate_generation = {"latitude": 0, "longitude": 0}
-        self._last_dispatched_coordinate_generation = {
-            "latitude": 0,
-            "longitude": 0,
-        }
+        # Pending one-shot timer that flushes a coalesced lat/lon pair. OVMS
+        # publishes latitude and longitude as two separate messages; we buffer
+        # them for GPS_COALESCE_WINDOW so the tracker writes one consistent
+        # position instead of a half-updated pair. See issues #203 and #223.
+        self._location_flush_handle = None
         self._config = config or {}
         self._device_identifier = get_ovms_device_identifier(
             self._config.get(CONF_CLIENT_ID),
@@ -167,8 +165,6 @@ class UpdateDispatcher:
     def _handle_location_update(self, topic: str, entity_id: str, payload: Any) -> None:
         """Handle updates to location topics."""
         try:
-            now = dt_util.utcnow().timestamp()
-
             # Extract latitude/longitude values if applicable
             is_latitude = any(
                 keyword in topic.lower() for keyword in ["latitude", "lat"]
@@ -187,26 +183,58 @@ class UpdateDispatcher:
                 )
                 return
 
-            # Update our location values cache
+            # Update our location values cache. We do NOT push to the device
+            # tracker yet: latitude and longitude arrive as two separate
+            # messages, so emitting now would write a half-updated pair (new
+            # latitude + stale longitude) - the right-angle artifact from
+            # issue #203. Instead we buffer briefly and flush the latest pair.
             if is_latitude:
                 self.location_values["latitude"] = coordinate
-                self.last_location_update["latitude"] = now
-                self._coordinate_generation["latitude"] += 1
             elif is_longitude:
                 self.location_values["longitude"] = coordinate
-                self.last_location_update["longitude"] = now
-                self._coordinate_generation["longitude"] += 1
 
-            # Only update device trackers if we have both latitude and longitude
-            if (
-                "latitude" in self.location_values
-                and "longitude" in self.location_values
-                and self._has_fresh_coordinate_pair()
-            ):
-                self._update_all_device_trackers()
+            self._schedule_location_flush()
 
         except Exception as ex:
             _LOGGER.exception("Error handling location update: %s", ex)
+
+    def _schedule_location_flush(self) -> None:
+        """Schedule a one-shot flush of the buffered lat/lon pair.
+
+        Coalesces the separate latitude and longitude messages of a single GPS
+        fix into one device-tracker update. A flush is scheduled at most once
+        per GPS_COALESCE_WINDOW; coordinates arriving inside the window simply
+        refresh location_values so the flush always emits the most recent pair.
+        This both prevents half-updated pairs (issue #203) and stops single-axis
+        movement from being dropped (issue #223), since the flush fires on any
+        coordinate change rather than requiring both axes to change.
+        """
+        if self._location_flush_handle is not None:
+            return
+
+        loop = getattr(self.hass, "loop", None)
+        if loop is None:
+            # No event loop available (should not happen in production); emit
+            # immediately so behaviour degrades gracefully instead of stalling.
+            self._flush_location()
+            return
+
+        self._location_flush_handle = loop.call_later(
+            GPS_COALESCE_WINDOW, self._flush_location
+        )
+
+    @callback
+    def _flush_location(self) -> None:
+        """Emit the buffered lat/lon pair to the device trackers."""
+        self._location_flush_handle = None
+        if "latitude" in self.location_values and "longitude" in self.location_values:
+            self._update_all_device_trackers()
+
+    def async_shutdown(self) -> None:
+        """Cancel any pending location flush on teardown."""
+        if self._location_flush_handle is not None:
+            self._location_flush_handle.cancel()
+            self._location_flush_handle = None
 
     def _handle_version_update(self, topic: str, entity_id: str, payload: str) -> None:
         """Handle updates to version topics with special priority."""
@@ -399,18 +427,5 @@ class UpdateDispatcher:
                 if topic == "combined_location":
                     self._update_entity(tracker_id, payload)
 
-            self._last_dispatched_coordinate_generation = (
-                self._coordinate_generation.copy()
-            )
-
         except Exception as ex:
             _LOGGER.exception("Error updating device trackers: %s", ex)
-
-    def _has_fresh_coordinate_pair(self) -> bool:
-        """Return True when both coordinates have arrived since the last dispatch."""
-        return (
-            self._coordinate_generation["latitude"]
-            > self._last_dispatched_coordinate_generation["latitude"]
-            and self._coordinate_generation["longitude"]
-            > self._last_dispatched_coordinate_generation["longitude"]
-        )

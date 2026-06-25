@@ -345,6 +345,10 @@ class OVMSMQTTClient:
         if hasattr(self, "staleness_manager"):
             await self.staleness_manager.async_shutdown()
 
+        # Cancel any pending GPS coalescing timer
+        if hasattr(self, "update_dispatcher"):
+            self.update_dispatcher.async_shutdown()
+
         await self.connection_manager.async_shutdown()
 
     def get_gps_accuracy(self, vehicle_id: Optional[str] = None) -> Optional[float]:
