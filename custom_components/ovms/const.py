@@ -348,6 +348,31 @@ MAX_STATE_LENGTH = 255
 GPS_ACCURACY_MIN_METERS = 5  # Minimum accuracy floor in meters
 GPS_ACCURACY_MAX_METERS = 100  # Maximum accuracy value (poorest quality)
 
+# GPS coordinate coalescing window (seconds)
+# OVMS publishes v.p.latitude and v.p.longitude as two SEPARATE MQTT messages,
+# emitted together within the same server transmission (typically <100 ms apart).
+# The device tracker needs both halves of a fix before it writes a position,
+# otherwise it either records a half-updated pair (new lat + stale lon = a
+# right-angle "blocky" artifact, issue #203) or, when only one axis changes
+# between fixes (e.g. driving due east only moves longitude), drops the update
+# entirely (sparse points joined by straight lines, issue #223).
+# We buffer incoming coordinates for this window and then emit the latest
+# lat/lon pair once. The window must be longer than the inter-message gap of a
+# single fix so the pair coalesces into one point, yet shorter than the GPS
+# publish interval when moving so consecutive fixes stay distinct.
+# 1.0 s sits comfortably above the ~100 ms intra-fix gap (with generous margin
+# for slow cellular links that could split the pair) and below the typical
+# >=1 s cellular MQTT location publish interval. Erring on the longer side is
+# deliberate: a merged point is invisible on the map, whereas a half-updated
+# pair is the exact right-angle artifact we are eliminating, and <=1 s of map
+# latency is irrelevant for a vehicle tracker.
+GPS_COALESCE_WINDOW = 1.0  # seconds
+
+# Minimum coordinate delta (degrees) before a position counts as moved.
+# 0.00001 deg ~= 1.1 m at the equator; smaller deltas are GPS jitter and would
+# only add redundant history points that make the map track look noisy.
+GPS_COORDINATE_DEADBAND = 0.00001
+
 
 def truncate_state_value(
     value: object, max_length: int = MAX_STATE_LENGTH

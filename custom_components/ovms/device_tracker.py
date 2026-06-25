@@ -14,6 +14,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
     DOMAIN,
+    GPS_COORDINATE_DEADBAND,
     LOGGER_NAME,
     SIGNAL_UPDATE_ENTITY,
     get_add_entities_signal,
@@ -236,8 +237,10 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                             if (
                                 self._prev_latitude is None
                                 or self._prev_longitude is None
-                                or abs(lat - self._prev_latitude) > 0.00001
-                                or abs(lon - self._prev_longitude) > 0.00001
+                                or abs(lat - self._prev_latitude)
+                                > GPS_COORDINATE_DEADBAND
+                                or abs(lon - self._prev_longitude)
+                                > GPS_COORDINATE_DEADBAND
                             ):
 
                                 coordinates_changed = True
@@ -267,7 +270,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                     if -90 <= lat <= 90:
                         if (
                             self._prev_latitude is None
-                            or abs(lat - self._prev_latitude) > 0.00001
+                            or abs(lat - self._prev_latitude) > GPS_COORDINATE_DEADBAND
                         ):
                             coordinates_changed = True
                             self._latitude = lat
@@ -286,7 +289,7 @@ class OVMSDeviceTracker(TrackerEntity, RestoreEntity):
                     if -180 <= lon <= 180:
                         if (
                             self._prev_longitude is None
-                            or abs(lon - self._prev_longitude) > 0.00001
+                            or abs(lon - self._prev_longitude) > GPS_COORDINATE_DEADBAND
                         ):
                             coordinates_changed = True
                             self._longitude = lon

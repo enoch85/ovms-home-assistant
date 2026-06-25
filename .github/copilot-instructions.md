@@ -204,6 +204,11 @@ Release script:
 - Generates changelog from commits
 - Creates GitHub release with artifacts
 
+### Git & PR Conventions
+
+- **No AI attribution.** Do NOT add Claude Code / "Generated with" / "Co-authored-by: Claude" or any other AI-tool attribution to commit messages, PR descriptions, or issue comments. Write them in a normal contributor voice.
+- Keep commit messages focused on the change and its reasoning (reference issue numbers, e.g. `Fixes #223`).
+
 ## Integration Points
 
 ### MQTT Protocol
