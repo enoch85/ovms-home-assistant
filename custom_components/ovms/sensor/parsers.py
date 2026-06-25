@@ -75,6 +75,46 @@ def calculate_median(values: List[float]) -> Optional[float]:
     return sorted_values[n // 2]
 
 
+def parse_labeled_vector(
+    payload: Any, labels: List[str], state_label: str
+) -> tuple[Optional[Any], Dict[str, Any]]:
+    """Parse a fixed-position CSV vector into a state value and named attributes.
+
+    Some OVMS metrics are published as comma-separated vectors where each
+    position has a distinct meaning rather than being a sample of the same
+    quantity - e.g. ``xsq.bms.contactor.cycles`` is
+    ``[max, now, consumed, diff, cycles_last_hour]``. Averaging such a vector
+    (the default comma handling) is meaningless, so a metric definition can
+    declare ``vector_attributes`` (the ordered position labels) and
+    ``vector_state`` (the label whose value is the sensor's main state). This
+    maps each position to its label and returns the chosen element as the state.
+
+    Args:
+        payload: Comma-separated values from the metric topic.
+        labels: Ordered labels, one per vector position.
+        state_label: The label whose value becomes the sensor state.
+
+    Returns:
+        Tuple of (state_value, {label: value}). state_value is None and the
+        dict is empty when the payload is not a usable CSV vector.
+    """
+    if not isinstance(payload, str) or "," not in payload:
+        return None, {}
+
+    parts = [p.strip() for p in payload.split(",")]
+    attributes: Dict[str, Any] = {}
+    for index, label in enumerate(labels):
+        if index >= len(parts) or parts[index] == "":
+            continue
+        try:
+            number = float(parts[index])
+            attributes[label] = int(number) if number.is_integer() else number
+        except ValueError:
+            attributes[label] = parts[index]
+
+    return attributes.get(state_label), attributes
+
+
 def parse_comma_separated_values(
     value: str,
     entity_name: str = "",

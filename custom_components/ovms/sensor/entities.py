@@ -25,6 +25,7 @@ from ..const import (
 )
 from .parsers import (
     parse_value,
+    parse_labeled_vector,
     process_json_payload,
     requires_numeric_value,
     is_special_state_value,
@@ -490,19 +491,20 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_extra_state_attributes.get("original_state_class")
             or self._attr_state_class
         )
-        self._parsed_value = parse_value(
-            initial_state,
-            device_class_for_parsing,
-            state_class_for_parsing,
-            self._is_cell_sensor,
-        )
+        if not self._try_parse_vector(initial_state):
+            self._parsed_value = parse_value(
+                initial_state,
+                device_class_for_parsing,
+                state_class_for_parsing,
+                self._is_cell_sensor,
+            )
 
-        # Format the value
-        self._attr_native_value = format_sensor_value(
-            self._parsed_value,
-            device_class_for_parsing,
-            self._attr_extra_state_attributes,
-        )
+            # Format the value
+            self._attr_native_value = format_sensor_value(
+                self._parsed_value,
+                device_class_for_parsing,
+                self._attr_extra_state_attributes,
+            )
 
         # Extract additional attributes
         if (
@@ -637,6 +639,13 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 or self._attr_state_class
             )
 
+            # Fixed-position vector metrics (e.g. contactor cycles) carry a
+            # distinct meaning per element; handle them before the generic
+            # comma-averaging so the state is the chosen element, not a mean.
+            if self._try_parse_vector(payload):
+                self.async_write_ha_state()
+                return
+
             self._parsed_value = parse_value(
                 payload,
                 device_class_for_parsing,
@@ -683,6 +692,32 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     update_state,
                 )
             )
+
+    def _try_parse_vector(self, payload: Any) -> bool:
+        """Apply config-driven vector handling if the metric declares it.
+
+        A metric definition can declare ``vector_attributes`` (ordered labels,
+        one per CSV position) and ``vector_state`` (the label whose value is the
+        sensor state). When present and the payload is a usable CSV vector, the
+        chosen element becomes the native value and every labelled element is
+        exposed as an attribute. Returns True when it handled the payload, so
+        the caller skips the default comma-averaging. No-op (returns False) for
+        every metric that doesn't declare a vector, so existing sensors are
+        unaffected. See OVMS metric xsq.bms.contactor.cycles and issue #224.
+        """
+        labels = self._attr_extra_state_attributes.get("vector_attributes")
+        state_label = self._attr_extra_state_attributes.get("vector_state")
+        if not labels or not state_label:
+            return False
+
+        state_value, vector_attrs = parse_labeled_vector(payload, labels, state_label)
+        if state_value is None:
+            return False
+
+        self._parsed_value = state_value
+        self._attr_native_value = state_value
+        self._attr_extra_state_attributes.update(vector_attrs)
+        return True
 
     def _handle_cell_values(self, payload: str) -> None:
         """Handle cell values in payload."""

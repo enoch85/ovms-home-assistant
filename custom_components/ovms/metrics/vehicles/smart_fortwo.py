@@ -27,6 +27,18 @@ METRIC_PREFIX = "xse."
 
 # Smart ForTwo specific metrics
 SMART_FORTWO_METRICS = {
+    "xsq.12v.trickle.count": {
+        "name": "Smart ForTwo 12V Trickle Charge Cycles 24h",
+        "description": (
+            "Number of 12V battery trickle-charge cycles in the last 24 hours "
+            "(Smart 453). Frequent trickle charging can indicate a weak 12V "
+            "battery. Requires OVMS firmware 3.3.006+."
+        ),
+        "icon": "mdi:battery-clock",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": "cycles",
+        "category": "smart_fortwo",
+    },
     "xsq.bms.amp2": {
         "name": "Smart ForTwo BMS Amp2",
         "description": "BMS secondary amp measurement",
@@ -92,6 +104,26 @@ SMART_FORTWO_METRICS = {
         "unit": UnitOfElectricPotential.VOLT,
         "suggested_display_precision": 2,
         "category": "smart_fortwo",
+    },
+    "xsq.bms.contactor.cycles": {
+        "name": "Smart ForTwo HV Contactor Cycles Remaining",
+        "description": (
+            "Remaining HV battery contactor switching cycles on Smart 453. "
+            "The BMS counts down from 200000; reaching 0 leaves the car "
+            "undriveable, and a sudden large drop can signal the contactor "
+            "counter glitch. OVMS publishes xsq.bms.contactor.cycles as a "
+            "vector [max, now, consumed, diff, cycles_last_hour]; 'now' is the "
+            "remaining count and the others are exposed as attributes. "
+            "Requires OVMS firmware 3.3.006+ (see 'xsq hvcycles')."
+        ),
+        "icon": "mdi:counter",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": "cycles",
+        "category": "smart_fortwo",
+        # Heterogeneous vector: handled by the sensor's config-driven vector
+        # path so the state is the remaining count, not the mean of all five.
+        "vector_attributes": ["max", "now", "consumed", "diff", "cycles_last_hour"],
+        "vector_state": "now",
     },
     "xsq.bms.cv.range.max": {
         "name": "Smart ForTwo Cell Voltage Max",
