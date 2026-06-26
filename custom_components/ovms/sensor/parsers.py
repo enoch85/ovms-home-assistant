@@ -286,6 +286,15 @@ def parse_value(
                 return None
             return str(json_val)
 
+        # Booleans first: bool is a subclass of int, so a JSON true/false on a
+        # numeric sensor must be converted to 1/0 here. Otherwise it falls into
+        # the int/float branch below and is returned as Python True/False, which
+        # HA renders as the string "True"/"False" for a numeric sensor.
+        if isinstance(json_val, bool):
+            if requires_numeric_value(device_class, state_class):
+                return 1 if json_val else 0
+            return json_val
+
         # If JSON is a scalar, use it directly
         if isinstance(json_val, (int, float)):
             return json_val
@@ -304,12 +313,6 @@ def parse_value(
                     return float(json_val)
                 except (ValueError, TypeError):
                     return None
-            return json_val
-
-        if isinstance(json_val, bool):
-            # If we need a numeric value, convert bool to int
-            if requires_numeric_value(device_class, state_class):
-                return 1 if json_val else 0
             return json_val
 
         # For arrays or other types, convert to string if not numeric
