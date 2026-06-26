@@ -219,6 +219,7 @@ STALENESS_STATUS_ENTITY_NAME = "Staleness Status"
 VEHICLE_TOPIC_PREFIXES = {
     "xvu": "VW eUP!",
     "xsq": "Smart ForTwo",
+    "xse": "Smart ED",
     "xmg": "MG ZS-EV",
     "xnl": "Nissan Leaf",
     "xrt": "Renault Twizy",
@@ -303,6 +304,7 @@ CATEGORY_SYSTEM = "system"
 CATEGORY_TIRE = "tire"
 CATEGORY_VW_EUP = "vw_eup"
 CATEGORY_SMART_FORTWO = "smart_fortwo"
+CATEGORY_SMART_ED = "smart_ed"
 CATEGORY_MG_ZS_EV = "mg_zs_ev"
 CATEGORY_NISSAN_LEAF = "nissan_leaf"
 CATEGORY_RENAULT_TWIZY = "renault_twizy"

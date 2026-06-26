@@ -385,6 +385,16 @@ class TopicParser:
                 if hasattr(metric_info["device_class"], "__module__"):
                     return "binary_sensor" in metric_info["device_class"].__module__
 
+            # An explicit numeric sensor definition (a unit or a sensor
+            # state_class) wins over the keyword heuristic below; otherwise a
+            # metric whose topic merely contains a binary keyword (e.g. "cool"
+            # inside "cooling", or "fan") would be wrongly forced to on/off.
+            if metric_info and (
+                metric_info.get("unit") is not None
+                or metric_info.get("state_class") is not None
+            ):
+                return False
+
             # Check for binary patterns in name
             name_lower = "_".join(parts).lower()
             binary_keywords = [
@@ -472,15 +482,15 @@ class TopicParser:
     def _is_gps_metric_topic(self, parts: list[str], name: str, topic: str) -> bool:
         """Check if topic is a GPS-related metric that should be a sensor."""
         gps_keywords = ["gpshdop", "gpssq", "gpsmode", "gpsspeed", "gpstime", "gps"]
-        coordinate_keywords = ["latitude", "lat", "longitude", "long", "lon", "lng"]
 
-        # GPS topics OR coordinate topics should be sensors
-        if any(keyword in topic.lower() for keyword in gps_keywords) or any(
-            keyword in topic.lower() for keyword in coordinate_keywords
-        ):
+        # Distinctive GPS keywords are safe as substrings, but coordinate
+        # keywords ("lat"/"lon"/...) must be matched precisely - otherwise an
+        # unrelated metric like "isolation" (contains "lat") is misread as a GPS
+        # coordinate and loses its unit/icon. Reuse the exact coordinate check.
+        if any(keyword in topic.lower() for keyword in gps_keywords):
             return True
 
-        return False
+        return self._is_coordinate_topic(parts, name, topic)
 
     def _normalize_blacklist(self, blacklist: object) -> list[str]:
         """Normalize the blacklist format to always be a list of patterns."""

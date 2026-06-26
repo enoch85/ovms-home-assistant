@@ -59,13 +59,19 @@ def determine_sensor_type(
         result["icon"] = "mdi:timer-outline"
         return result
 
-    # Special handling for GPS coordinates
+    # Special handling for GPS coordinates. Match the coordinate abbreviations
+    # ("lat"/"lon"/...) as whole underscore/dot tokens, not as bare substrings -
+    # otherwise an unrelated metric like "isolation" (which contains "lat") is
+    # given a latitude icon and has its real unit dropped by the early return.
     name_lower = internal_name.lower()
-    if "latitude" in name_lower or "lat" in name_lower:
+    name_tokens = name_lower.replace(".", "_").split("_")
+    if "latitude" in name_lower or "lat" in name_tokens:
         result["icon"] = "mdi:latitude"
         result["state_class"] = SensorStateClass.MEASUREMENT
         return result
-    elif "longitude" in name_lower or "lon" in name_lower or "lng" in name_lower:
+    if "longitude" in name_lower or any(
+        tok in name_tokens for tok in ("lon", "lng", "long")
+    ):
         result["icon"] = "mdi:longitude"
         result["state_class"] = SensorStateClass.MEASUREMENT
         return result
