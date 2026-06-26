@@ -71,7 +71,8 @@ class OVMSOptionsFlow(OptionsFlow):
 
     def __init__(self, config_entry):
         """Initialize options flow."""
-        self._config_entry = config_entry
+        # Note: the base OptionsFlow exposes the entry via self.config_entry;
+        # don't store it again (assigning self.config_entry is deprecated).
         _LOGGER.debug("Initializing options flow for entry: %s", config_entry.entry_id)
 
     def _get_clean_blacklist_display(self, entry_options, entry_data):

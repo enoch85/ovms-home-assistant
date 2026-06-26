@@ -172,8 +172,10 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
             def update_state(payload: str) -> None:
                 """Update the sensor state."""
                 try:
-                    # Ensure payload is properly truncated if it's a string
-                    if isinstance(payload, str) and len(payload) > 255:
+                    # Truncate over-long string payloads before parsing.
+                    # truncate_state_value enforces MAX_STATE_LENGTH internally,
+                    # so no separate length check / hardcoded limit is needed.
+                    if isinstance(payload, str):
                         truncated_payload = truncate_state_value(payload)
                         payload = (
                             truncated_payload

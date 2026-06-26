@@ -354,28 +354,6 @@ class EntityFactory:
                 self.config.get(CONF_VEHICLE_ID, "unknown"),
             )
 
-    def _get_metric_path_from_topic(self, topic: str) -> str:
-        """Extract metric path from topic."""
-        topic_suffix = topic
-        if topic.count("/") >= 3:  # Skip the prefix part
-            parts = topic.split("/")
-            # Find where the actual metric path starts
-            for i, part in enumerate(parts):
-                if part in [
-                    "metric",
-                    "status",
-                    "notify",
-                    "command",
-                    "m",
-                    "v",
-                    "s",
-                    "t",
-                ]:
-                    topic_suffix = "/".join(parts[i:])
-                    break
-
-        return topic_suffix.replace("/", ".")
-
     async def async_process_queued_entities(self) -> None:
         """Process any queued entities."""
         self.platforms_loaded = True
