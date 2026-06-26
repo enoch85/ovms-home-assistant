@@ -130,6 +130,91 @@ VW_EUP_METRICS = {
         "unit": PERCENTAGE,
         "category": "vw_eup",
     },
+    # Battery health / aging counters, new in OVMS firmware 3.3.006. These are
+    # cumulative lifetime totals that the BMS persists and never resets, so they
+    # use state_class TOTAL with a time unit (per HA docs, TOTAL_INCREASING is
+    # for meters that periodically restart from 0 - not the case here).
+    # NOTE: we deliberately do NOT set device_class DURATION here. This
+    # integration renders DURATION values as a human "Xd Yh Zm" string and
+    # clears the state_class (see sensor/entities.py), which would break the
+    # long-term statistics that make these accumulators useful. A plain numeric
+    # sensor with unit d/h keeps them graphable.
+    # The 6x8 SOC/temperature park-time matrix (xvu.b.time.parked.state) is a
+    # 48-value vector with no meaningful single sensor state, so it is
+    # suppressed via SYSTEM_TOPIC_BLACKLIST in const.py rather than surfaced as
+    # a broken/truncated entity; its useful aggregates are the scalars above.
+    "xvu.b.time.charged.ac": {
+        "name": "VW eUP! Battery Time Charged AC",
+        "description": "Total lifetime time the battery has been AC charged",
+        "icon": "mdi:current-ac",
+        "state_class": SensorStateClass.TOTAL,
+        "unit": UnitOfTime.HOURS,
+        "suggested_display_precision": 2,
+        "category": "vw_eup",
+    },
+    "xvu.b.time.charged.dc": {
+        "name": "VW eUP! Battery Time Charged DC",
+        "description": "Total lifetime time the battery has been DC charged",
+        "icon": "mdi:current-dc",
+        "state_class": SensorStateClass.TOTAL,
+        "unit": UnitOfTime.HOURS,
+        "suggested_display_precision": 2,
+        "category": "vw_eup",
+    },
+    "xvu.b.time.parked": {
+        "name": "VW eUP! Battery Time Parked",
+        "description": "Total lifetime time the vehicle has been parked",
+        "icon": "mdi:clock-outline",
+        "state_class": SensorStateClass.TOTAL,
+        "unit": UnitOfTime.DAYS,
+        "suggested_display_precision": 2,
+        "category": "vw_eup",
+    },
+    "xvu.b.time.parked.cold": {
+        "name": "VW eUP! Battery Time Parked Cold",
+        "description": "Total lifetime time parked with battery below 0 °C",
+        "icon": "mdi:thermometer-low",
+        "state_class": SensorStateClass.TOTAL,
+        "unit": UnitOfTime.DAYS,
+        "suggested_display_precision": 2,
+        "category": "vw_eup",
+    },
+    "xvu.b.time.parked.empty": {
+        "name": "VW eUP! Battery Time Parked Empty",
+        "description": "Total lifetime time parked below 10% SOC",
+        "icon": "mdi:battery-low",
+        "state_class": SensorStateClass.TOTAL,
+        "unit": UnitOfTime.DAYS,
+        "suggested_display_precision": 2,
+        "category": "vw_eup",
+    },
+    "xvu.b.time.parked.full": {
+        "name": "VW eUP! Battery Time Parked Full",
+        "description": "Total lifetime time parked above 90% SOC",
+        "icon": "mdi:battery-high",
+        "state_class": SensorStateClass.TOTAL,
+        "unit": UnitOfTime.DAYS,
+        "suggested_display_precision": 2,
+        "category": "vw_eup",
+    },
+    "xvu.b.time.parked.hot": {
+        "name": "VW eUP! Battery Time Parked Hot",
+        "description": "Total lifetime time parked with battery above 30 °C",
+        "icon": "mdi:thermometer-high",
+        "state_class": SensorStateClass.TOTAL,
+        "unit": UnitOfTime.DAYS,
+        "suggested_display_precision": 2,
+        "category": "vw_eup",
+    },
+    "xvu.b.time.total": {
+        "name": "VW eUP! Battery Total Age",
+        "description": "Total lifetime age of the high-voltage battery",
+        "icon": "mdi:battery-clock",
+        "state_class": SensorStateClass.TOTAL,
+        "unit": UnitOfTime.DAYS,
+        "suggested_display_precision": 2,
+        "category": "vw_eup",
+    },
     "xvu.c.ac.i1": {
         "name": "VW eUP! AC Charging Current L1",
         "description": "AC charging current phase 1",
