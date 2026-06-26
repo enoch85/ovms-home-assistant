@@ -1,0 +1,122 @@
+- generic [ref=e10]:
+  - complementary [ref=e11]:
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - generic "Sidebar toggle" [ref=e16]:
+          - button "Sidebar toggle" [ref=e17] [cursor=pointer]:
+            - generic [ref=e19]:
+              - img
+        - generic [ref=e20]: Home Assistant
+      - generic [ref=e21]:
+        - generic [ref=e23]:
+          - generic:
+            - listitem [ref=e25] [cursor=pointer]:
+              - generic [ref=e26]:
+                - generic [ref=e28]:
+                  - img
+                - generic [ref=e30]: Overview
+            - listitem [ref=e32] [cursor=pointer]:
+              - generic [ref=e33]:
+                - generic [ref=e34]:
+                  - img
+                - generic [ref=e36]: Map
+            - listitem [ref=e38] [cursor=pointer]:
+              - generic [ref=e39]:
+                - generic [ref=e41]:
+                  - img
+                - generic [ref=e43]: OVMS Test
+            - listitem [ref=e45] [cursor=pointer]:
+              - generic [ref=e46]:
+                - generic [ref=e47]:
+                  - img
+                - generic [ref=e49]: Energy
+            - listitem [ref=e51] [cursor=pointer]:
+              - generic [ref=e52]:
+                - generic [ref=e53]:
+                  - img
+                - generic [ref=e55]: Activity
+            - listitem [ref=e57] [cursor=pointer]:
+              - generic [ref=e58]:
+                - generic [ref=e59]:
+                  - img
+                - generic [ref=e61]: History
+            - listitem [ref=e63] [cursor=pointer]:
+              - generic [ref=e64]:
+                - generic [ref=e65]:
+                  - img
+                - generic [ref=e67]: To-do lists
+        - generic [ref=e68]:
+          - generic:
+            - listitem [ref=e70] [cursor=pointer]:
+              - generic [ref=e71]:
+                - generic [ref=e72]:
+                  - img
+                - generic [ref=e74]: Settings
+            - listitem [ref=e76] [cursor=pointer]:
+              - generic [ref=e77]:
+                - generic [ref=e78]:
+                  - img
+                - generic [ref=e80]: Notifications
+            - listitem [ref=e82] [cursor=pointer]:
+              - generic [ref=e83]:
+                - generic [ref=e85]: d
+                - generic [ref=e87]: dev
+  - generic [ref=e201]:
+    - generic [ref=e204]:
+      - generic [ref=e205]: Map
+      - generic [ref=e206]:
+        - generic [ref=e207]:
+          - generic:
+            - button "Add to Home Assistant" [ref=e210] [cursor=pointer]:
+              - generic [ref=e212]:
+                - img
+            - generic:
+              - generic: Add device
+              - generic: Create automation
+              - generic: Create area
+              - generic: Add person
+        - button [ref=e215] [cursor=pointer]:
+          - generic [ref=e217]:
+            - img
+        - button [ref=e220] [cursor=pointer]:
+          - generic [ref=e222]:
+            - img
+    - generic [ref=e230]:
+      - generic [ref=e232]:
+        - generic:
+          - generic:
+            - img
+          - generic:
+            - button "eL" [ref=e233] [cursor=pointer]:
+              - generic [ref=e235]: eL
+            - button "sL" [ref=e236] [cursor=pointer]:
+              - generic [ref=e238]: sL
+            - button "lL" [ref=e239] [cursor=pointer]:
+              - generic [ref=e241]: lL
+            - button "Home" [ref=e242] [cursor=pointer]:
+              - generic [ref=e244]:
+                - img
+        - generic:
+          - generic [ref=e245]:
+            - button "Zoom in" [ref=e246] [cursor=pointer]: +
+            - button "Zoom out" [ref=e247] [cursor=pointer]: −
+          - generic [ref=e248]:
+            - link "Leaflet" [ref=e249] [cursor=pointer]:
+              - /url: https://leafletjs.com
+              - img [ref=e250]
+              - text: Leaflet
+            - text: "| ©"
+            - link "OpenStreetMap" [ref=e254] [cursor=pointer]:
+              - /url: https://www.openstreetmap.org/copyright
+            - text: ", ©"
+            - link "CARTO" [ref=e255] [cursor=pointer]:
+              - /url: https://carto.com/attributions
+      - generic [ref=e256]:
+        - generic "Toggle grouping" [ref=e258]:
+          - button "Toggle grouping" [ref=e259] [cursor=pointer]:
+            - generic [ref=e261]:
+              - img
+        - generic "Reset focus" [ref=e263]:
+          - button "Reset focus" [ref=e264] [cursor=pointer]:
+            - generic [ref=e266]:
+              - img

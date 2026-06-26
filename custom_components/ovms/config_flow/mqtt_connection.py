@@ -32,6 +32,7 @@ from ..const import (
     ERROR_TOPIC_ACCESS_DENIED,
     ERROR_TLS_ERROR,
     ERROR_UNKNOWN,
+    PORT_PROBE_TIMEOUT,
 )
 from ..utils import uses_tls_transport, uses_websocket_transport
 
@@ -227,7 +228,7 @@ async def test_mqtt_connection(
         _LOGGER.debug("%s - Checking if port is open", log_prefix)
         port_check_start = asyncio.get_event_loop().time()
         port_open = await hass.async_add_executor_job(
-            _probe_tcp_port, config[CONF_HOST], config[CONF_PORT], 2
+            _probe_tcp_port, config[CONF_HOST], config[CONF_PORT], PORT_PROBE_TIMEOUT
         )
         port_check_time = asyncio.get_event_loop().time() - port_check_start
 

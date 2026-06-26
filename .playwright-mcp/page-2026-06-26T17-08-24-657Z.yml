@@ -1,0 +1,232 @@
+- generic [ref=e15]:
+  - generic [ref=e18]:
+    - generic "Sidebar toggle" [ref=e21]:
+      - button "Sidebar toggle" [ref=e22] [cursor=pointer]:
+        - generic [ref=e24]:
+          - img
+    - tablist [ref=e29]:
+      - generic:
+        - tab "GPS Trail" [ref=e30]:
+          - generic [ref=e31] [cursor=pointer]:
+            - generic: GPS Trail
+        - tab "Trail Test" [selected] [ref=e32]:
+          - generic [ref=e33] [cursor=pointer]:
+            - generic: Trail Test
+    - generic [ref=e35]:
+      - generic:
+        - button "Open dashboard menu" [ref=e38] [cursor=pointer]:
+          - generic [ref=e40]:
+            - img
+        - generic:
+          - generic: Add to Home Assistant
+          - generic: Search Home Assistant
+          - generic: Edit dashboard
+  - generic [ref=e45]:
+    - generic [ref=e46]:
+      - generic [ref=e49]:
+        - heading "All 3 cars — overview (z6)" [level=1] [ref=e50]
+        - generic [ref=e51]:
+          - generic [ref=e53]:
+            - generic:
+              - generic:
+                - img
+              - generic:
+                - button "lL" [ref=e170] [cursor=pointer]:
+                  - generic [ref=e172]: lL
+                - button "sL" [ref=e173] [cursor=pointer]:
+                  - generic [ref=e175]: sL
+                - button "eL" [ref=e176] [cursor=pointer]:
+                  - generic [ref=e178]: eL
+            - generic:
+              - generic [ref=e179]:
+                - button "Zoom in" [ref=e180] [cursor=pointer]: +
+                - button "Zoom out" [ref=e181] [cursor=pointer]: −
+              - generic [ref=e182]:
+                - link "Leaflet" [ref=e183] [cursor=pointer]:
+                  - /url: https://leafletjs.com
+                  - img [ref=e184]
+                  - text: Leaflet
+                - text: "| ©"
+                - link "OpenStreetMap" [ref=e188] [cursor=pointer]:
+                  - /url: https://www.openstreetmap.org/copyright
+                - text: ", ©"
+                - link "CARTO" [ref=e189] [cursor=pointer]:
+                  - /url: https://carto.com/attributions
+          - generic [ref=e190]:
+            - generic "Toggle grouping" [ref=e192]:
+              - button "Toggle grouping" [ref=e193] [cursor=pointer]:
+                - generic [ref=e195]:
+                  - img
+            - generic "Reset focus" [ref=e197]:
+              - button "Reset focus" [ref=e198] [cursor=pointer]:
+                - generic [ref=e200]:
+                  - img
+      - generic [ref=e203]:
+        - heading "eup Stockholm spiral (z13)" [level=1] [ref=e204]
+        - generic [ref=e205]:
+          - generic [ref=e207]:
+            - generic:
+              - generic:
+                - img
+              - button "eL" [ref=e210] [cursor=pointer]:
+                - generic [ref=e212]: eL
+            - generic:
+              - generic [ref=e213]:
+                - button "Zoom in" [ref=e214] [cursor=pointer]: +
+                - button "Zoom out" [ref=e215] [cursor=pointer]: −
+              - generic [ref=e216]:
+                - link "Leaflet" [ref=e217] [cursor=pointer]:
+                  - /url: https://leafletjs.com
+                  - img [ref=e218]
+                  - text: Leaflet
+                - text: "| ©"
+                - link "OpenStreetMap" [ref=e222] [cursor=pointer]:
+                  - /url: https://www.openstreetmap.org/copyright
+                - text: ", ©"
+                - link "CARTO" [ref=e223] [cursor=pointer]:
+                  - /url: https://carto.com/attributions
+          - generic "Reset focus" [ref=e226]:
+            - button "Reset focus" [ref=e227] [cursor=pointer]:
+              - generic [ref=e229]:
+                - img
+      - generic [ref=e232]:
+        - heading "smart Gothenburg loop (z14 closeup)" [level=1] [ref=e233]
+        - generic [ref=e234]:
+          - generic [ref=e236]:
+            - generic:
+              - generic:
+                - img
+              - button "sL" [ref=e239] [cursor=pointer]:
+                - generic [ref=e241]: sL
+            - generic:
+              - generic [ref=e242]:
+                - button "Zoom in" [ref=e243] [cursor=pointer]: +
+                - button "Zoom out" [ref=e244] [cursor=pointer]: −
+              - generic [ref=e245]:
+                - link "Leaflet" [ref=e246] [cursor=pointer]:
+                  - /url: https://leafletjs.com
+                  - img [ref=e247]
+                  - text: Leaflet
+                - text: "| ©"
+                - link "OpenStreetMap" [ref=e251] [cursor=pointer]:
+                  - /url: https://www.openstreetmap.org/copyright
+                - text: ", ©"
+                - link "CARTO" [ref=e252] [cursor=pointer]:
+                  - /url: https://carto.com/attributions
+          - generic "Reset focus" [ref=e255]:
+            - button "Reset focus" [ref=e256] [cursor=pointer]:
+              - generic [ref=e258]:
+                - img
+      - generic [ref=e261]:
+        - heading "leaf Malmo sine (z14 closeup)" [level=1] [ref=e262]
+        - generic [ref=e263]:
+          - generic [ref=e265]:
+            - generic:
+              - generic:
+                - img
+              - button "lL" [ref=e268] [cursor=pointer]:
+                - generic [ref=e270]: lL
+            - generic:
+              - generic [ref=e271]:
+                - button "Zoom in" [ref=e272] [cursor=pointer]: +
+                - button "Zoom out" [ref=e273] [cursor=pointer]: −
+              - generic [ref=e274]:
+                - link "Leaflet" [ref=e275] [cursor=pointer]:
+                  - /url: https://leafletjs.com
+                  - img [ref=e276]
+                  - text: Leaflet
+                - text: "| ©"
+                - link "OpenStreetMap" [ref=e280] [cursor=pointer]:
+                  - /url: https://www.openstreetmap.org/copyright
+                - text: ", ©"
+                - link "CARTO" [ref=e281] [cursor=pointer]:
+                  - /url: https://carto.com/attributions
+          - generic "Reset focus" [ref=e284]:
+            - button "Reset focus" [ref=e285] [cursor=pointer]:
+              - generic [ref=e287]:
+                - img
+    - generic [ref=e288]:
+      - generic [ref=e291]:
+        - heading "eup Stockholm spiral (z15 closeup)" [level=1] [ref=e292]
+        - generic [ref=e293]:
+          - generic [ref=e295]:
+            - generic:
+              - generic:
+                - img
+              - button "eL" [ref=e298] [cursor=pointer]:
+                - generic [ref=e300]: eL
+            - generic:
+              - generic [ref=e301]:
+                - button "Zoom in" [ref=e302] [cursor=pointer]: +
+                - button "Zoom out" [ref=e303] [cursor=pointer]: −
+              - generic [ref=e304]:
+                - link "Leaflet" [ref=e305] [cursor=pointer]:
+                  - /url: https://leafletjs.com
+                  - img [ref=e306]
+                  - text: Leaflet
+                - text: "| ©"
+                - link "OpenStreetMap" [ref=e310] [cursor=pointer]:
+                  - /url: https://www.openstreetmap.org/copyright
+                - text: ", ©"
+                - link "CARTO" [ref=e311] [cursor=pointer]:
+                  - /url: https://carto.com/attributions
+          - generic "Reset focus" [ref=e314]:
+            - button "Reset focus" [ref=e315] [cursor=pointer]:
+              - generic [ref=e317]:
+                - img
+      - generic [ref=e320]:
+        - heading "smart Gothenburg loop (z12)" [level=1] [ref=e321]
+        - generic [ref=e322]:
+          - generic [ref=e324]:
+            - generic:
+              - generic:
+                - img
+              - button "sL" [ref=e338] [cursor=pointer]:
+                - generic [ref=e340]: sL
+            - generic:
+              - generic [ref=e341]:
+                - button "Zoom in" [ref=e342] [cursor=pointer]: +
+                - button "Zoom out" [ref=e343] [cursor=pointer]: −
+              - generic [ref=e344]:
+                - link "Leaflet" [ref=e345] [cursor=pointer]:
+                  - /url: https://leafletjs.com
+                  - img [ref=e346]
+                  - text: Leaflet
+                - text: "| ©"
+                - link "OpenStreetMap" [ref=e350] [cursor=pointer]:
+                  - /url: https://www.openstreetmap.org/copyright
+                - text: ", ©"
+                - link "CARTO" [ref=e351] [cursor=pointer]:
+                  - /url: https://carto.com/attributions
+          - generic "Reset focus" [ref=e354]:
+            - button "Reset focus" [ref=e355] [cursor=pointer]:
+              - generic [ref=e357]:
+                - img
+      - generic [ref=e360]:
+        - heading "leaf Malmo sine (z11)" [level=1] [ref=e361]
+        - generic [ref=e362]:
+          - generic [ref=e364]:
+            - generic:
+              - generic:
+                - img
+              - button "lL" [ref=e403] [cursor=pointer]:
+                - generic [ref=e405]: lL
+            - generic:
+              - generic [ref=e406]:
+                - button "Zoom in" [ref=e407] [cursor=pointer]: +
+                - button "Zoom out" [ref=e408] [cursor=pointer]: −
+              - generic [ref=e409]:
+                - link "Leaflet" [ref=e410] [cursor=pointer]:
+                  - /url: https://leafletjs.com
+                  - img [ref=e411]
+                  - text: Leaflet
+                - text: "| ©"
+                - link "OpenStreetMap" [ref=e415] [cursor=pointer]:
+                  - /url: https://www.openstreetmap.org/copyright
+                - text: ", ©"
+                - link "CARTO" [ref=e416] [cursor=pointer]:
+                  - /url: https://carto.com/attributions
+          - generic "Reset focus" [ref=e419]:
+            - button "Reset focus" [ref=e420] [cursor=pointer]:
+              - generic [ref=e422]:
+                - img

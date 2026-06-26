@@ -1,0 +1,6 @@
+- generic [ref=e2]:
+  - img [ref=e3]
+  - generic [ref=e7]:
+    - progressbar "Loading" [ref=e10]
+    - generic [ref=e13]: Loading data
+  - img "Home Assistant is a project by the Open Home Foundation" [ref=e15]
