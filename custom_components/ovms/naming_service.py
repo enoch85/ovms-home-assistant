@@ -45,6 +45,23 @@ class EntityNamingService:
                         return f"{base_name} {module_number} ({vehicle_label})"
                     return f"{base_name} ({vehicle_label})"
 
+            # A prefix-pattern match (a vehicle-specific topic with no specific
+            # metric definition) leaves base_name as just the bare vehicle label,
+            # e.g. "VW eUP!". Derive a descriptor from the topic segments after
+            # the vehicle prefix so the entity reads "B Soc (VW eUP!)" instead of
+            # only "VW eUP!" repeated across every undefined metric.
+            if base_name in VEHICLE_TOPIC_PREFIXES.values():
+                tail = []
+                seen_prefix = False
+                for part in parts or []:
+                    if seen_prefix:
+                        tail.append(part)
+                    elif part in VEHICLE_TOPIC_PREFIXES:
+                        seen_prefix = True
+                if tail:
+                    descriptor = " ".join(tail).replace("_", " ").title()
+                    return f"{descriptor} ({base_name})"
+
             # If topic ends with a number (like /03), append it to the name
             if topic and topic.split("/")[-1].isdigit():
                 module_number = topic.split("/")[-1]
