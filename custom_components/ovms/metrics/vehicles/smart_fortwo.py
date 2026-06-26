@@ -23,7 +23,11 @@ from homeassistant.const import (
 # Vehicle metadata
 VEHICLE_TYPE = "smart_fortwo"
 VEHICLE_NAME = "Smart ForTwo"
-METRIC_PREFIX = "xse."
+# OVMS publishes Smart ForTwo (453/EQ) metrics under the "xsq" prefix - every
+# metric key below uses it, and const.VEHICLE_TOPIC_PREFIXES maps "xsq" to this
+# car. The prefix must match so config-flow discovery can auto-detect the
+# vehicle; "xse" is the older Smart ED module and never matches these topics.
+METRIC_PREFIX = "xsq."
 
 # Smart ForTwo specific metrics
 SMART_FORTWO_METRICS = {
