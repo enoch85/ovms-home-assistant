@@ -12,6 +12,7 @@ from homeassistant.const import (
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
+    UnitOfEnergyDistance,
     UnitOfLength,
     UnitOfPower,
     UnitOfSpeed,
@@ -165,11 +166,17 @@ BATTERY_METRICS = {
     },
     "v.b.consumption": {
         "name": "Battery Consumption",
+        # OVMS v.b.consumption is the momentary energy-per-distance efficiency
+        # (firmware unit: Wh/km), not a cumulative energy total. Typing it as
+        # ENERGY + TOTAL told HA to treat it as an accumulating meter, which
+        # distorted long-term statistics. HA's ENERGY_DISTANCE device class is
+        # purpose-built for this: it accepts the Wh/km unit, requires
+        # state_class MEASUREMENT, and gives users unit-system conversion.
         "description": "Main battery momentary consumption",
         "icon": "mdi:battery-minus",
-        "device_class": SensorDeviceClass.ENERGY,
-        "state_class": SensorStateClass.TOTAL,
-        "unit": UnitOfEnergy.WATT_HOUR,
+        "device_class": SensorDeviceClass.ENERGY_DISTANCE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfEnergyDistance.WATT_HOUR_PER_KM,
         "category": "battery",
     },
     "v.b.coulomb.recd": {
