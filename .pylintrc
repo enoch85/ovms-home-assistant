@@ -7,6 +7,14 @@
 # code. That noise can push the score under the gate when a new test is added.
 # Disable duplicate-code repo-wide; genuine duplication is caught in review.
 
+[MAIN]
+# Add the repo root to sys.path so pylint can resolve the `custom_components`
+# imports that the standalone scripts/tests/*.py harnesses use after a runtime
+# sys.path.insert (which pylint does not execute). Without this every test file
+# reports false-positive import-error / wrong-import-position, which drags the
+# global score under the --fail-under gate as more test files are added.
+init-hook='import sys; sys.path.insert(0, ".")'
+
 [MESSAGES CONTROL]
 disable=
     duplicate-code
