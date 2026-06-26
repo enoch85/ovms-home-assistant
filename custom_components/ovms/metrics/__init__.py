@@ -80,9 +80,6 @@ from ..const import (
     CATEGORY_RENAULT_TWIZY,
 )
 
-# Custom unit constants
-UNIT_AMPERE_HOUR = "Ah"
-
 # Combine all metrics into the master dictionary
 METRIC_DEFINITIONS = {
     **BATTERY_METRICS,

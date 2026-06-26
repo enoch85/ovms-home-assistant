@@ -21,9 +21,6 @@ VEHICLE_TYPE = "nissan_leaf"
 VEHICLE_NAME = "Nissan Leaf"
 METRIC_PREFIX = "xnl."
 
-# Custom unit constants
-UNIT_AMPERE_HOUR = "Ah"
-
 # Nissan Leaf specific metrics
 NISSAN_LEAF_METRICS = {
     # BMS metrics

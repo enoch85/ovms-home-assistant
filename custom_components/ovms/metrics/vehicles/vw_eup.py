@@ -25,9 +25,6 @@ VEHICLE_TYPE = "vw_eup"
 VEHICLE_NAME = "VW e-UP!"
 METRIC_PREFIX = "xvu."
 
-# Custom unit constants
-UNIT_AMPERE_HOUR = "Ah"
-
 # VW e-UP specific metrics
 VW_EUP_METRICS = {
     "xvu.b.cap.ah.abs": {

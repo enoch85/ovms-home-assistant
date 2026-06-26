@@ -25,9 +25,6 @@ VEHICLE_TYPE = "renault_twizy"
 VEHICLE_NAME = "Renault Twizy"
 METRIC_PREFIX = "xrt."
 
-# Custom unit constants
-UNIT_AMPERE_HOUR = "Ah"
-
 # Renault Twizy specific metrics
 RENAULT_TWIZY_METRICS = {
     # Battery metrics
