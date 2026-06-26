@@ -168,18 +168,12 @@ class OVMSOptionsFlow(OptionsFlow):
                 if "verify_ssl_certificate" in user_input:
                     del user_input["verify_ssl_certificate"]
 
-                # Process topic blacklist (convert to a list for storage)
-                if CONF_TOPIC_BLACKLIST in user_input and isinstance(
-                    user_input[CONF_TOPIC_BLACKLIST], str
-                ):
-                    blacklist = [
-                        x.strip()
-                        for x in user_input[CONF_TOPIC_BLACKLIST].split(",")
-                        if x.strip()
-                    ]
-                    user_input[CONF_TOPIC_BLACKLIST] = blacklist
-
-            # Process the blacklist string input
+            # Process the topic blacklist (string -> deduplicated list). This runs
+            # for every submit, including when a "Port" was selected above: the
+            # previous in-port-branch conversion turned the value into a list first,
+            # which made this isinstance(str) check fail and silently skipped the
+            # dedup, so duplicate patterns were stored. Keep a single conversion
+            # here so duplicates are always removed.
             if CONF_TOPIC_BLACKLIST in user_input and isinstance(
                 user_input[CONF_TOPIC_BLACKLIST], str
             ):
