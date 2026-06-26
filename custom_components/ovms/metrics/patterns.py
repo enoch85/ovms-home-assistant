@@ -209,6 +209,11 @@ TOPIC_PATTERNS = {
         "icon": "mdi:car-electric",
         "category": "smart_fortwo",
     },
+    "xse": {
+        "name": "Smart ED",
+        "icon": "mdi:car-electric",
+        "category": "smart_ed",
+    },
     "xmg": {
         "name": "MG ZS-EV",
         "icon": "mdi:car-electric",

@@ -17,7 +17,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from custom_components.ovms.const import UNIT_AMPERE_HOUR, VEHICLE_TOPIC_PREFIXES
 from custom_components.ovms.metrics import get_metric_by_path
-from custom_components.ovms.metrics.vehicles.smart_fortwo import VEHICLE_NAME
+from custom_components.ovms.metrics.vehicles.smart_fortwo import (
+    VEHICLE_NAME as SMART_FORTWO_NAME,
+)
+from custom_components.ovms.metrics.vehicles.smart_ed import (
+    VEHICLE_NAME as SMART_ED_NAME,
+)
 
 
 def _check(name, cond, results):
@@ -38,7 +43,18 @@ def main():
     )
     _check(
         "Smart ForTwo VEHICLE_NAME matches the canonical label",
-        VEHICLE_NAME == VEHICLE_TOPIC_PREFIXES["xsq"] == "Smart ForTwo",
+        SMART_FORTWO_NAME == VEHICLE_TOPIC_PREFIXES["xsq"] == "Smart ForTwo",
+        results,
+    )
+    _check(
+        "Smart ED VEHICLE_NAME matches the canonical label",
+        SMART_ED_NAME == VEHICLE_TOPIC_PREFIXES["xse"] == "Smart ED",
+        results,
+    )
+    _check(
+        "Smart ED and Smart ForTwo are distinct cars (different prefix + name)",
+        SMART_ED_NAME != SMART_FORTWO_NAME
+        and VEHICLE_TOPIC_PREFIXES["xse"] != VEHICLE_TOPIC_PREFIXES["xsq"],
         results,
     )
 

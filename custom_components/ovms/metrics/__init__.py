@@ -44,6 +44,7 @@ from .common import (
 from .vehicles import (
     VW_EUP_METRICS,
     SMART_FORTWO_METRICS,
+    SMART_ED_METRICS,
     MG_ZS_EV_METRICS,
     NISSAN_LEAF_METRICS,
     RENAULT_TWIZY_METRICS,
@@ -75,6 +76,7 @@ from ..const import (
     CATEGORY_TIRE,
     CATEGORY_VW_EUP,
     CATEGORY_SMART_FORTWO,
+    CATEGORY_SMART_ED,
     CATEGORY_MG_ZS_EV,
     CATEGORY_NISSAN_LEAF,
     CATEGORY_RENAULT_TWIZY,
@@ -97,6 +99,7 @@ METRIC_DEFINITIONS = {
     **TIRE_METRICS,
     **VW_EUP_METRICS,
     **SMART_FORTWO_METRICS,
+    **SMART_ED_METRICS,
     **MG_ZS_EV_METRICS,
     **NISSAN_LEAF_METRICS,
     **RENAULT_TWIZY_METRICS,
@@ -162,6 +165,11 @@ METRIC_CATEGORIES = {
         k
         for k, v in METRIC_DEFINITIONS.items()
         if v.get("category") == CATEGORY_SMART_FORTWO
+    ],
+    CATEGORY_SMART_ED: [
+        k
+        for k, v in METRIC_DEFINITIONS.items()
+        if v.get("category") == CATEGORY_SMART_ED
     ],
     CATEGORY_MG_ZS_EV: [
         k
@@ -276,6 +284,10 @@ PREFIX_CATEGORIES = {
     "xsq.odometer": CATEGORY_SMART_FORTWO,
     "xsq.use": CATEGORY_SMART_FORTWO,
     "xsq.v": CATEGORY_SMART_FORTWO,
+    "xse.mybms": CATEGORY_SMART_ED,
+    "xse.cepc": CATEGORY_SMART_ED,
+    "xse.hv": CATEGORY_SMART_ED,
+    "xse.v": CATEGORY_SMART_ED,
     "xmg.b": CATEGORY_MG_ZS_EV,
     "xmg.c": CATEGORY_MG_ZS_EV,
     "xmg.p": CATEGORY_MG_ZS_EV,

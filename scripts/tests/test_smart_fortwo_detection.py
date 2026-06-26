@@ -6,7 +6,9 @@ Smart ForTwo (453/EQ) publishes its metrics under the ``xsq`` topic prefix
 ``const.VEHICLE_TOPIC_PREFIXES`` maps ``xsq`` to "Smart ForTwo". The vehicle
 module previously declared ``METRIC_PREFIX = "xse."`` (the older Smart ED
 module), so ``detect_vehicle_type`` never matched a real Smart ForTwo topic and
-the car silently fell through to the generic profile.
+the car silently fell through to the generic profile. The Smart ED (451) is now
+supported as its own car under the ``xse`` prefix (see smart_ed.py), so this test
+also asserts the two Smart variants detect as distinct vehicle types.
 
 This test drives the REAL ``detect_vehicle_type`` and asserts that every
 declared vehicle prefix resolves to its own type (so no prefix is dead or
@@ -62,10 +64,18 @@ def main():
         results,
     )
 
-    # The stale 'xse' prefix must NOT be how Smart is detected anymore.
+    # 'xse' is the Smart ED (451) - a DIFFERENT car from the Smart ForTwo 453
+    # (xsq). It must detect as its own type, and the two must never collide.
+    smart_ed_type, _ = detect_vehicle_type({"ovms/u/ed/metric/xse/mybms/hv"})
     _check(
-        "'xse.' is no longer a declared vehicle prefix",
-        "xse." not in VEHICLE_TYPE_PREFIXES,
+        "real Smart ED xse topic detects 'smart_ed'",
+        smart_ed_type == "smart_ed",
+        results,
+    )
+    _check(
+        "Smart ED (xse) and Smart ForTwo (xsq) are distinct vehicle types",
+        VEHICLE_TYPE_PREFIXES.get("xse.") == "smart_ed"
+        and VEHICLE_TYPE_PREFIXES.get("xsq.") == "smart_fortwo",
         results,
     )
 
