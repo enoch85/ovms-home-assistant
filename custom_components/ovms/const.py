@@ -164,10 +164,6 @@ SYSTEM_TOPIC_BLACKLIST = [
     "server/web/socket",
     "egpio/output",
     "power/can1",
-    # VW e-Up 6x8 SOC/temperature park-time matrix (OVMS 3.3.006): a 48-value
-    # vector with no meaningful single sensor state (>255 char raw value); its
-    # useful aggregates are exposed as the xvu.b.time.* scalars instead.
-    "xvu/b/time/parked/state",
 ]
 
 # Legacy topic blacklist patterns - kept for migration compatibility
@@ -359,6 +355,14 @@ COMMAND_CLEANUP_RETRY_DELAY = 5  # seconds to wait after a cleanup-loop error
 
 # Maximum length for state values in Home Assistant
 MAX_STATE_LENGTH = 255
+
+# Minimum number of comma-separated numeric elements for a payload to be treated
+# as a data vector (median shown as the state, the full series exposed as
+# attributes) rather than a scalar string. 4+ avoids catching short tuples (GPS
+# pairs are handled separately, version triples, etc.) while covering real series
+# like the VW e-Up 48-value park-time matrix that would otherwise exceed
+# MAX_STATE_LENGTH and render as a truncated raw string.
+VECTOR_MIN_VALUES = 4
 
 # GPS accuracy calculation constants
 # Used to convert GPS signal quality (v.p.gpssq) to meters accuracy

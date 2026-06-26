@@ -20,6 +20,7 @@ from homeassistant.util import dt as dt_util
 from ..const import (
     LOGGER_NAME,
     SIGNAL_UPDATE_ENTITY,
+    VECTOR_MIN_VALUES,
     get_add_entities_signal,
     truncate_state_value,
 )
@@ -500,20 +501,24 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             self._attr_extra_state_attributes.get("original_state_class")
             or self._attr_state_class
         )
+        handled_numeric_vector = False
         if not self._try_parse_vector(initial_state):
-            self._parsed_value = parse_value(
-                initial_state,
-                device_class_for_parsing,
-                state_class_for_parsing,
-                self._is_cell_sensor,
-            )
+            if not self._is_cell_sensor:
+                handled_numeric_vector = self._try_parse_numeric_vector(initial_state)
+            if not handled_numeric_vector:
+                self._parsed_value = parse_value(
+                    initial_state,
+                    device_class_for_parsing,
+                    state_class_for_parsing,
+                    self._is_cell_sensor,
+                )
 
-            # Format the value
-            self._attr_native_value = format_sensor_value(
-                self._parsed_value,
-                device_class_for_parsing,
-                self._attr_extra_state_attributes,
-            )
+                # Format the value
+                self._attr_native_value = format_sensor_value(
+                    self._parsed_value,
+                    device_class_for_parsing,
+                    self._attr_extra_state_attributes,
+                )
 
         # Extract additional attributes
         if (
@@ -522,7 +527,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             and "," in initial_state
         ):
             self._handle_cell_values(initial_state)
-        else:
+        elif not handled_numeric_vector:
             updated_attrs = process_json_payload(
                 initial_state,
                 self._attr_extra_state_attributes,
@@ -655,24 +660,29 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 self.async_write_ha_state()
                 return
 
-            self._parsed_value = parse_value(
-                payload,
-                device_class_for_parsing,
-                state_class_for_parsing,
-                self._is_cell_sensor,
-            )
+            handled_numeric_vector = False
+            if not self._is_cell_sensor:
+                handled_numeric_vector = self._try_parse_numeric_vector(payload)
 
-            # Format the value
-            self._attr_native_value = format_sensor_value(
-                self._parsed_value,
-                device_class_for_parsing,
-                self._attr_extra_state_attributes,
-            )
+            if not handled_numeric_vector:
+                self._parsed_value = parse_value(
+                    payload,
+                    device_class_for_parsing,
+                    state_class_for_parsing,
+                    self._is_cell_sensor,
+                )
+
+                # Format the value
+                self._attr_native_value = format_sensor_value(
+                    self._parsed_value,
+                    device_class_for_parsing,
+                    self._attr_extra_state_attributes,
+                )
 
             # Process the payload for attributes
             if self._is_cell_sensor and isinstance(payload, str) and "," in payload:
                 self._handle_cell_values(payload)
-            else:
+            elif not handled_numeric_vector:
                 updated_attrs = process_json_payload(
                     payload,
                     self._attr_extra_state_attributes,
@@ -726,6 +736,40 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         self._parsed_value = state_value
         self._attr_native_value = state_value
         self._attr_extra_state_attributes.update(vector_attrs)
+        return True
+
+    def _try_parse_numeric_vector(self, payload: Any) -> bool:
+        """Render an undeclared comma-separated numeric vector cleanly.
+
+        Some OVMS metrics publish a comma-separated list of numbers (e.g. the VW
+        e-Up ``xvu.b.time.parked.state`` 6x8 park-time matrix) for which there is
+        no single natural scalar and whose raw form exceeds Home Assistant's
+        255-character state limit. Mirror the cell-sensor presentation: expose
+        the median as the state and the full series plus min/max/mean/count as
+        attributes. Only fires for a genuine numeric vector (>=
+        VECTOR_MIN_VALUES all-numeric elements) that no other handler claimed,
+        so scalars, short tuples and labelled vectors are unaffected. Returns
+        True when it handled the payload.
+        """
+        if not isinstance(payload, str) or "," not in payload:
+            return False
+        parts = [p.strip() for p in payload.split(",") if p.strip()]
+        if len(parts) < VECTOR_MIN_VALUES:
+            return False
+        try:
+            values = [float(p) for p in parts]
+        except (ValueError, TypeError):
+            return False
+
+        median = round(calculate_median(values), 4)
+        self._parsed_value = median
+        self._attr_native_value = median
+        self._attr_extra_state_attributes["values"] = values
+        self._attr_extra_state_attributes["count"] = len(values)
+        self._attr_extra_state_attributes["median"] = median
+        self._attr_extra_state_attributes["min"] = min(values)
+        self._attr_extra_state_attributes["max"] = max(values)
+        self._attr_extra_state_attributes["mean"] = round(sum(values) / len(values), 4)
         return True
 
     def _handle_cell_values(self, payload: str) -> None:
