@@ -341,6 +341,10 @@ class OVMSMQTTClient:
         for listener_remove in getattr(self, "_cleanup_listeners", []):
             listener_remove()
 
+        # Cancel the command handler's background cleanup task
+        if hasattr(self, "command_handler"):
+            await self.command_handler.async_shutdown()
+
         # Shutdown staleness manager
         if hasattr(self, "staleness_manager"):
             await self.staleness_manager.async_shutdown()
