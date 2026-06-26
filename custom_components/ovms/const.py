@@ -15,6 +15,9 @@ CONFIG_VERSION = 6
 OVMS_DEVICE_MANUFACTURER = "Open Vehicles"
 OVMS_DEVICE_MODEL = "OVMS Module"
 
+# Custom measurement units without a Home Assistant constant.
+UNIT_AMPERE_HOUR = "Ah"
+
 # Configuration
 CONF_VEHICLE_ID = "vehicle_id"
 CONF_QOS = "qos"

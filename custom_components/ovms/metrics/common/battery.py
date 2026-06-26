@@ -18,8 +18,7 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 
-# Custom unit constants
-UNIT_AMPERE_HOUR = "Ah"
+from ...const import UNIT_AMPERE_HOUR
 
 # Battery related metrics
 BATTERY_METRICS = {

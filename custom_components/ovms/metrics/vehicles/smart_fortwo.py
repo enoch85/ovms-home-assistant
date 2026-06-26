@@ -22,7 +22,7 @@ from homeassistant.const import (
 
 # Vehicle metadata
 VEHICLE_TYPE = "smart_fortwo"
-VEHICLE_NAME = "Smart EQ fortwo"
+VEHICLE_NAME = "Smart ForTwo"
 METRIC_PREFIX = "xse."
 
 # Smart ForTwo specific metrics

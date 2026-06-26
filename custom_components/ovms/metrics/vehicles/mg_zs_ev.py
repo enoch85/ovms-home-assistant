@@ -25,9 +25,6 @@ VEHICLE_TYPE = "mg_zs_ev"
 VEHICLE_NAME = "MG ZS EV"
 METRIC_PREFIX = "xmg."
 
-# Custom unit constants
-UNIT_AMPERE_HOUR = "Ah"
-
 # MG ZS-EV specific metrics
 MG_ZS_EV_METRICS = {
     # Battery system metrics
