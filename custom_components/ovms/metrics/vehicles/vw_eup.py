@@ -131,8 +131,9 @@ VW_EUP_METRICS = {
         "category": "vw_eup",
     },
     # Battery health / aging counters, new in OVMS firmware 3.3.006. These are
-    # cumulative lifetime totals (the BMS only ever increases them) whose value
-    # is meant to be trended, so they are TOTAL_INCREASING with a time unit.
+    # cumulative lifetime totals that the BMS persists and never resets, so they
+    # use state_class TOTAL with a time unit (per HA docs, TOTAL_INCREASING is
+    # for meters that periodically restart from 0 - not the case here).
     # NOTE: we deliberately do NOT set device_class DURATION here. This
     # integration renders DURATION values as a human "Xd Yh Zm" string and
     # clears the state_class (see sensor/entities.py), which would break the
@@ -145,7 +146,7 @@ VW_EUP_METRICS = {
         "name": "VW eUP! Battery Time Charged AC",
         "description": "Total lifetime time the battery has been AC charged",
         "icon": "mdi:current-ac",
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfTime.HOURS,
         "suggested_display_precision": 2,
         "category": "vw_eup",
@@ -154,7 +155,7 @@ VW_EUP_METRICS = {
         "name": "VW eUP! Battery Time Charged DC",
         "description": "Total lifetime time the battery has been DC charged",
         "icon": "mdi:current-dc",
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfTime.HOURS,
         "suggested_display_precision": 2,
         "category": "vw_eup",
@@ -163,7 +164,7 @@ VW_EUP_METRICS = {
         "name": "VW eUP! Battery Time Parked",
         "description": "Total lifetime time the vehicle has been parked",
         "icon": "mdi:clock-outline",
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfTime.DAYS,
         "suggested_display_precision": 2,
         "category": "vw_eup",
@@ -172,7 +173,7 @@ VW_EUP_METRICS = {
         "name": "VW eUP! Battery Time Parked Cold",
         "description": "Total lifetime time parked with battery below 0 °C",
         "icon": "mdi:thermometer-low",
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfTime.DAYS,
         "suggested_display_precision": 2,
         "category": "vw_eup",
@@ -181,7 +182,7 @@ VW_EUP_METRICS = {
         "name": "VW eUP! Battery Time Parked Empty",
         "description": "Total lifetime time parked below 10% SOC",
         "icon": "mdi:battery-low",
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfTime.DAYS,
         "suggested_display_precision": 2,
         "category": "vw_eup",
@@ -190,7 +191,7 @@ VW_EUP_METRICS = {
         "name": "VW eUP! Battery Time Parked Full",
         "description": "Total lifetime time parked above 90% SOC",
         "icon": "mdi:battery-high",
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfTime.DAYS,
         "suggested_display_precision": 2,
         "category": "vw_eup",
@@ -199,7 +200,7 @@ VW_EUP_METRICS = {
         "name": "VW eUP! Battery Time Parked Hot",
         "description": "Total lifetime time parked with battery above 30 °C",
         "icon": "mdi:thermometer-high",
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfTime.DAYS,
         "suggested_display_precision": 2,
         "category": "vw_eup",
@@ -208,7 +209,7 @@ VW_EUP_METRICS = {
         "name": "VW eUP! Battery Total Age",
         "description": "Total lifetime age of the high-voltage battery",
         "icon": "mdi:battery-clock",
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfTime.DAYS,
         "suggested_display_precision": 2,
         "category": "vw_eup",

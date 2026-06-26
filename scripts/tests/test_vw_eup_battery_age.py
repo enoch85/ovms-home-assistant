@@ -63,7 +63,7 @@ def main():
         m = get_metric_by_path(path)
         ok = (
             m is not None
-            and m["state_class"] == SensorStateClass.TOTAL_INCREASING
+            and m["state_class"] == SensorStateClass.TOTAL
             and m["unit"] == unit
             and m.get("category") == "vw_eup"
             and m.get("suggested_display_precision") == 2
@@ -71,9 +71,7 @@ def main():
             # as a "Xd Yh" string and drop state_class, breaking statistics.
             and m.get("device_class") is None
         )
-        _check(
-            f"{path}: numeric TOTAL_INCREASING / {unit} / no device_class", ok, results
-        )
+        _check(f"{path}: numeric TOTAL / {unit} / no device_class", ok, results)
 
     # Real OVMSSensor smoke test for one metric.
     path = "xvu.b.time.total"
@@ -98,10 +96,10 @@ def main():
         results,
     )
     _check(
-        "OVMSSensor unit=d, no device_class, state_class=total_increasing",
+        "OVMSSensor unit=d, no device_class, state_class=total",
         sensor.native_unit_of_measurement == UnitOfTime.DAYS
         and sensor.device_class is None
-        and sensor.state_class == SensorStateClass.TOTAL_INCREASING,
+        and sensor.state_class == SensorStateClass.TOTAL,
         results,
     )
 
