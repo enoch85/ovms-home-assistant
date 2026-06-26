@@ -96,8 +96,15 @@ LOCK_PIN_REQUIRED_ERROR = "A PIN code is required for lock and unlock commands."
 # These metrics automatically create switch entities alongside their sensors.
 # The dictionary key is the metric path (e.g., "v.e.hvac").
 # Source: OVMS command documentation for controllable vehicle features.
+# Each entry's "name" is the control switch's own display name. It MUST differ
+# from the status sensor created for the same metric (e.g. the "Charging Status"
+# binary sensor for v.c.charging) or both entities render the identical name on
+# the device page. TopicParser._build_related_control_entity passes this through
+# as the switch's friendly_name; without it the switch fell back to the status
+# sensor's name and collided with it.
 SWITCH_TYPES = {
     "v.e.hvac": {
+        "name": "Climate Control",
         "type": "climate",
         "icon": "mdi:thermometer",
         "category": None,
@@ -105,6 +112,7 @@ SWITCH_TYPES = {
         "off_command": "climatecontrol off",
     },
     "v.c.charging": {
+        "name": "Charge Control",
         "type": "charge",
         "icon": "mdi:battery-charging",
         "category": None,
@@ -112,6 +120,7 @@ SWITCH_TYPES = {
         "off_command": "charge stop",
     },
     "v.e.valet": {
+        "name": "Valet Control",
         "type": "valet",
         "icon": "mdi:key",
         "category": None,
