@@ -38,6 +38,22 @@ from ..utils import uses_tls_transport, uses_websocket_transport
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
 
+def _probe_tcp_port(host: str, port: int, timeout: float) -> bool:
+    """Return True if a TCP connection to host:port succeeds within timeout.
+
+    This opens a blocking socket, so it must run in an executor thread - never
+    call it directly on the event loop.
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(timeout)
+    try:
+        return sock.connect_ex((host, port)) == 0
+    except socket.error:
+        return False
+    finally:
+        sock.close()
+
+
 def ensure_serializable(obj):
     """Ensure objects are JSON serializable."""
     if isinstance(obj, dict):
@@ -181,7 +197,8 @@ async def test_mqtt_connection(
         _LOGGER.debug("%s - Resolving hostname", log_prefix)
         dns_start = asyncio.get_event_loop().time()
         try:
-            socket.gethostbyname(config[CONF_HOST])
+            # gethostbyname blocks, so resolve in an executor thread.
+            await hass.async_add_executor_job(socket.gethostbyname, config[CONF_HOST])
             dns_success = True
             dns_error = None
         except socket.gaierror as err:
@@ -206,18 +223,12 @@ async def test_mqtt_connection(
                 ),
             }
 
-        # Port check
+        # Port check (socket calls block, so probe in an executor thread).
         _LOGGER.debug("%s - Checking if port is open", log_prefix)
         port_check_start = asyncio.get_event_loop().time()
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(2)
-        try:
-            port_result = s.connect_ex((config[CONF_HOST], config[CONF_PORT]))
-            port_open = port_result == 0
-        except socket.error:
-            port_open = False
-        finally:
-            s.close()
+        port_open = await hass.async_add_executor_job(
+            _probe_tcp_port, config[CONF_HOST], config[CONF_PORT], 2
+        )
         port_check_time = asyncio.get_event_loop().time() - port_check_start
 
         debug_info["port_check"] = {
