@@ -457,6 +457,7 @@ def main():
             print_warning(f"  {issue}")
         # Auto-fix with black
         import subprocess
+
         try:
             fix_result = subprocess.run(
                 ["black", str(validator.custom_components_path), "--line-length", "88"],
