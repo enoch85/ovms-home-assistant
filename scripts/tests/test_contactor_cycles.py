@@ -120,6 +120,11 @@ async def main():
         and a.get("cycles_last_hour") == 3,
         results,
     )
+    _check(
+        "vector config keys are NOT leaked as user-facing attributes",
+        "vector_attributes" not in a and "vector_state" not in a,
+        results,
+    )
 
     # ---- a live update reflecting cycles being consumed ----
     _send(f"{SIGNAL_UPDATE_ENTITY}_{sensor.unique_id}", "200000,198400,1600,100,5")

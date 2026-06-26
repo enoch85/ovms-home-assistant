@@ -389,6 +389,15 @@ class OVMSSensor(SensorEntity, RestoreEntity):
             **attributes,
             "topic": topic,
         }
+        # Consume the vector config keys (if the metric declares them) into
+        # instance state so they drive _try_parse_vector without surfacing as
+        # confusing user-facing attributes. See issue #224.
+        self._vector_labels = self._attr_extra_state_attributes.pop(
+            "vector_attributes", None
+        )
+        self._vector_state_label = self._attr_extra_state_attributes.pop(
+            "vector_state", None
+        )
         self.hass: Optional[HomeAssistant] = hass
 
         # Determine sensor type
@@ -705,8 +714,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         every metric that doesn't declare a vector, so existing sensors are
         unaffected. See OVMS metric xsq.bms.contactor.cycles and issue #224.
         """
-        labels = self._attr_extra_state_attributes.get("vector_attributes")
-        state_label = self._attr_extra_state_attributes.get("vector_state")
+        labels = self._vector_labels
+        state_label = self._vector_state_label
         if not labels or not state_label:
             return False
 
