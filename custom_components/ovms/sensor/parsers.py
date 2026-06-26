@@ -277,6 +277,15 @@ def parse_value(
             if is_special_state_value(result):
                 return None
 
+            # A boolean extracted from the dict (bool is an int subclass) must be
+            # converted to 1/0 for a numeric sensor, mirroring the scalar bool
+            # branch below; otherwise it is returned as Python True/False and HA
+            # renders it as the string "True"/"False" on a numeric sensor.
+            if isinstance(result, bool) and requires_numeric_value(
+                device_class, state_class
+            ):
+                return 1 if result else 0
+
             # If we have a result, return it
             if result is not None:
                 return result
