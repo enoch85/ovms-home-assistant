@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional
 from homeassistant.core import HomeAssistant
 
 from ..const import (
+    DOMAIN,
     LOGGER_NAME,
     CONF_QOS,
     CONF_VEHICLE_ID,
@@ -125,6 +126,27 @@ class CommandHandler:
                 # Wait a bit before retrying to avoid tight loop
                 await asyncio.sleep(5)
 
+    def _get_connection_manager(self, vehicle_id: str = None):
+        """Return the MQTT connection manager for the targeted vehicle.
+
+        Each config entry owns one OVMSMQTTClient, stored in hass.data keyed by
+        entry_id. Match the entry whose vehicle_id equals the requested one
+        (defaulting to this handler's own vehicle) so a command publishes over
+        the correct broker connection. The previous logic compared the handler's
+        own config against itself, so in a multi-vehicle setup it returned the
+        first connected client's connection manager regardless of vehicle.
+        """
+        target_vehicle_id = vehicle_id or self.config.get(CONF_VEHICLE_ID)
+        for data in self.hass.data.get(DOMAIN, {}).values():
+            if not isinstance(data, dict):
+                continue
+            client = data.get("mqtt_client")
+            if client is None or not hasattr(client, "connection_manager"):
+                continue
+            if client.config.get(CONF_VEHICLE_ID) == target_vehicle_id:
+                return client.connection_manager
+        return None
+
     async def async_send_command(
         self,
         command: str,
@@ -134,16 +156,8 @@ class CommandHandler:
         vehicle_id: str = None,
     ) -> Dict[str, Any]:
         """Send a command to the OVMS module and wait for a response."""
-        # Get the MQTT client
-        mqtt_client = None
-        for entry_id, data in self.hass.data["ovms"].items():
-            if "mqtt_client" in data and hasattr(
-                data["mqtt_client"], "connection_manager"
-            ):
-                current_vehicle_id = vehicle_id or self.config.get(CONF_VEHICLE_ID)
-                if current_vehicle_id == self.config.get(CONF_VEHICLE_ID):
-                    mqtt_client = data["mqtt_client"].connection_manager
-                    break
+        # Resolve the connection manager for the targeted vehicle.
+        mqtt_client = self._get_connection_manager(vehicle_id)
 
         if not mqtt_client or not mqtt_client.connected:
             _LOGGER.error("Cannot send command, not connected to MQTT broker")
