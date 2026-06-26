@@ -108,8 +108,9 @@ def main():
         results,
     )
 
-    # The 48-value park-time matrix must be suppressed (blacklisted), while the
-    # scalar metrics must still create sensors.
+    # The 48-value park-time matrix is rendered as a clean numeric-vector sensor
+    # (median state + series attributes), no longer suppressed; the scalar
+    # metrics still create their own sensors.
     parser = TopicParser(
         {
             "vehicle_id": "eup",
@@ -121,14 +122,35 @@ def main():
     )
     base = "ovms/ovmsuser/eup/metric/xvu/b/time"
     _check(
-        "park-time matrix topic is suppressed (no entity)",
-        parser.parse_topic(f"{base}/parked/state", "1,2,3") is None,
+        "park-time matrix topic creates a sensor (rendered, not suppressed)",
+        (parser.parse_topic(f"{base}/parked/state", "0,1,2,3,4,5") or {}).get(
+            "entity_type"
+        )
+        == "sensor",
         results,
     )
     _check(
-        "scalar parked topic still creates a sensor (not over-blacklisted)",
+        "scalar parked topic also creates a sensor",
         (parser.parse_topic(f"{base}/parked", "300.25") or {}).get("entity_type")
         == "sensor",
+        results,
+    )
+
+    # The matrix renders cell-style: median as state, full series as attributes.
+    matrix_sensor = _TestSensor(
+        "ovms_test_eup_matrix",
+        "ovms_eup_matrix",
+        f"{base}/parked/state",
+        "0,2,4,6,8,10",
+        {},
+        {"category": "vw_eup"},
+        "Battery Time Parked State",
+        None,
+    )
+    _check(
+        "matrix sensor state is the median (5.0), not a raw vector string",
+        matrix_sensor.native_value == 5.0
+        and matrix_sensor.extra_state_attributes.get("count") == 6,
         results,
     )
 
