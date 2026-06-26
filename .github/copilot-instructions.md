@@ -354,7 +354,7 @@ client_id = f"ha_ovms_{hash[:12]}"
 
 - `paho-mqtt>=1.6.1`: MQTT client (do NOT use aiomqtt or asyncio-mqtt)
 - Home Assistant 2025.2.5+
-- Python 3.12+
+- Python 3.13+
 
 **Important**: Use synchronous paho-mqtt with manual event loop integration via `hass.loop.run_in_executor()` for blocking calls.
 
