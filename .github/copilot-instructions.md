@@ -172,6 +172,15 @@ System blacklist patterns in `const.py::SYSTEM_TOPIC_BLACKLIST` prevent high-fre
 - GPS accuracy: calculated from signal quality metrics
 - Cell statistics: min/max/avg/median for array data stored as attributes
 
+## Entity Naming Conventions
+
+Entity names must identify the vehicle **at most once**, and stay short (the UI is mostly used on mobile phones).
+
+- The Home Assistant **device** is named after the `vehicle_id` (e.g. the user's plate), so with `has_entity_name` it already prefixes every entity in dashboards/lists. Do **not** repeat the vehicle in the entity name to "make sure" it is identified.
+- For vehicle-specific metrics, the make/model belongs in the name **only as a trailing `(Make Model)` suffix**, added automatically by `naming_service.create_friendly_name`. Write the metric `name` with the make/model as a **leading** label (e.g. `"VW eUP! Battery Total Age"`); the naming service strips that prefix and re-appends it once as the suffix → `"Battery Total Age (VW eUP!)"`. Never hard-code the `(Make Model)` suffix in a metric `name`, and never end up with both a prefix and a suffix.
+- The make/model labels live in `const.VEHICLE_TOPIC_PREFIXES` (keyed by topic prefix); a vehicle module's `VEHICLE_NAME` must match its label there.
+- A vehicle-specific topic with **no** metric definition must still get a descriptor derived from the topic (e.g. `"E Dcdc State (VW eUP!)"`), never just the bare make/model label.
+
 ## Development Workflows
 
 ### Adding Vehicle Support
