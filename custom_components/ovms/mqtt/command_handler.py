@@ -140,7 +140,7 @@ class CommandHandler:
                 pass
             self._cleanup_task = None
 
-    def _get_connection_manager(self, vehicle_id: str = None):
+    def _get_connection_manager(self, vehicle_id: Optional[str] = None):
         """Return the MQTT connection manager for the targeted vehicle.
 
         Each config entry owns one OVMSMQTTClient, stored in hass.data keyed by
@@ -165,9 +165,9 @@ class CommandHandler:
         self,
         command: str,
         parameters: str = "",
-        command_id: str = None,
+        command_id: Optional[str] = None,
         timeout: int = DEFAULT_COMMAND_TIMEOUT,
-        vehicle_id: str = None,
+        vehicle_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Send a command to the OVMS module and wait for a response."""
         # Resolve the connection manager for the targeted vehicle.

@@ -74,6 +74,11 @@ class CodeQualityValidator:
     def __init__(self, base_path: Path):
         self.base_path = base_path
         self.custom_components_path = base_path / "custom_components" / "ovms"
+        # Also cover the standalone tooling under scripts/ (test harnesses,
+        # release helpers). These were previously excluded from the black check,
+        # so a formatting nit in this very file passed CI; include them so the
+        # gate enforces its own code too.
+        self.scripts_path = base_path / "scripts"
 
         # Home Assistant framework imports that are expected to be missing in dev environment
         self.ha_framework_imports = {
@@ -300,6 +305,7 @@ class CodeQualityValidator:
                 [
                     "black",
                     str(self.custom_components_path),
+                    str(self.scripts_path),
                     "--check",
                     "--line-length",
                     "88",
@@ -457,9 +463,16 @@ def main():
             print_warning(f"  {issue}")
         # Auto-fix with black
         import subprocess
+
         try:
             fix_result = subprocess.run(
-                ["black", str(validator.custom_components_path), "--line-length", "88"],
+                [
+                    "black",
+                    str(validator.custom_components_path),
+                    str(validator.scripts_path),
+                    "--line-length",
+                    "88",
+                ],
                 capture_output=True,
                 text=True,
             )

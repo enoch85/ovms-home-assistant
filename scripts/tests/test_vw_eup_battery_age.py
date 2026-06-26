@@ -4,9 +4,12 @@
 Firmware 3.3.006 adds cumulative battery health/aging counters:
   xvu.b.time.total / parked / parked.cold / parked.empty / parked.full /
   parked.hot  -> Days, and charged.ac / charged.dc -> Hours.
-They are lifetime accumulators, so each is a DURATION sensor with state_class
-TOTAL_INCREASING. This test asserts every definition is typed correctly and
-that a real OVMSSensor produces the numeric value with the right unit.
+They are lifetime accumulators typed as plain numeric sensors with state_class
+TOTAL and no DURATION device_class (the integration renders DURATION as a human
+"Xd Yh Zm" string and clears the state_class, which would break the long-term
+statistics these counters need). This test asserts every definition is typed
+correctly and that a real OVMSSensor produces the numeric value with the right
+unit.
 
 Run standalone:  python3 scripts/tests/test_vw_eup_battery_age.py
 Exits non-zero on failure.
