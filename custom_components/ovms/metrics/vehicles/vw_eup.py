@@ -22,7 +22,7 @@ from homeassistant.const import (
 
 # Vehicle metadata
 VEHICLE_TYPE = "vw_eup"
-VEHICLE_NAME = "VW e-UP!"
+VEHICLE_NAME = "VW eUP!"
 METRIC_PREFIX = "xvu."
 
 # Custom unit constants

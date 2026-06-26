@@ -22,7 +22,7 @@ from homeassistant.const import (
 
 # Vehicle metadata
 VEHICLE_TYPE = "mg_zs_ev"
-VEHICLE_NAME = "MG ZS EV"
+VEHICLE_NAME = "MG ZS-EV"
 METRIC_PREFIX = "xmg."
 
 # Custom unit constants
