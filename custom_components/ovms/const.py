@@ -341,6 +341,9 @@ ERROR_UNKNOWN = "unknown"
 DEFAULT_COMMAND_RATE_LIMIT = 5  # commands per minute
 DEFAULT_COMMAND_RATE_PERIOD = 60.0  # seconds
 DEFAULT_COMMAND_TIMEOUT = 10  # seconds to wait for command response
+COMMAND_CLEANUP_INTERVAL = 60  # seconds between pending-command sweeps
+COMMAND_PENDING_EXPIRY = 300  # seconds before a pending command is expired
+COMMAND_CLEANUP_RETRY_DELAY = 5  # seconds to wait after a cleanup-loop error
 
 # Maximum length for state values in Home Assistant
 MAX_STATE_LENGTH = 255

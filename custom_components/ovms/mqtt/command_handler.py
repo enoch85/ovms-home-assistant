@@ -16,9 +16,12 @@ from ..const import (
     CONF_VEHICLE_ID,
     DEFAULT_COMMAND_RATE_LIMIT,
     DEFAULT_COMMAND_RATE_PERIOD,
+    DEFAULT_COMMAND_TIMEOUT,
     DEFAULT_QOS,
     COMMAND_TOPIC_TEMPLATE,
-    RESPONSE_TOPIC_TEMPLATE,
+    COMMAND_CLEANUP_INTERVAL,
+    COMMAND_PENDING_EXPIRY,
+    COMMAND_CLEANUP_RETRY_DELAY,
     PIN_SENSITIVE_COMMANDS,
     SENSITIVE_LOG_REDACTION,
 )
@@ -93,15 +96,16 @@ class CommandHandler:
         """Periodically clean up timed-out command requests."""
         while True:
             try:
-                # Run every 60 seconds
-                await asyncio.sleep(60)
+                await asyncio.sleep(COMMAND_CLEANUP_INTERVAL)
 
                 current_time = time.time()
                 expired_commands = []
 
                 for command_id, command_data in self.pending_commands.items():
-                    # Check if command is older than 5 minutes
-                    if current_time - command_data["timestamp"] > 300:
+                    if (
+                        current_time - command_data["timestamp"]
+                        > COMMAND_PENDING_EXPIRY
+                    ):
                         expired_commands.append(command_id)
                         _LOGGER.debug("Cleaning up expired command: %s", command_id)
 
@@ -124,7 +128,17 @@ class CommandHandler:
             except Exception as ex:  # pylint: disable=broad-except
                 _LOGGER.exception("Error in command cleanup task: %s", ex)
                 # Wait a bit before retrying to avoid tight loop
-                await asyncio.sleep(5)
+                await asyncio.sleep(COMMAND_CLEANUP_RETRY_DELAY)
+
+    async def async_shutdown(self) -> None:
+        """Cancel the background cleanup task on teardown."""
+        if self._cleanup_task is not None:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+            self._cleanup_task = None
 
     def _get_connection_manager(self, vehicle_id: str = None):
         """Return the MQTT connection manager for the targeted vehicle.
@@ -152,7 +166,7 @@ class CommandHandler:
         command: str,
         parameters: str = "",
         command_id: str = None,
-        timeout: int = 10,
+        timeout: int = DEFAULT_COMMAND_TIMEOUT,
         vehicle_id: str = None,
     ) -> Dict[str, Any]:
         """Send a command to the OVMS module and wait for a response."""
