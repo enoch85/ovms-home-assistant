@@ -169,3 +169,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Local test/debug artifacts (Playwright snapshots, screenshots)
+.playwright-mcp/
+/trail-*.png
+/map-*.png
+/smart-ed-device.png
+/device-page-*.png
