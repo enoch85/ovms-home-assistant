@@ -152,6 +152,10 @@ SYSTEM_TOPIC_BLACKLIST = [
     "server/web/socket",
     "egpio/output",
     "power/can1",
+    # VW e-Up 6x8 SOC/temperature park-time matrix (OVMS 3.3.006): a 48-value
+    # vector with no meaningful single sensor state (>255 char raw value); its
+    # useful aggregates are exposed as the xvu.b.time.* scalars instead.
+    "xvu/b/time/parked/state",
 ]
 
 # Legacy topic blacklist patterns - kept for migration compatibility

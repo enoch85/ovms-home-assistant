@@ -25,6 +25,8 @@ import custom_components.ovms.sensor.entities as entities_mod
 from custom_components.ovms.sensor.entities import OVMSSensor
 from custom_components.ovms.attribute_manager import AttributeManager
 from custom_components.ovms.metrics import get_metric_by_path
+from custom_components.ovms.mqtt.topic_parser import TopicParser
+from custom_components.ovms.mqtt.entity_registry import EntityRegistry
 
 DAYS_METRICS = [
     "xvu.b.time.total",
@@ -100,6 +102,30 @@ def main():
         sensor.native_unit_of_measurement == UnitOfTime.DAYS
         and sensor.device_class is None
         and sensor.state_class == SensorStateClass.TOTAL,
+        results,
+    )
+
+    # The 48-value park-time matrix must be suppressed (blacklisted), while the
+    # scalar metrics must still create sensors.
+    parser = TopicParser(
+        {
+            "vehicle_id": "eup",
+            "topic_prefix": "ovms",
+            "mqtt_username": "ovmsuser",
+            "topic_structure": "{prefix}/{mqtt_username}/{vehicle_id}",
+        },
+        EntityRegistry(),
+    )
+    base = "ovms/ovmsuser/eup/metric/xvu/b/time"
+    _check(
+        "park-time matrix topic is suppressed (no entity)",
+        parser.parse_topic(f"{base}/parked/state", "1,2,3") is None,
+        results,
+    )
+    _check(
+        "scalar parked topic still creates a sensor (not over-blacklisted)",
+        (parser.parse_topic(f"{base}/parked", "300.25") or {}).get("entity_type")
+        == "sensor",
         results,
     )
 

@@ -139,9 +139,10 @@ VW_EUP_METRICS = {
     # clears the state_class (see sensor/entities.py), which would break the
     # long-term statistics that make these accumulators useful. A plain numeric
     # sensor with unit d/h keeps them graphable.
-    # The 6x8 SOC/temperature park-time matrix (xvu.b.time.parked.state) is
-    # intentionally omitted: it has no meaningful single state and is a niche
-    # web-UI diagnostic.
+    # The 6x8 SOC/temperature park-time matrix (xvu.b.time.parked.state) is a
+    # 48-value vector with no meaningful single sensor state, so it is
+    # suppressed via SYSTEM_TOPIC_BLACKLIST in const.py rather than surfaced as
+    # a broken/truncated entity; its useful aggregates are the scalars above.
     "xvu.b.time.charged.ac": {
         "name": "VW eUP! Battery Time Charged AC",
         "description": "Total lifetime time the battery has been AC charged",
