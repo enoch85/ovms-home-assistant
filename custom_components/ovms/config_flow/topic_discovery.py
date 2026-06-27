@@ -60,8 +60,8 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 def detect_vehicle_type(topics: Set[str]) -> tuple[str, str]:
     """Detect vehicle type from discovered topics.
 
-    Looks for vehicle-specific metric prefixes (xvu., xsq., xmg., xnl., xrt.)
-    in the topic paths to determine the vehicle type.
+    Looks for vehicle-specific metric prefixes (xvu., xsq., xse., xmg., xnl.,
+    xrt.) in the topic paths to determine the vehicle type.
 
     Note: MQTT topics use slashes (xvu/b/c/soh) while metric definitions use
     dots (xvu.b.c.soh), so we convert the prefix dots to slashes for matching.
