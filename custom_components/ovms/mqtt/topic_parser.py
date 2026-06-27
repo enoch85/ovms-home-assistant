@@ -168,7 +168,7 @@ class TopicParser:
             if parts[0] == "client":
                 return None
 
-            # Handle vendor-specific prefixes (like xvu, xsq, xmg, xnl)
+            # Convert the topic parts into a dotted metric-definition path
             metric_path = self._convert_to_metric_path(parts)
 
             # Determine entity type and category
@@ -316,32 +316,19 @@ class TopicParser:
         }
 
     def _convert_to_metric_path(self, parts: list[str]) -> str:
-        """Convert topic parts to metric path."""
-        # Keep vendor-specific prefixes intact
-        if len(parts) >= 2:
-            # VW e-UP metrics
-            if "xvu" in parts:
-                return ".".join(parts)
+        """Convert topic parts to a dotted metric-definition path.
 
-            # Smart ForTwo metrics
-            if "xsq" in parts:
-                return ".".join(parts)
-
-            # MG ZS-EV metrics
-            if "xmg" in parts:
-                return ".".join(parts)
-
-            # Nissan Leaf metrics
-            if "xnl" in parts:
-                return ".".join(parts)
-
-            # Renault Twizy metrics
-            if "xrt" in parts:
-                return ".".join(parts)
-
-            # Metric specific prefixes
-            if parts[0] in ["metric", "status", "notify"]:
-                return ".".join(parts[1:])
+        Strips the leading topic-type segment ("metric"/"status"/"notify") so
+        the remainder matches the dotted keys in the metric definitions, e.g.
+        ``["metric", "xvu", "b", "soc"]`` -> ``"xvu.b.soc"``. This is uniform for
+        every vehicle prefix (xvu/xsq/xse/xmg/xnl/xrt) and the generic ``v.*``
+        metrics - no per-prefix special-casing is needed. (The previous per-prefix
+        branches just re-joined the same parts and left a spurious "metric."
+        prefix on those five cars, which ``get_metric_by_path`` then had to
+        tolerate; Smart ED never had a branch and resolved correctly here.)
+        """
+        if len(parts) >= 2 and parts[0] in ["metric", "status", "notify"]:
+            return ".".join(parts[1:])
 
         return ".".join(parts)
 
