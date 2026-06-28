@@ -223,8 +223,15 @@ class EntityStalenessManager:
     def _start_cleanup_task(self) -> None:
         """Start the cleanup task."""
         if self._cleanup_task is None or self._cleanup_task.done():
-            self._cleanup_task = self.hass.async_create_task(
-                self._async_cleanup_stale_entities()
+            # Use a background task: this loop runs for the lifetime of the
+            # integration and never completes on its own. A normal
+            # async_create_task is tracked by HA's bootstrap, so the forever
+            # loop blocks "wrapping up the start up phase" (see issue #254).
+            # Background tasks are exempt from that wait and are auto-cancelled
+            # on shutdown.
+            self._cleanup_task = self.hass.async_create_background_task(
+                self._async_cleanup_stale_entities(),
+                name=f"ovms_staleness_cleanup_{self._vehicle_id}",
             )
             _LOGGER.debug("Started entity staleness cleanup task")
 
