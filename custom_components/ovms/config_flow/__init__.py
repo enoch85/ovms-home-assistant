@@ -219,7 +219,11 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             {
                 vol.Optional(CONF_USERNAME): str,
                 vol.Optional(CONF_PASSWORD): str,
-                vol.Required(CONF_QOS, default=DEFAULT_QOS): vol.In([0, 1, 2]),
+                # Coerce first: the frontend can submit the selected QoS as a
+                # string, which bare vol.In([0, 1, 2]) would reject.
+                vol.Required(CONF_QOS, default=DEFAULT_QOS): vol.All(
+                    vol.Coerce(int), vol.In([0, 1, 2])
+                ),
             }
         )
 

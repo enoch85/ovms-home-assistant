@@ -264,12 +264,14 @@ class OVMSOptionsFlow(OptionsFlow):
         # Add remaining options
         options.update(
             {
+                # Coerce first: the frontend can submit the selected QoS as a
+                # string, which bare vol.In([0, 1, 2]) would reject.
                 vol.Required(
                     CONF_QOS,
                     default=entry_options.get(
                         CONF_QOS, entry_data.get(CONF_QOS, DEFAULT_QOS)
                     ),
-                ): vol.In([0, 1, 2]),
+                ): vol.All(vol.Coerce(int), vol.In([0, 1, 2])),
                 vol.Required(
                     CONF_TOPIC_PREFIX,
                     default=entry_options.get(
