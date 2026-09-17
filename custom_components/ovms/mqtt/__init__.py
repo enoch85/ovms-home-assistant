@@ -2,25 +2,33 @@
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Dict, Any, Optional, Set
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import ATTR_RESTORED, STATE_UNAVAILABLE
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import (
     async_dispatcher_connect,
     async_dispatcher_send,
 )
+from homeassistant.helpers.event import async_call_later
 
 from ..const import (
     DOMAIN,
     LOGGER_NAME,
+    METRIC_REFRESH_COMMAND,
     METRIC_REQUEST_TOPIC_TEMPLATE,
     CONF_CONFIG_ENTRY_ID,
     CONF_CLIENT_ID,
     CONF_QOS,
+    DEFAULT_COMMAND_TIMEOUT,
     DEFAULT_QOS,
     RECONNECT_METRIC_REQUEST_DELAY,
     GPS_ACCURACY_MIN_METERS,
     GPS_ACCURACY_MAX_METERS,
+    STALENESS_UNIQUE_ID_MARKER,
+    STARTUP_METRIC_REFRESH_DELAY,
     get_platforms_loaded_signal,
 )
 
@@ -49,6 +57,8 @@ class OVMSMQTTClient:
         self.discovered_topics = set()
         self.topic_cache = {}
         self._shutting_down = False
+        # Cancel handle for the scheduled startup metric refresh (issue #261)
+        self._startup_refresh_cancel: Optional[CALLBACK_TYPE] = None
 
         # Initialize services
         self.naming_service = EntityNamingService(config)
@@ -124,6 +134,100 @@ class OVMSMQTTClient:
                 "No topics discovered yet, requesting metrics via on-demand feature"
             )
             await self.async_request_metrics()
+
+        # Firmware without the on-demand feature ignores that request, so
+        # entities for metrics OVMS won't republish until their value changes
+        # (e.g. v.c.* while parked) would stay restored-unavailable after a
+        # restart. Once the request has had its chance, fall back to the
+        # universal refresh command when known entities are still missing.
+        # See issue #261.
+        self._startup_refresh_cancel = async_call_later(
+            self.hass,
+            STARTUP_METRIC_REFRESH_DELAY,
+            self._async_startup_metric_refresh,
+        )
+
+    async def _async_startup_metric_refresh(self, _now: datetime) -> None:
+        """Request a full metric publish when known entities are still missing.
+
+        Entities are only created once a message arrives on their topic, and
+        OVMS publishes non-retained: after its initial on-connect publish it
+        only re-sends metrics whose value changed. So after a Home Assistant
+        restart, topics that are static while the vehicle is parked (e.g. the
+        v.c.* charge metrics sitting at 0) never republish and their entities
+        remain restored "unavailable" placeholders until the module reboots
+        (issue #261). Edge firmware is healed by the on-demand metric request
+        sent on connect; older firmware silently ignores it. When previously
+        discovered entities are still missing after the grace period, ask the
+        module to republish everything via METRIC_REFRESH_COMMAND - the same
+        universal method the ovms.refresh_metrics service uses - so the
+        entities are re-created through normal discovery with live data.
+
+        Runs once per setup. If the module is offline the command simply
+        fails: its own next reconnection triggers a full publish anyway.
+        """
+        self._startup_refresh_cancel = None
+        if self._shutting_down:
+            return
+        if not self.connected:
+            _LOGGER.debug(
+                "Skipping startup metric refresh: not connected to MQTT broker"
+            )
+            return
+
+        missing = self._count_missing_registry_entities()
+        if not missing:
+            _LOGGER.debug("Startup metric refresh not needed: no entities missing")
+            return
+
+        _LOGGER.info(
+            "%d previously discovered entities are still unavailable after "
+            "startup, requesting a full metric publish via '%s'",
+            missing,
+            METRIC_REFRESH_COMMAND,
+        )
+        result = await self.async_send_command(
+            command=METRIC_REFRESH_COMMAND, timeout=DEFAULT_COMMAND_TIMEOUT
+        )
+        if not result.get("success"):
+            _LOGGER.warning(
+                "Startup metric refresh command failed (%s); the entities "
+                "will recover when the module next reconnects or publishes. "
+                "The ovms.refresh_metrics service can be used to retry",
+                result.get("error", "no response"),
+            )
+
+    def _count_missing_registry_entities(self) -> int:
+        """Count this entry's registered entities that have no live data yet.
+
+        Covers entities Home Assistant knows from a previous run whose topics
+        have not produced a message this boot: their states are either the
+        registry's restored "unavailable" placeholders or, very early in
+        startup, not written at all. Disabled entities and the staleness
+        diagnostic sensor (not fed by an MQTT topic) are excluded.
+
+        Returns:
+            Number of entities still waiting for their first MQTT message.
+        """
+        if not self.config_entry_id:
+            return 0
+
+        entity_registry = er.async_get(self.hass)
+        missing = 0
+        for entry in er.async_entries_for_config_entry(
+            entity_registry, self.config_entry_id
+        ):
+            if entry.platform != DOMAIN or entry.disabled_by is not None:
+                continue
+            if entry.unique_id and STALENESS_UNIQUE_ID_MARKER in entry.unique_id:
+                continue
+
+            state = self.hass.states.get(entry.entity_id)
+            if state is None or (
+                state.state == STATE_UNAVAILABLE and state.attributes.get(ATTR_RESTORED)
+            ):
+                missing += 1
+        return missing
 
     async def _on_message_received(self, topic: str, payload: str) -> None:
         """Handle message received from MQTT broker."""
@@ -336,6 +440,11 @@ class OVMSMQTTClient:
     async def async_shutdown(self) -> None:
         """Shutdown the MQTT client."""
         self._shutting_down = True
+
+        # Cancel a still-pending startup metric refresh
+        if self._startup_refresh_cancel is not None:
+            self._startup_refresh_cancel()
+            self._startup_refresh_cancel = None
 
         # Clean up listeners
         for listener_remove in getattr(self, "_cleanup_listeners", []):

@@ -266,6 +266,23 @@ LEGACY_DISCOVERY_TIMEOUT = 60  # fallback timeout for older firmware
 # Delay before requesting metrics after reconnection to ensure subscriptions are established
 RECONNECT_METRIC_REQUEST_DELAY = ACTIVE_DISCOVERY_TIMEOUT / 2  # 5 seconds
 
+# Universal metric refresh command. Marks every metric as modified so server v3
+# retransmits them all. Works on all MQTT-capable firmware, unlike the
+# on-demand request/metric feature above (edge firmware only). Shared by the
+# ovms.refresh_metrics service and the automatic startup refresh (issue #261).
+METRIC_REFRESH_COMMAND = "server v3 update all"
+
+# Delay after platform setup before checking for still-missing entities and
+# falling back to METRIC_REFRESH_COMMAND. OVMS publishes non-retained and only
+# re-publishes a metric when its value changes, so after a Home Assistant
+# restart the entities for metrics that are static while the vehicle is parked
+# (e.g. v.c.* charge metrics) stay restored-unavailable until data arrives.
+# The delay covers the on-demand metric request sent
+# RECONNECT_METRIC_REQUEST_DELAY (5 s) after connect plus the
+# ACTIVE_DISCOVERY_TIMEOUT (10 s) window in which edge firmware answers it,
+# with margin - so the command is only sent when that request went unanswered.
+STARTUP_METRIC_REFRESH_DELAY = ACTIVE_DISCOVERY_TIMEOUT * 2  # 20 seconds
+
 # Discovery thresholds (percentage-based)
 # These are percentages of expected metrics for the detected vehicle type
 MINIMUM_DISCOVERY_PERCENT = 5  # Below this, show warning to user

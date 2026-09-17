@@ -59,9 +59,11 @@ OVMSMQTTClient (mqtt/__init__.py) - orchestrates all components
 
 2. **Entity Creation Pattern**: Topic → TopicParser (matches patterns in `metrics/patterns.py`) → EntityFactory → Platform-specific entity class → Home Assistant entity registry.
 
-3. **State Updates**: MQTT message → StateParser (handles type conversion, array processing) → UpdateDispatcher → Entity state update via signal dispatch.
+3. **Startup Metric Refresh**: OVMS publishes non-retained and only re-sends changed metrics, so after an HA restart the entities for static metrics (e.g. v.c.* while parked) stay restored-unavailable. `STARTUP_METRIC_REFRESH_DELAY` after platform setup, `OVMSMQTTClient._async_startup_metric_refresh` sends `METRIC_REFRESH_COMMAND` ("server v3 update all", same universal method as the ovms.refresh_metrics service) when previously discovered entities are still missing; the module then republishes everything and the entities are re-created through normal discovery with live data (issue #261).
 
-4. **Command Flow**: Service call → CommandHandler.async_send_command() → MQTT publish to `{prefix}/{username}/{vehicle_id}/client/rr/command/{command_id}` → Response on `{prefix}/{username}/{vehicle_id}/client/rr/response/{command_id}`.
+4. **State Updates**: MQTT message → StateParser (handles type conversion, array processing) → UpdateDispatcher → Entity state update via signal dispatch.
+
+5. **Command Flow**: Service call → CommandHandler.async_send_command() → MQTT publish to `{prefix}/{username}/{vehicle_id}/client/rr/command/{command_id}` → Response on `{prefix}/{username}/{vehicle_id}/client/rr/response/{command_id}`.
 
 ### Configuration Management
 

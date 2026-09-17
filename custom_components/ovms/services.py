@@ -10,7 +10,13 @@ from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import config_validation as cv
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import CONF_VEHICLE_ID, DEFAULT_COMMAND_TIMEOUT, DOMAIN, LOGGER_NAME
+from .const import (
+    CONF_VEHICLE_ID,
+    DEFAULT_COMMAND_TIMEOUT,
+    DOMAIN,
+    LOGGER_NAME,
+    METRIC_REFRESH_COMMAND,
+)
 from .utils import get_merged_config
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -531,12 +537,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
         mqtt_client = get_mqtt_client_or_raise(vehicle_id)
 
-        # Always use 'server v3 update all' as primary method - works universally
+        # Always use METRIC_REFRESH_COMMAND as primary method - works universally
         # The on-demand metric request only works with edge firmware and we can't
         # reliably detect firmware version from MQTT publish success alone
         try:
             result = await mqtt_client.async_send_command(
-                command="server v3 update all",
+                command=METRIC_REFRESH_COMMAND,
                 timeout=DEFAULT_COMMAND_TIMEOUT,
             )
 
@@ -550,7 +556,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 "success": True,
                 "method": "server-command",
                 "pattern": pattern,
-                "message": "Requested all metrics via 'server v3 update all'",
+                "message": f"Requested all metrics via '{METRIC_REFRESH_COMMAND}'",
                 "response": result.get("response", ""),
             }
         except (OSError, TimeoutError, ValueError) as ex:
