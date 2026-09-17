@@ -45,6 +45,7 @@ The [OVMS integration](https://docs.openvehicles.com/en/latest/userguide/homeass
 - **Entity Creation**: Creates appropriate Home Assistant entities based on data type with intelligent state parsing
 - **Smart Categorization**: Organizes entities into logical groups (battery, climate, location, etc.)
 - **Real-time Updates**: Entities update as new data is published through MQTT
+- **Restart Resilience**: If previously discovered entities are still unavailable shortly after a Home Assistant restart, the integration automatically asks the module for a full metric publish (`server v3 update all`), so metrics the vehicle only publishes on change (e.g. charge metrics while parked) come back on their own
 - **Command Interface**: Send commands to your vehicle through services with proper rate limiting
 - **Vehicle Status**: Track online/offline status of your vehicle automatically
 - **Secure Communication**: Supports TLS/SSL connections to MQTT brokers with certificate verification
@@ -94,7 +95,7 @@ config set server.v3 metrics.exclude "v.e.*.log"
 ## Known "Issues" and Solutions
 
 - If you have trouble with certain metrics not appearing, try the `server v3 update all` command. Please see [this section](https://github.com/enoch85/ovms-home-assistant?tab=readme-ov-file#ovmssend_command) for more information. This command will update all of your metrics at once in the OVMS module, and in turn send the updated metrics over to the broker which is then picked up by the integration.
-- Some metrics may show as unavailable initially. This is normal until the vehicle provides data for these metrics.
+- Some metrics may show as unavailable initially. This is normal until the vehicle provides data for these metrics. After a restart the integration requests a full metric publish automatically when previously discovered entities are still missing, so this now resolves itself while the module is online.
 - For best results, ensure your OVMS module firmware is updated to at least version 3.3.004 or higher.
 
 
