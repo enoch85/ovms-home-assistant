@@ -64,22 +64,12 @@ The [OVMS integration](https://docs.openvehicles.com/en/latest/userguide/homeass
 
 ## Requirements
 
-- Home Assistant (2025.2.5 or newer) according to HACS specification
+- Home Assistant (2026.8.0 or newer) according to HACS specification
 - MQTT integration configured in Home Assistant
 - MQTT broker supporting MQTT 3.1, 3.1.1, or 5.0 (client ID length limit: 23 characters for 3.1/3.1.1)
 - OVMS module publishing to the same MQTT broker
 - OVMS firmware 3.3.001 or newer required (edge firmware for fastest discovery)
 - Python package: paho-mqtt>=1.6.1 (installed automatically)
-
-### OVMS Firmware Features by Version
-
-| Version | Features |
-|---------|----------|
-| 3.3.001+ | Basic MQTT support |
-| 3.3.003+ | GPS signal quality metric (`v.p.gpssq`) |
-| 3.3.004+ | Improved stability |
-| 3.3.005 | Current stable release |
-| Edge | On-demand metric requests (faster setup) |
 
 ### Reducing MQTT Traffic (Optional)
 

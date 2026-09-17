@@ -273,10 +273,11 @@ class UpdateDispatcher:
                     from homeassistant.helpers import device_registry as dr
 
                     device_registry = dr.async_get(self.hass)
+                    config_entry_id = self._config.get(CONF_CONFIG_ENTRY_ID)
 
-                    # Look up device by its identifier directly
-                    device = device_registry.async_get_device(
-                        identifiers={(DOMAIN, self._device_identifier)}
+                    # Look up this entry's device by its identifier
+                    device = device_registry.async_get_device_by_identifier(
+                        (DOMAIN, self._device_identifier), config_entry_id
                     )
 
                     if device is None:
@@ -284,8 +285,8 @@ class UpdateDispatcher:
                         # setups that haven't restarted since migration.
                         vehicle_id = self._config.get(CONF_VEHICLE_ID)
                         if vehicle_id:
-                            device = device_registry.async_get_device(
-                                identifiers={(DOMAIN, str(vehicle_id).lower())}
+                            device = device_registry.async_get_device_by_identifier(
+                                (DOMAIN, str(vehicle_id).lower()), config_entry_id
                             )
 
                     # Update device with version information
