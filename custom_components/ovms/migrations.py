@@ -250,12 +250,12 @@ async def async_migrate_entity_identity(
                 break
 
     if not existing_device and vehicle_id:
-        existing_device = device_reg.async_get_device(
-            identifiers={(DOMAIN, str(vehicle_id).lower())}
+        existing_device = device_reg.async_get_device_by_identifier(
+            (DOMAIN, str(vehicle_id).lower()), config_entry.entry_id
         )
 
-    migrated_device = device_reg.async_get_device(
-        identifiers={(DOMAIN, new_device_identifier)}
+    migrated_device = device_reg.async_get_device_by_identifier(
+        (DOMAIN, new_device_identifier), config_entry.entry_id
     )
 
     device_name = get_ovms_device_name(vehicle_id)
@@ -431,7 +431,9 @@ async def async_cleanup_stale_device_associations(
     entity_reg = entity_registry.async_get(hass)
 
     # Ensure this entry's device exists with the correct identifier
-    own_device = device_reg.async_get_device(identifiers={(DOMAIN, own_identifier)})
+    own_device = device_reg.async_get_device_by_identifier(
+        (DOMAIN, own_identifier), config_entry.entry_id
+    )
     if own_device is None:
         own_device = device_reg.async_get_or_create(
             config_entry_id=config_entry.entry_id,
