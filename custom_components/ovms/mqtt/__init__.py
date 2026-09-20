@@ -63,14 +63,20 @@ class OVMSMQTTClient:
         self._shutting_down = False
         # Cancel handle for the scheduled startup metric refresh (issue #261)
         self._startup_refresh_cancel: Optional[CALLBACK_TYPE] = None
-        # Firmware-reported units (see const.METRIC_UNITS_COMMAND). The module
-        # is asked once, when the first sensor topic without a definition shows
-        # up; such topics wait here (topic -> latest payload) until the answer
-        # or its failure is in, so an entity is never created with a guessed
-        # unit that the module could have told us.
-        self._metric_units_requested = False
-        self._metric_units_resolved = False
+        # Firmware-reported units (see const.METRIC_UNITS_COMMAND). A sensor
+        # topic without a definition, whose unit the module has not told us,
+        # waits here (topic -> latest payload) while the module is asked, so an
+        # entity is never created with a guessed unit the module could supply.
         self._topics_awaiting_units: Dict[str, str] = {}
+        # Topics that have waited for an answer already: a topic never triggers
+        # a second query, whatever becomes of its entity.
+        self._topics_asked_for_units: Set[str] = set()
+        self._metric_units_query_running = False
+        self._unit_mismatches_logged: Set[str] = set()
+        # OVMS publishes its metrics retained, so the broker delivers them the
+        # moment we subscribe - while this client is still being set up and
+        # cannot send commands yet. The module is asked once setup is complete.
+        self._setup_complete = asyncio.Event()
 
         # Initialize services
         self.naming_service = EntityNamingService(config)
@@ -132,6 +138,7 @@ class OVMSMQTTClient:
     async def _async_platforms_loaded(self) -> None:
         """Handle platforms loaded event."""
         _LOGGER.info("All platforms loaded, processing entity discovery")
+        self._setup_complete.set()
 
         # Process queued entities from entity factory
         await self.entity_factory.async_process_queued_entities()
@@ -289,7 +296,7 @@ class OVMSMQTTClient:
         if not entities_for_topic:
             # New topic, create entity
             parsed_data = self.topic_parser.parse_topic(topic, payload)
-            if parsed_data and self._awaits_metric_units(parsed_data):
+            if parsed_data and self._awaits_metric_units(topic, parsed_data):
                 self._topics_awaiting_units[topic] = payload
                 self._request_metric_units()
             elif parsed_data:
@@ -320,23 +327,24 @@ class OVMSMQTTClient:
                     exc_info=True,
                 )
 
-    def _awaits_metric_units(self, parsed_data: Dict[str, Any]) -> bool:
+    def _awaits_metric_units(self, topic: str, parsed_data: Dict[str, Any]) -> bool:
         """Return True if this topic's entity must wait for the module's units.
 
-        Only a sensor without a metric definition depends on them; everything
-        else is created immediately, exactly as before.
+        Only a sensor without a metric definition depends on them, and only
+        while the module has not described that metric; everything else is
+        created immediately, exactly as before.
         """
         return (
-            not self._metric_units_resolved
+            topic not in self._topics_asked_for_units
             and parsed_data.get("entity_type") == "sensor"
             and not parsed_data.get("metric_defined", True)
+            and parsed_data.get("metric_path") not in self.topic_parser.reported_units
         )
 
     def _request_metric_units(self) -> None:
-        """Ask the module for its metric units, once per setup."""
-        if self._metric_units_requested:
+        """Ask the module for its metric units, unless it is being asked already."""
+        if self._metric_units_query_running:
             return
-        self._metric_units_requested = True
         # Background task: the command can take its full timeout when the
         # module is offline, and must not hold up Home Assistant's startup.
         # Created on the config entry, as Home Assistant asks of integrations,
@@ -345,6 +353,7 @@ class OVMSMQTTClient:
         if entry is None:
             # The entry is gone, so this client is being torn down.
             return
+        self._metric_units_query_running = True
         entry.async_create_background_task(
             self.hass,
             self._async_load_metric_units(),
@@ -361,29 +370,42 @@ class OVMSMQTTClient:
         without a definition having to exist. On failure (module offline,
         firmware older than 3.3.004, rate limit) nothing is learned and the
         waiting topics get the topic-name guess, the behaviour before this.
-        """
-        # async_send_command never raises: every failure comes back as
-        # success=False, so the waiting topics below are always released.
-        result = await self.async_send_command(
-            command=METRIC_UNITS_COMMAND, timeout=DEFAULT_COMMAND_TIMEOUT
-        )
-        response = result.get("response")
-        units: Dict[str, Optional[str]] = {}
-        if result.get("success") and isinstance(response, str):
-            units = parse_metric_units(response)
-        self.topic_parser.reported_units = units
-        self._metric_units_resolved = True
 
-        _LOGGER.info("Module described %d of its metrics", len(units))
-        self._log_unit_mismatches(units)
+        The module only lists a unit for metrics that have a value, so a metric
+        it sets later (charge metrics while parked, for one) is asked for when
+        its topic first shows up.
+        """
+        try:
+            await self._setup_complete.wait()
+            # async_send_command never raises: every failure comes back as
+            # success=False, so the waiting topics below are always released.
+            result = await self.async_send_command(
+                command=METRIC_UNITS_COMMAND, timeout=DEFAULT_COMMAND_TIMEOUT
+            )
+            response = result.get("response")
+            units: Dict[str, Optional[str]] = {}
+            if result.get("success") and isinstance(response, str):
+                units = parse_metric_units(response)
+            self.topic_parser.reported_units.update(units)
+            _LOGGER.info("Module described %d of its metrics", len(units))
+            self._log_unit_mismatches(units)
+        finally:
+            self._metric_units_query_running = False
 
         waiting, self._topics_awaiting_units = self._topics_awaiting_units, {}
+        self._topics_asked_for_units.update(waiting)
         for topic, payload in waiting.items():
             if self._shutting_down:
                 return
             parsed_data = self.topic_parser.parse_topic(topic, payload)
-            if parsed_data:
+            if not parsed_data:
+                continue
+            try:
                 await self._async_create_topic_entities(topic, payload, parsed_data)
+            except Exception as ex:  # pylint: disable=broad-except
+                _LOGGER.error(
+                    "Failed to create entity for topic %s: %s", topic, ex, exc_info=True
+                )
 
     def _log_unit_mismatches(self, units: Dict[str, Optional[str]]) -> None:
         """Warn when a metric definition disagrees with the module's unit.
@@ -393,19 +415,21 @@ class OVMSMQTTClient:
         definition needs fixing - this surfaces it instead of leaving it
         unnoticed.
         """
-        mismatches = [
-            f"{name} (module: {unit}, defined: {METRIC_DEFINITIONS[name]['unit']})"
+        mismatches = {
+            name: f"{name} (module: {unit}, defined: {METRIC_DEFINITIONS[name]['unit']})"
             for name, unit in sorted(units.items())
             if unit is not None
+            and name not in self._unit_mismatches_logged
             and name in METRIC_DEFINITIONS
             and METRIC_DEFINITIONS[name].get("unit")
             and str(METRIC_DEFINITIONS[name]["unit"]) != unit
-        ]
+        }
         if mismatches:
+            self._unit_mismatches_logged.update(mismatches)
             _LOGGER.warning(
                 "The OVMS module reports other units than this integration "
                 "defines for: %s. Please report this at %s",
-                ", ".join(mismatches),
+                ", ".join(mismatches.values()),
                 ISSUE_TRACKER_URL,
             )
 
