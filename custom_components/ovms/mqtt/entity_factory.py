@@ -98,7 +98,11 @@ class EntityFactory:
             friendly_name = entity_data.get("friendly_name")
             if not friendly_name:
                 friendly_name = self.naming_service.create_friendly_name(
-                    parts, metric_info, topic, raw_name
+                    parts,
+                    metric_info,
+                    topic,
+                    raw_name,
+                    entity_data.get("metric_defined", True),
                 )
 
             # Reduce logging frequency - only log entity creation for important entities or during setup

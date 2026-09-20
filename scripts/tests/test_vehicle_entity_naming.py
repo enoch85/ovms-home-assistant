@@ -97,6 +97,47 @@ def main():
         results,
     )
 
+    # 6) Issue #267: an undefined vehicle metric whose last topic segment is a
+    #    generic pattern word ("power", "temp", ...) used to take that
+    #    pattern's name verbatim - a bare, vehicle-less "Power" that collided
+    #    with every other "*.power" topic. It is described like any other
+    #    undefined vehicle metric.
+    topic6 = "ovms/u/eup/metric/xsq/v/charge/bcb/power"
+    generic_power = {"name": "Power", "unit": "W"}
+    _check(
+        "undefined vehicle metric matching a generic pattern gets a descriptor",
+        svc.create_friendly_name(
+            _parts(topic6), generic_power, topic6, "x", metric_defined=False
+        ),
+        "V Charge Bcb Power (Smart ForTwo)",
+        results,
+    )
+
+    # 7) The same pattern on a topic WITHOUT a vehicle prefix is unchanged.
+    topic7 = "ovms/u/eup/metric/v/x/new/power"
+    _check(
+        "generic pattern on a standard metric keeps the pattern name",
+        svc.create_friendly_name(
+            _parts(topic7), generic_power, topic7, "x", metric_defined=False
+        ),
+        "Power",
+        results,
+    )
+
+    # 8) A DEFINED vehicle metric is never renamed by the flag's default.
+    _check(
+        "defined vehicle metric is unaffected by the new parameter",
+        svc.create_friendly_name(
+            _parts(topic6),
+            {"name": "Smart ForTwo BCB Mains Power"},
+            topic6,
+            "x",
+            metric_defined=True,
+        ),
+        "BCB Mains Power (Smart ForTwo)",
+        results,
+    )
+
     print("-" * 55)
     if all(results):
         print(f"All {len(results)} checks passed.")

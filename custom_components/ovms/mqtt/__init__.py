@@ -16,9 +16,11 @@ from homeassistant.helpers.event import async_call_later
 
 from ..const import (
     DOMAIN,
+    ISSUE_TRACKER_URL,
     LOGGER_NAME,
     METRIC_REFRESH_COMMAND,
     METRIC_REQUEST_TOPIC_TEMPLATE,
+    METRIC_UNITS_COMMAND,
     CONF_CONFIG_ENTRY_ID,
     CONF_CLIENT_ID,
     CONF_QOS,
@@ -41,6 +43,8 @@ from .command_handler import CommandHandler
 from ..naming_service import EntityNamingService
 from ..attribute_manager import AttributeManager
 from ..entity_staleness_manager import EntityStalenessManager
+from ..metrics import METRIC_DEFINITIONS
+from ..metrics.units import parse_metric_units
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -59,6 +63,14 @@ class OVMSMQTTClient:
         self._shutting_down = False
         # Cancel handle for the scheduled startup metric refresh (issue #261)
         self._startup_refresh_cancel: Optional[CALLBACK_TYPE] = None
+        # Firmware-reported units (see const.METRIC_UNITS_COMMAND). The module
+        # is asked once, when the first sensor topic without a definition shows
+        # up; such topics wait here (topic -> latest payload) until the answer
+        # or its failure is in, so an entity is never created with a guessed
+        # unit that the module could have told us.
+        self._metric_units_requested = False
+        self._metric_units_resolved = False
+        self._topics_awaiting_units: Dict[str, str] = {}
 
         # Initialize services
         self.naming_service = EntityNamingService(config)
@@ -277,30 +289,125 @@ class OVMSMQTTClient:
         if not entities_for_topic:
             # New topic, create entity
             parsed_data = self.topic_parser.parse_topic(topic, payload)
-            if parsed_data:
-                # Create the primary entity
-                await self.entity_factory.async_create_entities(
-                    topic, payload, parsed_data
-                )
-
-                # Create any related entities (e.g., switches for controllable metrics)
-                related_entities = self.topic_parser.get_related_entities(parsed_data)
-                for related_entity in related_entities:
-                    try:
-                        await self.entity_factory.async_create_entities(
-                            topic, payload, related_entity
-                        )
-                    except Exception as ex:
-                        _LOGGER.error(
-                            "Failed to create related entity for topic %s (%s): %s",
-                            topic,
-                            related_entity.get("entity_type", "unknown"),
-                            ex,
-                            exc_info=True,
-                        )
+            if parsed_data and self._awaits_metric_units(parsed_data):
+                self._topics_awaiting_units[topic] = payload
+                self._request_metric_units()
+            elif parsed_data:
+                await self._async_create_topic_entities(topic, payload, parsed_data)
         else:
             # Existing topic, update entity
             self.update_dispatcher.dispatch_update(topic, payload)
+
+    async def _async_create_topic_entities(
+        self, topic: str, payload: str, parsed_data: Dict[str, Any]
+    ) -> None:
+        """Create the primary entity of a parsed topic and its related entities."""
+        await self.entity_factory.async_create_entities(topic, payload, parsed_data)
+
+        # Create any related entities (e.g., switches for controllable metrics)
+        related_entities = self.topic_parser.get_related_entities(parsed_data)
+        for related_entity in related_entities:
+            try:
+                await self.entity_factory.async_create_entities(
+                    topic, payload, related_entity
+                )
+            except Exception as ex:
+                _LOGGER.error(
+                    "Failed to create related entity for topic %s (%s): %s",
+                    topic,
+                    related_entity.get("entity_type", "unknown"),
+                    ex,
+                    exc_info=True,
+                )
+
+    def _awaits_metric_units(self, parsed_data: Dict[str, Any]) -> bool:
+        """Return True if this topic's entity must wait for the module's units.
+
+        Only a sensor without a metric definition depends on them; everything
+        else is created immediately, exactly as before.
+        """
+        return (
+            not self._metric_units_resolved
+            and parsed_data.get("entity_type") == "sensor"
+            and not parsed_data.get("metric_defined", True)
+        )
+
+    def _request_metric_units(self) -> None:
+        """Ask the module for its metric units, once per setup."""
+        if self._metric_units_requested:
+            return
+        self._metric_units_requested = True
+        # Background task: the command can take its full timeout when the
+        # module is offline, and must not hold up Home Assistant's startup.
+        # Created on the config entry, as Home Assistant asks of integrations,
+        # so it is cancelled when the entry is unloaded.
+        entry = self.hass.config_entries.async_get_entry(self.config_entry_id)
+        if entry is None:
+            # The entry is gone, so this client is being torn down.
+            return
+        entry.async_create_background_task(
+            self.hass,
+            self._async_load_metric_units(),
+            name=f"ovms_metric_units_{self.config_entry_id}",
+        )
+
+    async def _async_load_metric_units(self) -> None:
+        """Learn metric units from the module, then create the waiting entities.
+
+        MQTT carries bare values, so the unit of a metric without a definition
+        could only be guessed from its topic name. METRIC_UNITS_COMMAND makes
+        the module list every metric with its native unit - the unit Server V3
+        publishes in - which removes the guessing for any vehicle and firmware
+        without a definition having to exist. On failure (module offline,
+        firmware older than 3.3.004, rate limit) nothing is learned and the
+        waiting topics get the topic-name guess, the behaviour before this.
+        """
+        # async_send_command never raises: every failure comes back as
+        # success=False, so the waiting topics below are always released.
+        result = await self.async_send_command(
+            command=METRIC_UNITS_COMMAND, timeout=DEFAULT_COMMAND_TIMEOUT
+        )
+        response = result.get("response")
+        units: Dict[str, Optional[str]] = {}
+        if result.get("success") and isinstance(response, str):
+            units = parse_metric_units(response)
+        self.topic_parser.reported_units = units
+        self._metric_units_resolved = True
+
+        _LOGGER.info("Module described %d of its metrics", len(units))
+        self._log_unit_mismatches(units)
+
+        waiting, self._topics_awaiting_units = self._topics_awaiting_units, {}
+        for topic, payload in waiting.items():
+            if self._shutting_down:
+                return
+            parsed_data = self.topic_parser.parse_topic(topic, payload)
+            if parsed_data:
+                await self._async_create_topic_entities(topic, payload, parsed_data)
+
+    def _log_unit_mismatches(self, units: Dict[str, Optional[str]]) -> None:
+        """Warn when a metric definition disagrees with the module's unit.
+
+        The definition still wins (it also works offline and on old firmware),
+        but a disagreement means the displayed number is wrong and the
+        definition needs fixing - this surfaces it instead of leaving it
+        unnoticed.
+        """
+        mismatches = [
+            f"{name} (module: {unit}, defined: {METRIC_DEFINITIONS[name]['unit']})"
+            for name, unit in sorted(units.items())
+            if unit is not None
+            and name in METRIC_DEFINITIONS
+            and METRIC_DEFINITIONS[name].get("unit")
+            and str(METRIC_DEFINITIONS[name]["unit"]) != unit
+        ]
+        if mismatches:
+            _LOGGER.warning(
+                "The OVMS module reports other units than this integration "
+                "defines for: %s. Please report this at %s",
+                ", ".join(mismatches),
+                ISSUE_TRACKER_URL,
+            )
 
     def _track_gps_quality_topic(self, topic: str, payload: str) -> None:
         """Track GPS quality topics for location accuracy."""

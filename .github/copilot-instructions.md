@@ -61,9 +61,11 @@ OVMSMQTTClient (mqtt/__init__.py) - orchestrates all components
 
 3. **Startup Metric Refresh**: OVMS publishes non-retained and only re-sends changed metrics, so after an HA restart the entities for static metrics (e.g. v.c.* while parked) stay restored-unavailable. `STARTUP_METRIC_REFRESH_DELAY` after platform setup, `OVMSMQTTClient._async_startup_metric_refresh` sends `METRIC_REFRESH_COMMAND` ("server v3 update all", same universal method as the ovms.refresh_metrics service) when previously discovered entities are still missing; the module then republishes everything and the entities are re-created through normal discovery with live data (issue #261).
 
-4. **State Updates**: MQTT message → StateParser (handles type conversion, array processing) → UpdateDispatcher → Entity state update via signal dispatch.
+4. **Firmware-Reported Units**: MQTT carries bare values - no unit, type or label. The first sensor topic WITHOUT a metric definition makes `OVMSMQTTClient._request_metric_units` send `METRIC_UNITS_COMMAND` ("metrics list -n", native units = what Server V3 publishes; firmware 3.3.004+) once per setup; such topics are held in `_topics_awaiting_units` until the answer or its failure is in, then created. The query runs as a background task created on the **config entry** (`entry.async_create_background_task`, not `hass.`), so it never blocks startup and is cancelled on unload. `metrics/units.py::parse_metric_units` maps the firmware's unit labels (`const.OVMS_UNIT_LABELS`) to HA units and `describe_reported_unit` types the sensor. A definition always wins over the reported unit; a disagreement is logged as a warning (`_log_unit_mismatches`) because it means the definition is wrong. On failure (offline, old firmware, rate limit) the topic-name guess from `metrics/patterns.py` remains the fallback. Defined metrics, binary sensors and all other platforms are never held back.
 
-5. **Command Flow**: Service call → CommandHandler.async_send_command() → MQTT publish to `{prefix}/{username}/{vehicle_id}/client/rr/command/{command_id}` → Response on `{prefix}/{username}/{vehicle_id}/client/rr/response/{command_id}`.
+5. **State Updates**: MQTT message → StateParser (handles type conversion, array processing) → UpdateDispatcher → Entity state update via signal dispatch.
+
+6. **Command Flow**: Service call → CommandHandler.async_send_command() → MQTT publish to `{prefix}/{username}/{vehicle_id}/client/rr/command/{command_id}` → Response on `{prefix}/{username}/{vehicle_id}/client/rr/response/{command_id}`.
 
 ### Configuration Management
 
@@ -128,6 +130,8 @@ Metrics are defined in `metrics/` with a three-tier hierarchy:
 
 **Lookup Priority**: Vehicle-specific → Category-specific → Generic pattern → Fallback sensor
 
+**Definitions are optional.** A definition adds a curated name, icon, category and device class; it is not needed for a metric to work. An undefined metric gets a topic-derived name and the unit the module reports for it (see "Firmware-Reported Units"), so new upstream metrics need no integration change. Do not add definitions just to supply a unit, and never let a definition's unit differ from the firmware's native unit for that metric (`MetricFloat(..., <unit>)` in the vehicle module source) - the integration does not convert, it labels.
+
 Example metric definition:
 ```python
 "v.b.soc": {
@@ -182,6 +186,7 @@ Entity names must identify the vehicle **at most once**, and stay short (the UI 
 - For vehicle-specific metrics, the make/model belongs in the name **only as a trailing `(Make Model)` suffix**, added automatically by `naming_service.create_friendly_name`. Write the metric `name` with the make/model as a **leading** label (e.g. `"VW eUP! Battery Total Age"`); the naming service strips that prefix and re-appends it once as the suffix → `"Battery Total Age (VW eUP!)"`. Never hard-code the `(Make Model)` suffix in a metric `name`, and never end up with both a prefix and a suffix.
 - The make/model labels live in `const.VEHICLE_TOPIC_PREFIXES` (keyed by topic prefix); a vehicle module's `VEHICLE_NAME` must match its label there.
 - A vehicle-specific topic with **no** metric definition must still get a descriptor derived from the topic (e.g. `"E Dcdc State (VW eUP!)"`), never just the bare make/model label.
+- The same holds when such a topic only matches a **generic pattern** (`metric_defined` is False in the parsed topic): the pattern's name ("Power", "Voltage") is shared by many metrics and must not be used on its own; `create_friendly_name` derives `"V Charge Bcb Power (Smart ForTwo)"` from the topic instead (issue #267).
 
 ## Development Workflows
 
@@ -269,6 +274,11 @@ Defined in `services.yaml` and implemented in `services.py`:
 
 **Problem**: String values like "yes" cause errors for sensors with device_class.
 **Solution**: Always use `StateParser.parse_value()` with device_class parameter. Parser handles string→number conversion.
+
+### Restoring Stored State
+
+**Problem**: `RestoreEntity.async_get_last_state()` returns the *displayed* state. Adopting it as `native_value` double-converts for users with a different display unit (°F, mi), and a stored text state makes Home Assistant reject a sensor that is now numeric ("Error adding entity").
+**Solution**: Follow the Home Assistant sensor docs: `OVMSSensor` extends `RestoreSensor` and restores from `async_get_last_sensor_data()` (native value + native unit). The live MQTT payload always wins; the stored value only fills in when there is no live value and it still fits the sensor (`_can_restore_value`: same native unit, numeric where a number is required).
 
 ### Topic Discovery Timing
 

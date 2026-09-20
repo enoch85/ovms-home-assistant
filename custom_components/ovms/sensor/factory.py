@@ -21,6 +21,7 @@ from ..const import LOGGER_NAME
 from ..metrics import get_metric_by_path, get_metric_by_pattern
 from ..metrics.common.tire import TIRE_POSITIONS
 from ..metrics.patterns import TOPIC_PATTERNS
+from ..metrics.units import ATTR_REPORTED_UNIT, describe_reported_unit
 from ..utils import get_namespaced_ovms_unique_id
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -108,6 +109,20 @@ def determine_sensor_type(
         metric_info = get_metric_by_pattern(topic_parts) or get_metric_by_pattern(
             name_parts
         )
+
+        # The module reported this metric's real unit (or that its value is
+        # text): that overrules typing which was only guessed from the topic
+        # name ("*.power" -> W while the firmware publishes kW). A definition
+        # is never overruled - exact matches never reach this point, and one
+        # found by the vehicle lookups inside get_metric_by_pattern is not a
+        # generic pattern.
+        if ATTR_REPORTED_UNIT in attributes and (
+            metric_info is None
+            or any(metric_info is pattern for pattern in TOPIC_PATTERNS.values())
+        ):
+            metric_info = describe_reported_unit(
+                metric_info, attributes[ATTR_REPORTED_UNIT]
+            )
 
     # Apply metric info if found
     if metric_info:

@@ -8,12 +8,30 @@ from homeassistant.const import (  # noqa: W0611
     CONF_USERNAME,
     CONF_PROTOCOL,
 )
+from homeassistant.const import (
+    DEGREE,
+    PERCENTAGE,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    UnitOfElectricCurrent,
+    UnitOfElectricPotential,
+    UnitOfEnergy,
+    UnitOfEnergyDistance,
+    UnitOfLength,
+    UnitOfPower,
+    UnitOfPressure,
+    UnitOfSpeed,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 
 DOMAIN = "ovms"
 CONFIG_VERSION = 6
 
 OVMS_DEVICE_MANUFACTURER = "Open Vehicles"
 OVMS_DEVICE_MODEL = "OVMS Module"
+
+# Where users are asked to report problems (same as manifest.json issue_tracker).
+ISSUE_TRACKER_URL = "https://github.com/enoch85/ovms-home-assistant/issues"
 
 # Custom measurement units without a Home Assistant constant.
 UNIT_AMPERE_HOUR = "Ah"
@@ -283,6 +301,68 @@ METRIC_REFRESH_COMMAND = "server v3 update all"
 # with margin - so the command is only sent when that request went unanswered.
 STARTUP_METRIC_REFRESH_DELAY = ACTIVE_DISCOVERY_TIMEOUT * 2  # 20 seconds
 
+# Firmware-reported metric units
+# MQTT carries bare values only - no unit, type or label - so the unit of a
+# metric without a definition had to be guessed from its topic name, and the
+# guess is often wrong (every "*.power" is assumed to be W although OVMS
+# registers most power metrics in kW). The module can describe itself instead:
+# this shell command prints every metric as "<name> <value><unit label>" in its
+# native unit, which is exactly what Server V3 publishes (metric->AsString()).
+# "-n" (native units) exists since firmware 3.3.004; older firmware rejects the
+# option, no units are learned and the topic-name guess remains the fallback.
+METRIC_UNITS_COMMAND = "metrics list -n"
+# Every unit label the firmware appends to a value (unit_info table in
+# main/ovms_metrics.cpp) mapped to the Home Assistant unit, or to None where
+# Home Assistant has no equivalent. The None entries matter: they let "20sq" be
+# recognised as a number in an unknown unit rather than mistaken for text.
+OVMS_UNIT_LABELS = {
+    "km": UnitOfLength.KILOMETERS,
+    "M": UnitOfLength.MILES,
+    "m": UnitOfLength.METERS,
+    "ft": UnitOfLength.FEET,
+    "°C": UnitOfTemperature.CELSIUS,
+    "°F": UnitOfTemperature.FAHRENHEIT,
+    "kPa": UnitOfPressure.KPA,
+    "Pa": UnitOfPressure.PA,
+    "psi": UnitOfPressure.PSI,
+    "bar": UnitOfPressure.BAR,
+    "V": UnitOfElectricPotential.VOLT,
+    "A": UnitOfElectricCurrent.AMPERE,
+    "Ah": UNIT_AMPERE_HOUR,
+    "kW": UnitOfPower.KILO_WATT,
+    "W": UnitOfPower.WATT,
+    "kWh": UnitOfEnergy.KILO_WATT_HOUR,
+    "Wh": UnitOfEnergy.WATT_HOUR,
+    "Sec": UnitOfTime.SECONDS,
+    "Min": UnitOfTime.MINUTES,
+    "Hour": UnitOfTime.HOURS,
+    "Day": UnitOfTime.DAYS,
+    "°": DEGREE,
+    "km/h": UnitOfSpeed.KILOMETERS_PER_HOUR,
+    "Mph": UnitOfSpeed.MILES_PER_HOUR,
+    "m/s": UnitOfSpeed.METERS_PER_SECOND,
+    "ft/s": UnitOfSpeed.FEET_PER_SECOND,
+    "dBm": SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    "%": PERCENTAGE,
+    "Wh/km": UnitOfEnergyDistance.WATT_HOUR_PER_KM,
+    "kWh/100km": UnitOfEnergyDistance.KILO_WATT_HOUR_PER_100_KM,
+    "km/kWh": UnitOfEnergyDistance.KM_PER_KILO_WATT_HOUR,
+    "mi/kWh": UnitOfEnergyDistance.MILES_PER_KILO_WATT_HOUR,
+    "Nm": "Nm",
+    "m/s²": "m/s²",
+    "ft/s²": None,
+    "km/h/s": None,
+    "Mph/s": None,
+    "Wh/mi": None,
+    "kC": None,
+    "MJ": None,
+    "sq": None,
+    "Mon": None,
+    "Year": None,
+    "epoch": None,
+    "\u2030": None,
+}
+
 # Discovery thresholds (percentage-based)
 # These are percentages of expected metrics for the detected vehicle type
 MINIMUM_DISCOVERY_PERCENT = 5  # Below this, show warning to user
@@ -383,6 +463,11 @@ MAX_STATE_LENGTH = 255
 # like the VW e-Up 48-value park-time matrix that would otherwise exceed
 # MAX_STATE_LENGTH and render as a truncated raw string.
 VECTOR_MIN_VALUES = 4
+# A sensor that must be numeric (it has a device/state class) cannot show a
+# short tuple as text: below VECTOR_MIN_VALUES the payload used to fall through
+# to scalar parsing, fail, and leave the state unknown (e.g. a 3-phase voltage
+# vector "229.5,0,0"). For those sensors any vector of 2+ numbers is a series.
+VECTOR_MIN_VALUES_NUMERIC = 2
 
 # GPS accuracy calculation constants
 # Used to convert GPS signal quality (v.p.gpssq) to meters accuracy

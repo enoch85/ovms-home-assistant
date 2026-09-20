@@ -43,6 +43,7 @@ The [OVMS integration](https://docs.openvehicles.com/en/latest/userguide/homeass
 
 - **Automatic Discovery**: Detects all metrics published by your OVMS module without manual configuration
 - **Entity Creation**: Creates appropriate Home Assistant entities based on data type with intelligent state parsing
+- **Units from the Module**: MQTT carries bare values, so for metrics this integration has no definition for it asks the module once per start (`metrics list -n`) which unit each metric is in, instead of guessing from the topic name. New metrics from a firmware update or an unsupported vehicle get the right unit without an integration update
 - **Smart Categorization**: Organizes entities into logical groups (battery, climate, location, etc.)
 - **Real-time Updates**: Entities update as new data is published through MQTT
 - **Restart Resilience**: If previously discovered entities are still unavailable shortly after a Home Assistant restart, the integration automatically asks the module for a full metric publish (`server v3 update all`), so metrics the vehicle only publishes on change (e.g. charge metrics while parked) come back on their own
@@ -68,7 +69,7 @@ The [OVMS integration](https://docs.openvehicles.com/en/latest/userguide/homeass
 - MQTT integration configured in Home Assistant
 - MQTT broker supporting MQTT 3.1, 3.1.1, or 5.0 (client ID length limit: 23 characters for 3.1/3.1.1)
 - OVMS module publishing to the same MQTT broker
-- OVMS firmware 3.3.001 or newer required (edge firmware for fastest discovery)
+- OVMS firmware 3.3.001 or newer required (edge firmware for fastest discovery; 3.3.004 or newer for module-reported units)
 - Python package: paho-mqtt>=1.6.1 (installed automatically)
 
 ### Reducing MQTT Traffic (Optional)
@@ -87,6 +88,8 @@ config set server.v3 metrics.exclude "v.e.*.log"
 - If you have trouble with certain metrics not appearing, try the `server v3 update all` command. Please see [this section](https://github.com/enoch85/ovms-home-assistant?tab=readme-ov-file#ovmssend_command) for more information. This command will update all of your metrics at once in the OVMS module, and in turn send the updated metrics over to the broker which is then picked up by the integration.
 - Some metrics may show as unavailable initially. This is normal until the vehicle provides data for these metrics. After a restart the integration requests a full metric publish automatically when previously discovered entities are still missing, so this now resolves itself while the module is online.
 - For best results, ensure your OVMS module firmware is updated to at least version 3.3.004 or higher.
+- Metrics without a definition in this integration get their unit from the module itself (`metrics list -n`, firmware 3.3.004+). If the module is offline at that moment or runs older firmware, the unit is guessed from the topic name as before; the module is asked again on the next restart or reload of the integration.
+- A log warning "The OVMS module reports other units than this integration defines for: ..." means a metric definition in this integration is out of date compared to your firmware. The entity keeps working; please report it so the definition can be corrected.
 
 
 ## Screenshots
@@ -297,6 +300,8 @@ After setup, entities will be created for your vehicle metrics. These include:
 - **Location**: GPS position of the vehicle
 - **Status**: Connection state, operational parameters
 - **Vehicle-specific**: Other metrics specific to your vehicle model
+
+Metrics the integration has no definition for (new firmware metrics, vehicles without dedicated support) still become entities: the name is derived from the topic, with the make/model as a suffix where the vehicle is known (e.g. `V Charge Bcb Power (Smart ForTwo)`), and the unit comes from the module.
 
 Entities are grouped under a device representing your vehicle, identified by the vehicle ID.
 
