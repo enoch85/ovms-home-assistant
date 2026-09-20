@@ -12,7 +12,7 @@ from homeassistant.const import (
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
-    UnitOfLength,
+    UnitOfEnergyDistance,
     UnitOfPower,
     UnitOfTemperature,
     UnitOfTime,
@@ -64,16 +64,22 @@ MG_ZS_EV_METRICS = {
         "name": "MG ZS-EV Average Consumption",
         "description": "Average energy consumption",
         "icon": "mdi:gauge",
+        # The firmware registers this metric in Wh/km (WattHoursPK), the
+        # same energy-per-distance quantity as the generic v.b.consumption.
+        "device_class": SensorDeviceClass.ENERGY_DISTANCE,
         "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfLength.MILES + "/" + UnitOfEnergy.KILO_WATT_HOUR,
+        "unit": UnitOfEnergyDistance.WATT_HOUR_PER_KM,
         "category": "mg_zs_ev",
     },
     "xmg.p.trip.consumption": {
         "name": "MG ZS-EV Trip Consumption",
         "description": "Trip energy consumption",
         "icon": "mdi:gauge",
+        # The firmware registers this metric in Wh/km (WattHoursPK), the
+        # same energy-per-distance quantity as the generic v.b.consumption.
+        "device_class": SensorDeviceClass.ENERGY_DISTANCE,
         "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfLength.MILES + "/" + UnitOfEnergy.KILO_WATT_HOUR,
+        "unit": UnitOfEnergyDistance.WATT_HOUR_PER_KM,
         "category": "mg_zs_ev",
     },
     # System status metrics

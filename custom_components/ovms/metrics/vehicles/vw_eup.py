@@ -20,6 +20,8 @@ from homeassistant.const import (
     EntityCategory,
 )
 
+from ...const import UNIT_AMPERE_HOUR
+
 # Vehicle metadata
 VEHICLE_TYPE = "vw_eup"
 VEHICLE_NAME = "VW eUP!"
@@ -31,18 +33,26 @@ VW_EUP_METRICS = {
         "name": "VW eUP! Absolute Battery Capacity",
         "description": "Absolute battery capacity",
         "icon": "mdi:battery",
-        "device_class": SensorDeviceClass.ENERGY_STORAGE,
+        # The firmware registers this metric in Ah (AmpHours); the kWh
+        # capacities are the separate xvu.b.cap.kwh.* metrics. Home
+        # Assistant has no device class for Ah, so like the generic
+        # v.b.cac it is a plain measurement.
+        "device_class": None,
         "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfEnergy.KILO_WATT_HOUR,  # Changed from UNIT_AMPERE_HOUR to kWh
+        "unit": UNIT_AMPERE_HOUR,
         "category": "vw_eup",
     },
     "xvu.b.cap.ah.norm": {
         "name": "VW eUP! Normalized Battery Capacity",
         "description": "Normalized battery capacity",
         "icon": "mdi:battery",
-        "device_class": SensorDeviceClass.ENERGY_STORAGE,
+        # The firmware registers this metric in Ah (AmpHours); the kWh
+        # capacities are the separate xvu.b.cap.kwh.* metrics. Home
+        # Assistant has no device class for Ah, so like the generic
+        # v.b.cac it is a plain measurement.
+        "device_class": None,
         "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfEnergy.KILO_WATT_HOUR,  # Changed from UNIT_AMPERE_HOUR to kWh
+        "unit": UNIT_AMPERE_HOUR,
         "category": "vw_eup",
     },
     "xvu.b.cap.kwh.abs": {

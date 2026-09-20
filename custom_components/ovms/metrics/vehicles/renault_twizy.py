@@ -492,19 +492,24 @@ RENAULT_TWIZY_METRICS = {
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "category": "renault_twizy",
     },
-    # Scale metrics
+    # SEVCON monitor series; the firmware registers them in kW and Nm
+    # (rt_sevcon_mon.cpp)
     "xrt.s.b.pwr.drv": {
         "name": "Renault Twizy Battery Power Drive Scale",
         "description": "Battery drive power scale factor",
         "icon": "mdi:scale-balance",
+        "device_class": SensorDeviceClass.POWER,
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.KILO_WATT,
         "category": "renault_twizy",
     },
     "xrt.s.b.pwr.rec": {
         "name": "Renault Twizy Battery Power Recovery Scale",
         "description": "Battery recovery power scale factor",
         "icon": "mdi:scale-balance",
+        "device_class": SensorDeviceClass.POWER,
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.KILO_WATT,
         "category": "renault_twizy",
     },
     "xrt.s.m.trq.drv": {
@@ -512,6 +517,7 @@ RENAULT_TWIZY_METRICS = {
         "description": "Motor drive torque scale factor",
         "icon": "mdi:scale-balance",
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": "Nm",
         "category": "renault_twizy",
     },
     "xrt.s.m.trq.rec": {
@@ -519,6 +525,7 @@ RENAULT_TWIZY_METRICS = {
         "description": "Motor recovery torque scale factor",
         "icon": "mdi:scale-balance",
         "state_class": SensorStateClass.MEASUREMENT,
+        "unit": "Nm",
         "category": "renault_twizy",
     },
     # Vehicle alerts and status

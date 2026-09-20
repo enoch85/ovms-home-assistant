@@ -72,7 +72,9 @@ TRIP_METRICS = {
         "icon": "mdi:map-marker-distance",
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
-        "unit": UnitOfLength.KILOMETERS,
+        # The firmware registers this metric in metres (metrics_standard.cpp),
+        # unlike the odometer metrics which are kilometres.
+        "unit": UnitOfLength.METERS,
         "category": "trip",
     },
     "v.e.throttle": {
