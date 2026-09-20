@@ -23,13 +23,63 @@ class EntityNamingService:
         self.config = config
         self.vehicle_id = config.get("vehicle_id", "")
 
+    def _vehicle_topic_descriptor(self, parts: Optional[List[str]]) -> Optional[str]:
+        """Name a vehicle-specific topic from its segments after the prefix.
+
+        Args:
+            parts: Topic segments after the vehicle id
+
+        Returns:
+            e.g. "V Charge Bcb Power (Smart ForTwo)" for
+            ["metric", "xsq", "v", "charge", "bcb", "power"], or None when the
+            topic carries no vehicle prefix or nothing follows it.
+        """
+        tail: List[str] = []
+        vehicle_label = None
+        for part in parts or []:
+            if vehicle_label is not None:
+                tail.append(part)
+            else:
+                vehicle_label = VEHICLE_TOPIC_PREFIXES.get(part)
+        if not tail:
+            return None
+        descriptor = " ".join(tail).replace("_", " ").title()
+        return f"{descriptor} ({vehicle_label})"
+
     def create_friendly_name(
-        self, parts: List[str], metric_info: Optional[Dict], topic: str, raw_name: str
+        self,
+        parts: List[str],
+        metric_info: Optional[Dict],
+        topic: str,
+        raw_name: str,
+        metric_defined: bool = True,
     ) -> str:
-        """Create an entity name based on topic parts and metric info."""
+        """Create an entity name based on topic parts and metric info.
+
+        Args:
+            parts: Topic segments after the vehicle id
+            metric_info: Metric definition or generic topic pattern, if any
+            topic: Full MQTT topic
+            raw_name: Underscore-joined topic segments
+            metric_defined: False when metric_info is only a generic topic
+                pattern ("power", "temp", ...) rather than a definition of
+                this metric
+
+        Returns:
+            The entity name; vehicle-specific metrics end in "(Make Model)".
+        """
         # Handle status topics specially
         if topic and topic.endswith("/status"):
             return STATUS_ENTITY_NAME
+
+        # A generic pattern names every topic it matches identically and knows
+        # nothing about the vehicle, so an undefined vehicle-specific metric
+        # such as xsq.v.charge.bcb.power would read a bare "Power". Describe it
+        # by its topic instead, like any other undefined vehicle metric.
+        if not metric_defined:
+            descriptor = self._vehicle_topic_descriptor(parts)
+            if descriptor:
+                return descriptor
 
         # For vehicle-specific metrics, prioritize the metric name from definitions
         if metric_info and "name" in metric_info:
@@ -51,16 +101,9 @@ class EntityNamingService:
             # the vehicle prefix so the entity reads "B Soc (VW eUP!)" instead of
             # only "VW eUP!" repeated across every undefined metric.
             if base_name in VEHICLE_TOPIC_PREFIXES.values():
-                tail = []
-                seen_prefix = False
-                for part in parts or []:
-                    if seen_prefix:
-                        tail.append(part)
-                    elif part in VEHICLE_TOPIC_PREFIXES:
-                        seen_prefix = True
-                if tail:
-                    descriptor = " ".join(tail).replace("_", " ").title()
-                    return f"{descriptor} ({base_name})"
+                descriptor = self._vehicle_topic_descriptor(parts)
+                if descriptor:
+                    return descriptor
 
             # If topic ends with a number (like /03), append it to the name
             if topic and topic.split("/")[-1].isdigit():

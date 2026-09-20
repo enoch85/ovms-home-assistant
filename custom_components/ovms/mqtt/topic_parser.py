@@ -17,9 +17,11 @@ from ..const import (
 )
 from ..metrics import (
     BINARY_METRICS,
+    TOPIC_PATTERNS,
     get_metric_by_path,
     get_metric_by_pattern,
 )
+from ..metrics.units import ATTR_REPORTED_UNIT
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -37,6 +39,11 @@ class TopicParser:
         self.coordinate_entities_created = (
             {}
         )  # Track which coordinate entities we've created
+        # What the module reported for its metrics (metric path -> Home
+        # Assistant unit, or None for a text value), filled in by the MQTT
+        # client once known. Empty until then, and on firmware that cannot
+        # report it.
+        self.reported_units: dict[str, str | None] = {}
 
         # Initialize topic blacklist from user configuration (defaults to system patterns)
         configured_blacklist = config.get(CONF_TOPIC_BLACKLIST, SYSTEM_TOPIC_BLACKLIST)
@@ -194,6 +201,25 @@ class TopicParser:
             if not metric_info:
                 metric_info = get_metric_by_pattern(parts)
 
+            # A generic topic pattern ("power", "temp", ...) is a guess from the
+            # topic name, not a definition of this metric: its unit may be wrong
+            # and its name is shared by every topic it matches.
+            metric_defined = metric_info is not None and not any(
+                metric_info is pattern for pattern in TOPIC_PATTERNS.values()
+            )
+
+            # Hand the firmware-reported unit to the sensor, which resolves its
+            # own typing from the topic. Definitions stay authoritative.
+            if (
+                metric_path in self.reported_units
+                and not metric_defined
+                and entity_type == "sensor"
+            ):
+                metric_info = {
+                    **(metric_info or {}),
+                    ATTR_REPORTED_UNIT: self.reported_units[metric_path],
+                }
+
             # Prepare basic attributes
             attributes = {
                 "topic": topic,
@@ -208,6 +234,7 @@ class TopicParser:
                 "parts": parts,
                 "metric_path": metric_path,
                 "metric_info": metric_info,
+                "metric_defined": metric_defined,
                 "attributes": attributes,
                 "priority": 5 if "version" in name.lower() else 0,
             }

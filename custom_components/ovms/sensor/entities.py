@@ -21,6 +21,7 @@ from ..const import (
     LOGGER_NAME,
     SIGNAL_UPDATE_ENTITY,
     VECTOR_MIN_VALUES,
+    VECTOR_MIN_VALUES_NUMERIC,
     get_add_entities_signal,
     truncate_state_value,
 )
@@ -39,6 +40,7 @@ from .factory import (
 )
 from .duration_formatter import format_duration, parse_duration
 from ..metrics.common.tire import TIRE_POSITIONS
+from ..metrics.units import ATTR_REPORTED_UNIT
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -405,6 +407,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         sensor_type = determine_sensor_type(
             self._internal_name, self._topic, self._attr_extra_state_attributes
         )
+        # The firmware-reported unit has done its job in determine_sensor_type;
+        # like the vector keys above it is wiring, not a user-facing attribute.
+        self._attr_extra_state_attributes.pop(ATTR_REPORTED_UNIT, None)
         self._attr_device_class = sensor_type["device_class"]
         self._attr_state_class = sensor_type["state_class"]
         self._attr_native_unit_of_measurement = sensor_type[
@@ -612,7 +617,7 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                         else:
                             # Just use the state value directly
                             self._attr_native_value = state.state
-                else:
+                elif self._can_restore_state(state):
                     # For other sensors, use the state directly
                     self._attr_native_value = state.state
 
@@ -712,6 +717,31 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 )
             )
 
+    def _can_restore_state(self, state: Any) -> bool:
+        """Return True if the stored state may become this sensor's value.
+
+        The sensor is always created from a live MQTT payload, which is newer
+        than anything stored, so a stored state only fills in when that payload
+        gave no value. For a numeric sensor it must also be a number in the
+        sensor's own unit: Home Assistant stores the *displayed* state, so
+        "61.2" recorded in °F (or mi) would otherwise be adopted as °C (km) and
+        converted a second time, and a text state left over from before the
+        metric became numeric would make Home Assistant reject the entity.
+        """
+        # An empty payload leaves a text sensor with "" rather than None.
+        if self._attr_native_value not in (None, ""):
+            return False
+        if not requires_numeric_value(self._attr_device_class, self._attr_state_class):
+            return True
+        try:
+            float(state.state)
+        except (TypeError, ValueError):
+            return False
+        return (
+            state.attributes.get("unit_of_measurement")
+            == self._attr_native_unit_of_measurement
+        )
+
     def _try_parse_vector(self, payload: Any) -> bool:
         """Apply config-driven vector handling if the metric declares it.
 
@@ -748,13 +778,20 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         the median as the state and the full series plus min/max/mean/count as
         attributes. Only fires for a genuine numeric vector (>=
         VECTOR_MIN_VALUES all-numeric elements) that no other handler claimed,
-        so scalars, short tuples and labelled vectors are unaffected. Returns
-        True when it handled the payload.
+        so scalars, short tuples and labelled vectors are unaffected. A sensor
+        that must be numeric cannot show a short tuple as text - it used to
+        end up unknown - so for those VECTOR_MIN_VALUES_NUMERIC applies.
+        Returns True when it handled the payload.
         """
         if not isinstance(payload, str) or "," not in payload:
             return False
         parts = [p.strip() for p in payload.split(",") if p.strip()]
-        if len(parts) < VECTOR_MIN_VALUES:
+        min_values = (
+            VECTOR_MIN_VALUES_NUMERIC
+            if requires_numeric_value(self._attr_device_class, self._attr_state_class)
+            else VECTOR_MIN_VALUES
+        )
+        if len(parts) < min_values:
             return False
         try:
             values = [float(p) for p in parts]
