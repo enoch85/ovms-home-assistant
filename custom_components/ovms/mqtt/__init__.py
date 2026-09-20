@@ -177,11 +177,13 @@ class OVMSMQTTClient:
     async def _async_startup_metric_refresh(self, _now: datetime) -> None:
         """Request a full metric publish when known entities are still missing.
 
-        Entities are only created once a message arrives on their topic, and
-        OVMS publishes non-retained: after its initial on-connect publish it
-        only re-sends metrics whose value changed. So after a Home Assistant
-        restart, topics that are static while the vehicle is parked (e.g. the
-        v.c.* charge metrics sitting at 0) never republish and their entities
+        Entities are only created once a message arrives on their topic. OVMS
+        publishes retained, but the broker does not always still hold those
+        messages (restarted without persistence, a bridged or cloud broker,
+        cleared topics), and after its on-connect publish the module only
+        re-sends metrics whose value changed. After a Home Assistant restart,
+        topics that are static while the vehicle is parked (e.g. the v.c.*
+        charge metrics sitting at 0) then never arrive and their entities
         remain restored "unavailable" placeholders until the module reboots
         (issue #261). Edge firmware is healed by the on-demand metric request
         sent on connect; older firmware silently ignores it. When previously

@@ -5,7 +5,6 @@ from typing import Any, Dict, Optional, List
 from datetime import datetime
 
 from homeassistant.components.sensor import (
-    RestoreSensor,
     SensorEntity,
     SensorStateClass,
     SensorDeviceClass,
@@ -347,7 +346,7 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
             )
 
 
-class OVMSSensor(RestoreSensor):
+class OVMSSensor(SensorEntity, RestoreEntity):
     """Representation of an OVMS sensor."""
 
     _attr_has_entity_name = True
@@ -618,8 +617,18 @@ class OVMSSensor(RestoreSensor):
                         else:
                             # Just use the state value directly
                             self._attr_native_value = state.state
-                else:
-                    await self._async_restore_native_value()
+                # Any other sensor keeps the value of the live MQTT payload it
+                # was created from; the stored state is never adopted. It is the
+                # DISPLAYED state (°F or mi for a native °C or km, which Home
+                # Assistant would then convert a second time), it may be text
+                # from before the metric became numeric (Home Assistant then
+                # rejects the entity), and it is older than what the module just
+                # sent. When the module sent no value the state is unknown until
+                # it does - retained topics and the startup metric refresh see
+                # to that. Storing the native value instead (RestoreSensor) is no
+                # way out: Home Assistant keeps the restore data of ALL entities
+                # in one file, and a value it cannot store - a SIM's 20 digit
+                # ICCID parsed as an integer - fails that whole file.
 
             # Restore attributes if available, but clean up inconsistent ones
             if state.attributes:
@@ -716,43 +725,6 @@ class OVMSSensor(RestoreSensor):
                     update_state,
                 )
             )
-
-    async def _async_restore_native_value(self) -> None:
-        """Fill in the stored native value when the live payload gave none.
-
-        The sensor is always created from a live MQTT payload, which is newer
-        than anything stored, so the stored value only fills a gap. It comes
-        from RestoreSensor's stored native value and unit, not from the last
-        state: Home Assistant stores the state as *displayed*, so "61.2"
-        recorded in °F (or mi) would be adopted as °C (km) and converted a
-        second time.
-        """
-        # An empty payload leaves a text sensor with "" rather than None.
-        if self._attr_native_value not in (None, ""):
-            return
-        data = await self.async_get_last_sensor_data()
-        if data is not None and self._can_restore_value(
-            data.native_value, data.native_unit_of_measurement
-        ):
-            self._attr_native_value = data.native_value
-
-    def _can_restore_value(self, value: Any, unit: Optional[str]) -> bool:
-        """Return True if a stored native value still fits this sensor.
-
-        The metric may have been re-typed since the value was stored (a new
-        definition, or a unit reported by the module): a value in another unit
-        would be mislabelled, and a text value in a sensor that is now numeric
-        makes Home Assistant reject the entity.
-        """
-        if value is None or unit != self._attr_native_unit_of_measurement:
-            return False
-        if not requires_numeric_value(self._attr_device_class, self._attr_state_class):
-            return True
-        try:
-            float(value)
-        except (TypeError, ValueError):
-            return False
-        return True
 
     def _try_parse_vector(self, payload: Any) -> bool:
         """Apply config-driven vector handling if the metric declares it.

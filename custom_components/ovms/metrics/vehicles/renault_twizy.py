@@ -20,6 +20,8 @@ from homeassistant.const import (
     EntityCategory,
 )
 
+from ...const import TRIP_DISTANCE_DISPLAY_PRECISION
+
 # Vehicle metadata
 VEHICLE_TYPE = "renault_twizy"
 VEHICLE_NAME = "Renault Twizy"
@@ -323,6 +325,7 @@ RENAULT_TWIZY_METRICS = {
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfLength.KILOMETERS,
+        "suggested_display_precision": TRIP_DISTANCE_DISPLAY_PRECISION,
         "category": "renault_twizy",
     },
     "xrt.p.stats.acc.recd": {
@@ -358,6 +361,7 @@ RENAULT_TWIZY_METRICS = {
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfLength.KILOMETERS,
+        "suggested_display_precision": TRIP_DISTANCE_DISPLAY_PRECISION,
         "category": "renault_twizy",
     },
     "xrt.p.stats.cst.recd": {
@@ -394,6 +398,7 @@ RENAULT_TWIZY_METRICS = {
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfLength.KILOMETERS,
+        "suggested_display_precision": TRIP_DISTANCE_DISPLAY_PRECISION,
         "category": "renault_twizy",
     },
     "xrt.p.stats.dec.recd": {
@@ -429,6 +434,7 @@ RENAULT_TWIZY_METRICS = {
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfLength.KILOMETERS,
+        "suggested_display_precision": TRIP_DISTANCE_DISPLAY_PRECISION,
         "category": "renault_twizy",
     },
     "xrt.p.stats.ldn.hsum": {
@@ -464,6 +470,7 @@ RENAULT_TWIZY_METRICS = {
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.TOTAL,
         "unit": UnitOfLength.KILOMETERS,
+        "suggested_display_precision": TRIP_DISTANCE_DISPLAY_PRECISION,
         "category": "renault_twizy",
     },
     "xrt.p.stats.lup.hsum": {
@@ -582,6 +589,7 @@ RENAULT_TWIZY_METRICS = {
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfLength.KILOMETERS,
+        "suggested_display_precision": TRIP_DISTANCE_DISPLAY_PRECISION,
         "category": "renault_twizy",
     },
     "xrt.v.i.status": {

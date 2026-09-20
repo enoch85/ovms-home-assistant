@@ -291,10 +291,12 @@ RECONNECT_METRIC_REQUEST_DELAY = ACTIVE_DISCOVERY_TIMEOUT / 2  # 5 seconds
 METRIC_REFRESH_COMMAND = "server v3 update all"
 
 # Delay after platform setup before checking for still-missing entities and
-# falling back to METRIC_REFRESH_COMMAND. OVMS publishes non-retained and only
-# re-publishes a metric when its value changes, so after a Home Assistant
-# restart the entities for metrics that are static while the vehicle is parked
-# (e.g. v.c.* charge metrics) stay restored-unavailable until data arrives.
+# falling back to METRIC_REFRESH_COMMAND. OVMS publishes retained, but the
+# broker does not always still hold those messages (restarted without
+# persistence, a bridged or cloud broker, cleared topics), and the module only
+# re-publishes a metric when its value changes. After a Home Assistant restart
+# the entities for metrics that are static while the vehicle is parked (e.g.
+# v.c.* charge metrics) then stay restored-unavailable until data arrives.
 # The delay covers the on-demand metric request sent
 # RECONNECT_METRIC_REQUEST_DELAY (5 s) after connect plus the
 # ACTIVE_DISCOVERY_TIMEOUT (10 s) window in which edge firmware answers it,
@@ -476,6 +478,14 @@ VECTOR_MIN_VALUES = 4
 # to scalar parsing, fail, and leave the state unknown (e.g. a 3-phase voltage
 # vector "229.5,0,0"). For those sensors any vector of 2+ numbers is a series.
 VECTOR_MIN_VALUES_NUMERIC = 2
+
+# Decimals shown for a distance sensor whose metric definition sets none. Home
+# Assistant's own default for km is 2, which turns a service distance of 12900 km
+# into "12,900.00" - easily misread, and the decimals are always zero. Ranges,
+# odometers and service distances are whole numbers to their reader.
+DISTANCE_DISPLAY_PRECISION = 0
+# Trip-type distances are the exception: a 0.4 km trip must not read "0".
+TRIP_DISTANCE_DISPLAY_PRECISION = 1
 
 # GPS accuracy calculation constants
 # Used to convert GPS signal quality (v.p.gpssq) to meters accuracy
