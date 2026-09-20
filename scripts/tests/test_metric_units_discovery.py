@@ -239,6 +239,60 @@ async def main():
     )
     await _stop(client)
 
+    # ---- 1d) the module cannot be asked: use what it said last time ------
+    class _FakeStore:
+        def __init__(self):
+            self.saved = []
+
+        async def async_save(self, data):
+            self.saved.append(dict(data))
+
+    offline = {"success": False, "error": "Timeout waiting for response"}
+    client, hass, commands = await _client(offline)
+    client._metric_units_store = _FakeStore()
+    client.topic_parser.reported_units.update({"xks.b.pack.power": "kW"})  # loaded
+    await client._on_message_received(UNDEFINED, "42.5")
+    _check(
+        "a unit known from an earlier setup is used at once - no waiting, no flip "
+        "back to the guess while the module is away",
+        client.entity_factory.created,
+        [(UNDEFINED, "42.5", "kW")],
+        results,
+    )
+    await asyncio.gather(*hass.background_tasks)
+    await client._on_message_received(BASE + "xks/b/pack/voltage", "355")
+    await asyncio.gather(*hass.background_tasks)
+    _check(
+        "the module is still asked once per setup, to notice a firmware update; "
+        "an unknown metric asks again",
+        (len(commands), client._metric_units_store.saved),
+        (2, []),
+        results,
+    )
+    await _stop(client)
+
+    client, hass, commands = await _client(reply)
+    client._metric_units_store = _FakeStore()
+    client.topic_parser.reported_units.update({"xks.b.pack.power": "W"})  # stale
+    await client._on_message_received(UNDEFINED, "42.5")
+    await asyncio.gather(*hass.background_tasks)
+    _check(
+        "a fresh answer replaces what was stored, and is saved",
+        client._metric_units_store.saved,
+        [{"xks.b.pack.power": "kW", "xks.b.pack.voltage": "V"}],
+        results,
+    )
+    client._metric_units_refreshed = False
+    await client._on_message_received(BASE + "xks/b/pack/voltage", "355")
+    await asyncio.gather(*hass.background_tasks)
+    _check(
+        "an unchanged answer is not written again",
+        len(client._metric_units_store.saved),
+        1,
+        results,
+    )
+    await _stop(client)
+
     # ---- 2) every failure releases the topic with the old behaviour ------
     failures = {
         "module offline (timeout)": {

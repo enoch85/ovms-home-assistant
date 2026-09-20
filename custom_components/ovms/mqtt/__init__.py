@@ -45,6 +45,7 @@ from ..attribute_manager import AttributeManager
 from ..entity_staleness_manager import EntityStalenessManager
 from ..metrics import METRIC_DEFINITIONS
 from ..metrics.units import parse_metric_units
+from ..utils import get_metric_units_store
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -72,6 +73,10 @@ class OVMSMQTTClient:
         # a second query, whatever becomes of its entity.
         self._topics_asked_for_units: Set[str] = set()
         self._metric_units_query_running = False
+        # What the module reported is stored (const.METRIC_UNITS_STORAGE_KEY)
+        # and refreshed once per setup; see _async_load_stored_metric_units.
+        self._metric_units_store = None
+        self._metric_units_refreshed = False
         self._unit_mismatches_logged: Set[str] = set()
         # OVMS publishes its metrics retained, so the broker delivers them the
         # moment we subscribe - while this client is still being set up and
@@ -115,6 +120,9 @@ class OVMSMQTTClient:
     async def async_setup(self) -> bool:
         """Set up the MQTT client."""
         _LOGGER.debug("Setting up MQTT client")
+
+        # Before any topic arrives: the units the module reported last time
+        await self._async_load_stored_metric_units()
 
         # Initialize components
         if not await self.connection_manager.async_setup():
@@ -300,6 +308,12 @@ class OVMSMQTTClient:
                 self._topics_awaiting_units[topic] = payload
                 self._request_metric_units()
             elif parsed_data:
+                if not self._metric_units_refreshed and self._is_undefined_sensor(
+                    parsed_data
+                ):
+                    # Its unit is known from last time; ask anyway, once per
+                    # setup, so a firmware update is noticed.
+                    self._request_metric_units()
                 await self._async_create_topic_entities(topic, payload, parsed_data)
         else:
             # Existing topic, update entity
@@ -336,10 +350,31 @@ class OVMSMQTTClient:
         """
         return (
             topic not in self._topics_asked_for_units
-            and parsed_data.get("entity_type") == "sensor"
-            and not parsed_data.get("metric_defined", True)
+            and self._is_undefined_sensor(parsed_data)
             and parsed_data.get("metric_path") not in self.topic_parser.reported_units
         )
+
+    @staticmethod
+    def _is_undefined_sensor(parsed_data: Dict[str, Any]) -> bool:
+        """Return True for a sensor topic without a metric definition."""
+        return parsed_data.get("entity_type") == "sensor" and not parsed_data.get(
+            "metric_defined", True
+        )
+
+    async def _async_load_stored_metric_units(self) -> None:
+        """Start from the units the module reported during an earlier setup.
+
+        They are used until the module answers again, and for good when it
+        cannot be asked: see const.METRIC_UNITS_STORAGE_KEY.
+        """
+        if not self.config_entry_id:
+            return
+        self._metric_units_store = get_metric_units_store(
+            self.hass, self.config_entry_id
+        )
+        stored = await self._metric_units_store.async_load()
+        if isinstance(stored, dict):
+            self.topic_parser.reported_units.update(stored)
 
     def _request_metric_units(self) -> None:
         """Ask the module for its metric units, unless it is being asked already."""
@@ -354,6 +389,7 @@ class OVMSMQTTClient:
             # The entry is gone, so this client is being torn down.
             return
         self._metric_units_query_running = True
+        self._metric_units_refreshed = True
         entry.async_create_background_task(
             self.hass,
             self._async_load_metric_units(),
@@ -386,7 +422,11 @@ class OVMSMQTTClient:
             units: Dict[str, Optional[str]] = {}
             if result.get("success") and isinstance(response, str):
                 units = parse_metric_units(response)
-            self.topic_parser.reported_units.update(units)
+            known = self.topic_parser.reported_units
+            changed = any(known.get(name, "") != unit for name, unit in units.items())
+            known.update(units)
+            if changed and self._metric_units_store is not None:
+                await self._metric_units_store.async_save(dict(known))
             _LOGGER.info("Module described %d of its metrics", len(units))
             self._log_unit_mismatches(units)
         finally:
@@ -402,7 +442,7 @@ class OVMSMQTTClient:
                 continue
             try:
                 await self._async_create_topic_entities(topic, payload, parsed_data)
-            except Exception as ex:  # pylint: disable=broad-except
+            except Exception as ex:
                 _LOGGER.error(
                     "Failed to create entity for topic %s: %s", topic, ex, exc_info=True
                 )

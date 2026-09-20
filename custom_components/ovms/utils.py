@@ -7,6 +7,7 @@ from typing import Any, Dict, Mapping, Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 
 from .const import (
     CONF_HOST,
@@ -17,6 +18,8 @@ from .const import (
     CONF_VERIFY_SSL,
     DOMAIN,
     LOGGER_NAME,
+    METRIC_UNITS_STORAGE_KEY,
+    METRIC_UNITS_STORAGE_VERSION,
     OVMS_DEVICE_MANUFACTURER,
     OVMS_DEVICE_MODEL,
     PIN_SECURE_PROTOCOLS,
@@ -142,6 +145,15 @@ def get_ovms_device_name(vehicle_id: Optional[str]) -> str:
     to avoid redundant "OVMS ▸ OVMS - …" display.
     """
     return vehicle_id or "unknown"
+
+
+def get_metric_units_store(hass: HomeAssistant, config_entry_id: str) -> Store:
+    """Return the store holding the metric units a config entry's module reported."""
+    return Store(
+        hass,
+        METRIC_UNITS_STORAGE_VERSION,
+        METRIC_UNITS_STORAGE_KEY.format(entry_id=config_entry_id),
+    )
 
 
 def get_ovms_device_info(
