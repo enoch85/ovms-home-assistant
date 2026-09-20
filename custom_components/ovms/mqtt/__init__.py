@@ -339,7 +339,14 @@ class OVMSMQTTClient:
         self._metric_units_requested = True
         # Background task: the command can take its full timeout when the
         # module is offline, and must not hold up Home Assistant's startup.
-        self.hass.async_create_background_task(
+        # Created on the config entry, as Home Assistant asks of integrations,
+        # so it is cancelled when the entry is unloaded.
+        entry = self.hass.config_entries.async_get_entry(self.config_entry_id)
+        if entry is None:
+            # The entry is gone, so this client is being torn down.
+            return
+        entry.async_create_background_task(
+            self.hass,
             self._async_load_metric_units(),
             name=f"ovms_metric_units_{self.config_entry_id}",
         )

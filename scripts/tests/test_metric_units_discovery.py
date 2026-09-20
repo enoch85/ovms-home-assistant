@@ -45,17 +45,33 @@ DEFINED = BASE + "v/b/soc"
 BINARY = BASE + "v/c/charging"
 
 
+class _FakeEntry:
+    """Config entry that records the background tasks created on it."""
+
+    def __init__(self, background_tasks):
+        self._background_tasks = background_tasks
+
+    def async_create_background_task(self, hass, coro, name=None):
+        task = asyncio.get_running_loop().create_task(coro)
+        self._background_tasks.append(task)
+        return task
+
+
+class _FakeConfigEntries:
+    def __init__(self, entry):
+        self._entry = entry
+
+    def async_get_entry(self, entry_id):
+        return self._entry if entry_id == CONFIG["config_entry_id"] else None
+
+
 class _FakeHass:
     """Just enough of Home Assistant for the message path."""
 
     def __init__(self):
         self.data = {}
         self.background_tasks = []
-
-    def async_create_background_task(self, coro, name=None):
-        task = asyncio.get_running_loop().create_task(coro)
-        self.background_tasks.append(task)
-        return task
+        self.config_entries = _FakeConfigEntries(_FakeEntry(self.background_tasks))
 
 
 class _RecordingFactory:
