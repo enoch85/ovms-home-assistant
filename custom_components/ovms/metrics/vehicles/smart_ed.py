@@ -18,6 +18,8 @@ from homeassistant.const import (
     UnitOfTime,
 )
 
+from ...const import TRIP_DISTANCE_DISPLAY_PRECISION
+
 # Vehicle metadata
 VEHICLE_TYPE = "smart_ed"
 VEHICLE_NAME = "Smart ED"
@@ -342,6 +344,7 @@ SMART_ED_METRICS = {
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "unit": UnitOfLength.KILOMETERS,
+        "suggested_display_precision": TRIP_DISTANCE_DISPLAY_PRECISION,
         "category": "smart_ed",
     },
     "xse.v.display.trip.reset": {
@@ -351,6 +354,7 @@ SMART_ED_METRICS = {
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "unit": UnitOfLength.KILOMETERS,
+        "suggested_display_precision": TRIP_DISTANCE_DISPLAY_PRECISION,
         "category": "smart_ed",
     },
     "xse.v.pos.odometer.start": {

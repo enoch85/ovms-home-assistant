@@ -17,7 +17,7 @@ from homeassistant.const import (
 )
 from homeassistant.const import EntityCategory
 
-from ..const import LOGGER_NAME
+from ..const import DISTANCE_DISPLAY_PRECISION, LOGGER_NAME
 from ..metrics import get_metric_by_path, get_metric_by_pattern
 from ..metrics.common.tire import TIRE_POSITIONS
 from ..metrics.patterns import TOPIC_PATTERNS
@@ -142,7 +142,7 @@ def determine_sensor_type(
             result["suggested_display_precision"] = metric_info[
                 "suggested_display_precision"
             ]
-        return result
+        return _with_default_precision(result)
 
     # If no metric info found, try matching by pattern from TOPIC_PATTERNS
     for pattern, pattern_info in TOPIC_PATTERNS.items():
@@ -163,6 +163,16 @@ def determine_sensor_type(
                 ]
             break
 
+    return _with_default_precision(result)
+
+
+def _with_default_precision(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Show distances as whole numbers unless the metric asks for decimals."""
+    if (
+        result["device_class"] == SensorDeviceClass.DISTANCE
+        and result["suggested_display_precision"] is None
+    ):
+        result["suggested_display_precision"] = DISTANCE_DISPLAY_PRECISION
     return result
 
 

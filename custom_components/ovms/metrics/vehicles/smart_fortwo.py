@@ -23,7 +23,7 @@ from homeassistant.const import (
     EntityCategory,
 )
 
-from ...const import UNIT_AMPERE_HOUR
+from ...const import TRIP_DISTANCE_DISPLAY_PRECISION, UNIT_AMPERE_HOUR
 
 # Vehicle metadata
 VEHICLE_TYPE = "smart_fortwo"
@@ -516,6 +516,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "unit": UnitOfLength.KILOMETERS,
+        "suggested_display_precision": TRIP_DISTANCE_DISPLAY_PRECISION,
         "category": "smart_fortwo",
     },
     "xsq.odometer.trip.total": {
@@ -525,6 +526,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "unit": UnitOfLength.KILOMETERS,
+        "suggested_display_precision": TRIP_DISTANCE_DISPLAY_PRECISION,
         "category": "smart_fortwo",
     },
     "xsq.poll.state": {
@@ -658,6 +660,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "unit": UnitOfLength.KILOMETERS,
+        "suggested_display_precision": TRIP_DISTANCE_DISPLAY_PRECISION,
         "category": "smart_fortwo",
     },
     "xsq.v.reset.energy": {
@@ -691,6 +694,7 @@ SMART_FORTWO_METRICS = {
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "unit": UnitOfLength.KILOMETERS,
+        "suggested_display_precision": TRIP_DISTANCE_DISPLAY_PRECISION,
         "category": "smart_fortwo",
     },
     "xsq.v.start.time": {

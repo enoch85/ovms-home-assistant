@@ -11,6 +11,8 @@ from homeassistant.const import (
     UnitOfTime,
 )
 
+from ...const import TRIP_DISTANCE_DISPLAY_PRECISION
+
 # Trip metrics
 TRIP_METRICS = {
     "v.e.drivetime": {
@@ -64,6 +66,7 @@ TRIP_METRICS = {
         "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "unit": UnitOfLength.KILOMETERS,
+        "suggested_display_precision": TRIP_DISTANCE_DISPLAY_PRECISION,
         "category": "trip",
     },
     "v.p.valet.distance": {

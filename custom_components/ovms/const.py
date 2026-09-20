@@ -479,6 +479,14 @@ VECTOR_MIN_VALUES = 4
 # vector "229.5,0,0"). For those sensors any vector of 2+ numbers is a series.
 VECTOR_MIN_VALUES_NUMERIC = 2
 
+# Decimals shown for a distance sensor whose metric definition sets none. Home
+# Assistant's own default for km is 2, which turns a service distance of 12900 km
+# into "12,900.00" - easily misread, and the decimals are always zero. Ranges,
+# odometers and service distances are whole numbers to their reader.
+DISTANCE_DISPLAY_PRECISION = 0
+# Trip-type distances are the exception: a 0.4 km trip must not read "0".
+TRIP_DISTANCE_DISPLAY_PRECISION = 1
+
 # GPS accuracy calculation constants
 # Used to convert GPS signal quality (v.p.gpssq) to meters accuracy
 # Source: OVMS firmware v.p.gpssq is 0-100% where <30 unusable, >50 good, >80 excellent
