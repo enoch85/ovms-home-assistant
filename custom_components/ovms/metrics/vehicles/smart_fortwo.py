@@ -203,16 +203,26 @@ SMART_FORTWO_METRICS = {
         "entity_category": EntityCategory.DIAGNOSTIC,
         "category": "smart_fortwo",
     },
+    # The two interlock flags are firmware booleans (1 = interlock loop closed)
+    # and have always been binary sensors: before they had a definition the
+    # generic "lock" pattern matched "interlock". They must stay binary sensors,
+    # because the platform is part of an entity's registry identity - turning
+    # them into sensors would orphan the existing entities. PLUG reads
+    # "plugged in" for a closed loop, where LOCK read "unlocked".
     "xsq.bms.interlock.hvplug": {
         "name": "Smart ForTwo HV Plug Interlock",
-        "description": "HV plug interlock status flag as reported by the BMS",
+        "description": "HV plug interlock loop closed, as reported by the BMS",
         "icon": "mdi:power-plug-battery",
+        "device_class": BinarySensorDeviceClass.PLUG,
         "category": "smart_fortwo",
     },
     "xsq.bms.interlock.service": {
         "name": "Smart ForTwo Service Interlock",
-        "description": "Service disconnect interlock status flag as reported by the BMS",
+        "description": (
+            "Service disconnect interlock loop closed, as reported by the BMS"
+        ),
         "icon": "mdi:wrench-cog",
+        "device_class": BinarySensorDeviceClass.PLUG,
         "category": "smart_fortwo",
     },
     "xsq.bms.mileage": {
@@ -347,10 +357,12 @@ SMART_FORTWO_METRICS = {
         "vector_state": "volt",
     },
     "xsq.evc.plug.detected": {
+        # A firmware boolean, but deliberately NOT given a binary device class:
+        # it has been a yes/no sensor since release 3.3.006, and moving it to
+        # the binary_sensor platform would orphan that entity.
         "name": "Smart ForTwo Charge Plug Detected",
-        "description": "Charging plug detected by the charger",
+        "description": "Charging plug detected by the charger (yes / no)",
         "icon": "mdi:power-plug",
-        "device_class": BinarySensorDeviceClass.PLUG,
         "category": "smart_fortwo",
     },
     "xsq.evc.traceability": {
