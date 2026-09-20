@@ -29,6 +29,7 @@ from .services import async_setup_services, async_unload_services
 from .utils import (
     generate_ovms_client_id,
     get_merged_config,
+    get_metric_units_store,
     sanitize_topic_structure,
 )
 
@@ -389,3 +390,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.exception("Error during cleanup after failed unload: %s", ex2)
 
         return False
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove what the integration stored for a config entry that is deleted."""
+    await get_metric_units_store(hass, entry.entry_id).async_remove()

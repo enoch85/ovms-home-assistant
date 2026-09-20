@@ -311,6 +311,14 @@ STARTUP_METRIC_REFRESH_DELAY = ACTIVE_DISCOVERY_TIMEOUT * 2  # 20 seconds
 # "-n" (native units) exists since firmware 3.3.004; older firmware rejects the
 # option, no units are learned and the topic-name guess remains the fallback.
 METRIC_UNITS_COMMAND = "metrics list -n"
+# What the module reported is kept per config entry (Home Assistant's storage
+# helper), so an entity keeps its unit when the module cannot be asked at the
+# next start - the car is away or asleep while its retained topics still arrive.
+# Falling back to the guess there would flip the unit between starts, and Home
+# Assistant would convert the value from the guessed unit into the entity's
+# stored display unit (42.5 kW shown as 0.0425 kW). A fresh answer always wins.
+METRIC_UNITS_STORAGE_VERSION = 1
+METRIC_UNITS_STORAGE_KEY = "ovms.metric_units.{entry_id}"
 # Every unit label the firmware appends to a value (unit_info table in
 # main/ovms_metrics.cpp) mapped to the Home Assistant unit, or to None where
 # Home Assistant has no equivalent. The None entries matter: they let "20sq" be

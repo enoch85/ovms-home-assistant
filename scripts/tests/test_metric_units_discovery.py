@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """Regression test for the metric-unit discovery flow in the MQTT client.
 
-The module is asked for its metric units once, lazily, when the first sensor
-topic WITHOUT a metric definition shows up. Such topics are held back until
-the answer - or its failure - is in, so an entity is never created with a
-guessed unit the module could have supplied. Everything else must be created
-immediately, exactly as before, and a failing query must never strand a topic.
+The module is asked for its metric units when a sensor topic WITHOUT a metric
+definition shows up whose unit it has not told us yet. Such topics are held
+back until the answer - or its failure - is in, so an entity is never created
+with a guessed unit the module could have supplied. Everything else must be
+created immediately, exactly as before, and a failing query must never strand a
+topic.
+
+OVMS publishes its metrics retained, so on a real module they all arrive while
+the config entry is still being set up and no command can be sent yet: the
+query has to wait for setup to complete. And the module only lists a unit for
+metrics that have a value, so a metric it sets later (charge metrics while
+parked) has to be asked for when its topic first shows up.
 
 Also covers the short numeric vector fix: a sensor that must be numeric used to
 go "unknown" on a 2-3 element vector such as 3-phase currents "16.2,15.8,16.0".
@@ -94,17 +101,24 @@ def _check(name, got, want, results):
     )
 
 
-async def _client(command_result, gate=None):
-    """Build a real client whose command channel returns ``command_result``."""
+async def _client(command_result, gate=None, setup_complete=True):
+    """Build a real client whose command channel returns ``command_result``.
+
+    ``command_result`` may be a list: one result per successive command.
+    """
     hass = _FakeHass()
     client = OVMSMQTTClient(hass, dict(CONFIG))
     client.entity_factory = _RecordingFactory()
+    if setup_complete:
+        client._setup_complete.set()
     commands = []
 
     async def _send_command(**kwargs):
         commands.append(kwargs.get("command"))
         if gate is not None:
             await gate.wait()
+        if isinstance(command_result, list):
+            return command_result[len(commands) - 1]
         return command_result
 
     client.async_send_command = _send_command
@@ -122,7 +136,12 @@ async def main():
 
     # ---- 1) happy path: hold, ask once, release with the reported unit ---
     gate = asyncio.Event()
-    reply = {"success": True, "response": f"{'xks.b.pack.power':<40.40s} 42.5kW\n"}
+    reply = {
+        "success": True,
+        "response": f"{'xks.b.pack.power':<40.40s} 42.5kW\n"
+        f"{'xks.b.pack.voltage':<40.40s} 355V\n"
+        f"{'xks.c.late.power':<40.40s}\n",  # registered, but no value yet
+    }
     client, hass, commands = await _client(reply, gate)
 
     await client._on_message_received(DEFINED, "81")
@@ -159,13 +178,117 @@ async def main():
     await client._on_message_received(BASE + "xks/b/pack/voltage", "355")
     await asyncio.sleep(0)
     _check(
-        "later undefined topics are created at once, without a second query",
+        "a later topic the module already described is created at once, no query",
         (
             len(commands),
-            BASE + "xks/b/pack/voltage"
-            in [c[0] for c in client.entity_factory.created],
+            [c for c in client.entity_factory.created if c[0].endswith("pack/voltage")],
         ),
-        (1, True),
+        (1, [(BASE + "xks/b/pack/voltage", "355", "V")]),
+        results,
+    )
+    await _stop(client)
+
+    # ---- 1b) a metric that had no value when the module was first asked ---
+    late = BASE + "xks/c/late/power"
+    later_reply = {
+        "success": True,
+        "response": f"{'xks.c.late.power':<40.40s} 7.2kW\n",
+    }
+    client, hass, commands = await _client([reply, later_reply, later_reply])
+    await client._on_message_received(UNDEFINED, "42.5")
+    await asyncio.gather(*hass.background_tasks)
+    await client._on_message_received(late, "7.2")  # charging started
+    await asyncio.gather(*hass.background_tasks)
+    _check(
+        "a metric without a value at first is asked for when its topic shows up",
+        (
+            len(commands),
+            [c for c in client.entity_factory.created if c[0] == late],
+        ),
+        (2, [(late, "7.2", "kW")]),
+        results,
+    )
+    client.entity_factory.created.clear()
+    await client._on_message_received(late, "7.3")  # its entity was never registered
+    await asyncio.gather(*hass.background_tasks)
+    _check(
+        "a topic never triggers a second query",
+        (len(commands), [c[0] for c in client.entity_factory.created]),
+        (2, [late]),
+        results,
+    )
+    await _stop(client)
+
+    # ---- 1c) retained topics arrive while the entry is still being set up -
+    client, hass, commands = await _client(reply, setup_complete=False)
+    await client._on_message_received(UNDEFINED, "42.5")
+    await asyncio.sleep(0.05)
+    _check(
+        "no command is sent before setup is complete; the topic waits",
+        (commands, client.entity_factory.created),
+        ([], []),
+        results,
+    )
+    client._setup_complete.set()
+    await asyncio.gather(*hass.background_tasks)
+    _check(
+        "once setup is complete the module is asked and the topic released",
+        (commands, client.entity_factory.created),
+        ([METRIC_UNITS_COMMAND], [(UNDEFINED, "42.5", "kW")]),
+        results,
+    )
+    await _stop(client)
+
+    # ---- 1d) the module cannot be asked: use what it said last time ------
+    class _FakeStore:
+        def __init__(self):
+            self.saved = []
+
+        async def async_save(self, data):
+            self.saved.append(dict(data))
+
+    offline = {"success": False, "error": "Timeout waiting for response"}
+    client, hass, commands = await _client(offline)
+    client._metric_units_store = _FakeStore()
+    client.topic_parser.reported_units.update({"xks.b.pack.power": "kW"})  # loaded
+    await client._on_message_received(UNDEFINED, "42.5")
+    _check(
+        "a unit known from an earlier setup is used at once - no waiting, no flip "
+        "back to the guess while the module is away",
+        client.entity_factory.created,
+        [(UNDEFINED, "42.5", "kW")],
+        results,
+    )
+    await asyncio.gather(*hass.background_tasks)
+    await client._on_message_received(BASE + "xks/b/pack/voltage", "355")
+    await asyncio.gather(*hass.background_tasks)
+    _check(
+        "the module is still asked once per setup, to notice a firmware update; "
+        "an unknown metric asks again",
+        (len(commands), client._metric_units_store.saved),
+        (2, []),
+        results,
+    )
+    await _stop(client)
+
+    client, hass, commands = await _client(reply)
+    client._metric_units_store = _FakeStore()
+    client.topic_parser.reported_units.update({"xks.b.pack.power": "W"})  # stale
+    await client._on_message_received(UNDEFINED, "42.5")
+    await asyncio.gather(*hass.background_tasks)
+    _check(
+        "a fresh answer replaces what was stored, and is saved",
+        client._metric_units_store.saved,
+        [{"xks.b.pack.power": "kW", "xks.b.pack.voltage": "V"}],
+        results,
+    )
+    client._metric_units_refreshed = False
+    await client._on_message_received(BASE + "xks/b/pack/voltage", "355")
+    await asyncio.gather(*hass.background_tasks)
+    _check(
+        "an unchanged answer is not written again",
+        len(client._metric_units_store.saved),
+        1,
         results,
     )
     await _stop(client)
