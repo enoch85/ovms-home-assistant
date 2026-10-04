@@ -23,7 +23,10 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+
 from custom_components.ovms.mqtt.topic_parser import TopicParser
+from custom_components.ovms.sensor.binary_sensor import OVMSBinarySensor
 
 _CONFIG = {
     "vehicle_id": "veh",
@@ -86,6 +89,30 @@ def main():
         ),
         results,
     )
+
+    # A topic naming both a door and a lock is a lock, and a lock reads the way
+    # Home Assistant means it: off is locked (issue #276). The Kia Niro / Kona
+    # per-door locks have no definition, so they come through the patterns.
+    for metric_path, device_class, locked_is_on in (
+        ("xkn.v.door.lock.front.left", BinarySensorDeviceClass.LOCK, False),
+        ("xkn.v.door.lock.rear.right", BinarySensorDeviceClass.LOCK, False),
+        ("v.e.locked", BinarySensorDeviceClass.LOCK, False),  # defined, unchanged
+        ("v.d.fl", BinarySensorDeviceClass.DOOR, True),  # a door is still a door
+    ):
+        parsed = tp.parse_topic(_topic(metric_path), "yes")
+        sensor = OVMSBinarySensor(
+            "uid",
+            parsed["name"],
+            _topic(metric_path),
+            "yes",  # OvmsMetricBool::AsString - true, i.e. locked or open
+            {},
+            dict(parsed.get("attributes") or {}),
+        )
+        _check(
+            f"{metric_path} is a {device_class} reading {locked_is_on}",
+            sensor.device_class == device_class and sensor.is_on is locked_is_on,
+            results,
+        )
 
     print("-" * 55)
     if all(results):

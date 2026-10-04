@@ -160,11 +160,17 @@ class OVMSBinarySensor(BinarySensorEntity, RestoreEntity):
 
                 # Restore attributes if available
                 if state.attributes:
-                    # Don't overwrite entity attributes like device_class, icon
+                    # Don't overwrite entity attributes like device_class, icon.
+                    # invert_state belongs with them: it decides how a payload
+                    # is read, so it has to come from the metric definition on
+                    # every start - a stored one keeps inverting an entity whose
+                    # definition no longer asks for it. The lock platform
+                    # already drops it for the same reason.
                     saved_attributes = {
                         k: v
                         for k, v in state.attributes.items()
-                        if k not in ["device_class", "icon", "last_updated"]
+                        if k
+                        not in ["device_class", "icon", "invert_state", "last_updated"]
                     }
                     self._attr_extra_state_attributes.update(saved_attributes)
 
