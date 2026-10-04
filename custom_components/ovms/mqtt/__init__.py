@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from datetime import datetime
+from collections.abc import Iterator
 from typing import Dict, Any, Optional, Set
 
 from homeassistant.const import ATTR_RESTORED, STATE_UNAVAILABLE
@@ -64,6 +65,10 @@ class OVMSMQTTClient:
         self._shutting_down = False
         # Cancel handle for the scheduled startup metric refresh (issue #261)
         self._startup_refresh_cancel: Optional[CALLBACK_TYPE] = None
+        # Whether this config entry already had entities before this setup.
+        # False on a first setup, which is its own reason to ask the module for
+        # everything it has (issue #275).
+        self._entry_had_entities = False
         # Firmware-reported units (see const.METRIC_UNITS_COMMAND). A sensor
         # topic without a definition, whose unit the module has not told us,
         # waits here (topic -> latest payload) while the module is asked, so an
@@ -121,8 +126,10 @@ class OVMSMQTTClient:
         """Set up the MQTT client."""
         _LOGGER.debug("Setting up MQTT client")
 
-        # Before any topic arrives: the units the module reported last time
+        # Before any topic arrives: the units the module reported last time,
+        # and whether this entry is being set up for the first time.
         await self._async_load_stored_metric_units()
+        self._entry_had_entities = any(self._registry_entities())
 
         # Initialize components
         if not await self.connection_manager.async_setup():
@@ -175,22 +182,28 @@ class OVMSMQTTClient:
         )
 
     async def _async_startup_metric_refresh(self, _now: datetime) -> None:
-        """Request a full metric publish when known entities are still missing.
+        """Request a full metric publish when entities could be missing.
 
         Entities are only created once a message arrives on their topic. OVMS
         publishes retained, but the broker does not always still hold those
         messages (restarted without persistence, a bridged or cloud broker,
-        cleared topics), and after its on-connect publish the module only
-        re-sends metrics whose value changed. After a Home Assistant restart,
-        topics that are static while the vehicle is parked (e.g. the v.c.*
-        charge metrics sitting at 0) then never arrive and their entities
-        remain restored "unavailable" placeholders until the module reboots
-        (issue #261). Edge firmware is healed by the on-demand metric request
-        sent on connect; older firmware silently ignores it. When previously
-        discovered entities are still missing after the grace period, ask the
-        module to republish everything via METRIC_REFRESH_COMMAND - the same
-        universal method the ovms.refresh_metrics service uses - so the
-        entities are re-created through normal discovery with live data.
+        cleared topics, or simply a broker the module has only just been
+        pointed at), and after its on-connect publish the module only re-sends
+        metrics whose value changed - its own full publish is 20 minutes apart.
+        Asking for everything via METRIC_REFRESH_COMMAND - the same universal
+        method the ovms.refresh_metrics service uses - gets the entities
+        created through normal discovery with live data. Two cases need it:
+
+        * A Home Assistant restart where topics that are static while the
+          vehicle is parked (the v.c.* charge metrics sitting at 0) never
+          arrive, leaving their entities as restored "unavailable"
+          placeholders until the module reboots (issue #261).
+        * The first setup of a config entry, where the entity set is only
+          whatever the broker happened to hold. There are no previously
+          registered entities to be missing then, so that case has to be
+          recognised separately - without it, re-adding the integration
+          against a fresh broker left half the entities uncreated and nothing
+          ever asked for the rest (issue #275).
 
         Runs once per setup. If the module is offline the command simply
         fails: its own next reconnection triggers a full publish anyway.
@@ -205,16 +218,23 @@ class OVMSMQTTClient:
             return
 
         missing = self._count_missing_registry_entities()
-        if not missing:
+        if self._entry_had_entities and not missing:
             _LOGGER.debug("Startup metric refresh not needed: no entities missing")
             return
 
-        _LOGGER.info(
-            "%d previously discovered entities are still unavailable after "
-            "startup, requesting a full metric publish via '%s'",
-            missing,
-            METRIC_REFRESH_COMMAND,
-        )
+        if self._entry_had_entities:
+            _LOGGER.info(
+                "%d previously discovered entities are still unavailable after "
+                "startup, requesting a full metric publish via '%s'",
+                missing,
+                METRIC_REFRESH_COMMAND,
+            )
+        else:
+            _LOGGER.info(
+                "First setup of this vehicle, requesting a full metric publish "
+                "via '%s' so every metric the module holds gets an entity",
+                METRIC_REFRESH_COMMAND,
+            )
         result = await self.async_send_command(
             command=METRIC_REFRESH_COMMAND, timeout=DEFAULT_COMMAND_TIMEOUT
         )
@@ -226,23 +246,17 @@ class OVMSMQTTClient:
                 result.get("error", "no response"),
             )
 
-    def _count_missing_registry_entities(self) -> int:
-        """Count this entry's registered entities that have no live data yet.
+    def _registry_entities(self) -> Iterator[er.RegistryEntry]:
+        """Yield this entry's registered entities that are fed by an MQTT topic.
 
-        Covers entities Home Assistant knows from a previous run whose topics
-        have not produced a message this boot: their states are either the
-        registry's restored "unavailable" placeholders or, very early in
-        startup, not written at all. Disabled entities and the staleness
-        diagnostic sensor (not fed by an MQTT topic) are excluded.
-
-        Returns:
-            Number of entities still waiting for their first MQTT message.
+        Disabled entities and the staleness diagnostic sensor (which has no
+        topic) are left out, so a count of these is a count of entities that
+        should be carrying live data.
         """
         if not self.config_entry_id:
-            return 0
+            return
 
         entity_registry = er.async_get(self.hass)
-        missing = 0
         for entry in er.async_entries_for_config_entry(
             entity_registry, self.config_entry_id
         ):
@@ -250,7 +264,21 @@ class OVMSMQTTClient:
                 continue
             if entry.unique_id and STALENESS_UNIQUE_ID_MARKER in entry.unique_id:
                 continue
+            yield entry
 
+    def _count_missing_registry_entities(self) -> int:
+        """Count this entry's registered entities that have no live data yet.
+
+        Covers entities Home Assistant knows from a previous run whose topics
+        have not produced a message this boot: their states are either the
+        registry's restored "unavailable" placeholders or, very early in
+        startup, not written at all.
+
+        Returns:
+            Number of entities still waiting for their first MQTT message.
+        """
+        missing = 0
+        for entry in self._registry_entities():
             state = self.hass.states.get(entry.entity_id)
             if state is None or (
                 state.state == STATE_UNAVAILABLE and state.attributes.get(ATTR_RESTORED)
