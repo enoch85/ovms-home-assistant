@@ -224,11 +224,11 @@ POWER_METRICS = {
         "device_class": BinarySensorDeviceClass.RUNNING,
         "category": "power",
     },
+    # Same firmware unit as v.c.timerstart: a UTC time of day, not a timestamp.
     "v.g.timerstart": {
         "name": "Generator Timer Start",
-        "description": "Time generator is due to start",
+        "description": "Time of day the generator timer is due to start (UTC)",
         "icon": "mdi:timer",
-        "device_class": SensorDeviceClass.TIMESTAMP,
         "category": "power",
     },
     "v.g.timestamp": {

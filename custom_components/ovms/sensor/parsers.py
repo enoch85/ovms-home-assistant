@@ -9,11 +9,18 @@ from datetime import datetime
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.util import dt as dt_util
 
-from ..const import LOGGER_NAME, MAX_STATE_LENGTH, truncate_state_value
+from ..const import (
+    LOGGER_NAME,
+    OVMS_TIMESTAMP_FORMAT,
+    OVMS_TIMESTAMP_PATTERN,
+    OVMS_UTC_ZONE_TOKENS,
+)
 from ..metrics.common.tire import TIRE_POSITIONS
 from .duration_formatter import parse_duration
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
+_OVMS_TIMESTAMP_RE = re.compile(OVMS_TIMESTAMP_PATTERN)
 
 # List of device classes that should have numeric values
 NUMERIC_DEVICE_CLASSES = [
@@ -180,6 +187,37 @@ def parse_comma_separated_values(
     return None
 
 
+def parse_ovms_timestamp(value: str) -> Optional[datetime]:
+    """Parse an OVMS date/time payload into a time-zone aware datetime.
+
+    Args:
+        value: Payload of a timestamp metric, e.g. "2026-10-03 11:28:28 UTC".
+
+    Returns:
+        The datetime in Home Assistant's time zone, or None when the payload
+        is not a date and time at all.
+
+    Notes:
+        The module publishes a DateUTC metric as "... UTC" and a DateLocal
+        metric in its own zone with only the zone abbreviation appended
+        (const.OVMS_TIMESTAMP_PATTERN). An abbreviation cannot be resolved to
+        an offset, so only the UTC tokens are honoured; anything else is read
+        as Home Assistant's zone, which is correct when the module's zone
+        matches Home Assistant's - what the README asks for. Reading a UTC
+        payload as local time shifted every such metric by the full offset
+        (issue #277).
+    """
+    parsed = dt_util.parse_datetime(value)
+    if parsed is None:
+        match = _OVMS_TIMESTAMP_RE.match(value.strip())
+        if not match:
+            return None
+        parsed = datetime.strptime(match.group(1), OVMS_TIMESTAMP_FORMAT)
+        if (match.group(2) or "").upper() in OVMS_UTC_ZONE_TOKENS:
+            parsed = parsed.replace(tzinfo=dt_util.UTC)
+    return dt_util.as_local(parsed)
+
+
 def parse_value(
     value: Any,
     device_class: Optional[Any] = None,
@@ -189,30 +227,7 @@ def parse_value(
     """Parse the value from the payload."""
     # Handle timestamp device class specifically
     if device_class == SensorDeviceClass.TIMESTAMP and isinstance(value, str):
-        try:
-            # Try Home Assistant's built-in datetime parser first
-            parsed = dt_util.parse_datetime(value)
-            if parsed:
-                return parsed
-
-            # For OVMS timestamp format, extract just the datetime part
-            import datetime
-            import re
-
-            # Match format "2025-03-25 17:42:57 TIMEZONE" and extract datetime part
-            match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", value)
-            if match:
-                dt_str = match.group(1)
-                # Create a datetime object without timezone info
-                dt_obj = datetime.datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
-                # Home Assistant requires tzinfo, but we'll use local time zone
-                return dt_util.as_local(dt_obj)
-
-            # Return current time if we can't parse it instead of failing
-            return dt_util.now()
-        except Exception:
-            # Return current time on parse failure instead of None
-            return dt_util.now()
+        return parse_ovms_timestamp(value)
 
     # For duration sensors, use our dedicated parser
     if device_class == SensorDeviceClass.DURATION:

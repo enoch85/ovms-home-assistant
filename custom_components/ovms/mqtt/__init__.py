@@ -21,6 +21,7 @@ from ..const import (
     METRIC_REFRESH_COMMAND,
     METRIC_REQUEST_TOPIC_TEMPLATE,
     METRIC_UNITS_COMMAND,
+    MODULE_TIMEZONE_COMMAND,
     CONF_CONFIG_ENTRY_ID,
     CONF_CLIENT_ID,
     CONF_QOS,
@@ -45,6 +46,7 @@ from ..attribute_manager import AttributeManager
 from ..entity_staleness_manager import EntityStalenessManager
 from ..metrics import METRIC_DEFINITIONS
 from ..metrics.units import parse_metric_units
+from ..module_time_zone import get_module_time_zone
 from ..utils import get_metric_units_store
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -154,6 +156,8 @@ class OVMSMQTTClient:
         # Try to discover by subscribing again (in case initial subscription failed)
         await self.connection_manager.async_subscribe_topics()
 
+        self._sync_module_time_zone()
+
         # Request all metrics using on-demand feature (OVMS edge firmware)
         # This replaces the old async_send_discovery_command() workaround
         if not self.discovered_topics and self.connected:
@@ -172,6 +176,59 @@ class OVMSMQTTClient:
             self.hass,
             STARTUP_METRIC_REFRESH_DELAY,
             self._async_startup_metric_refresh,
+        )
+
+    def _sync_module_time_zone(self) -> None:
+        """Put the module on Home Assistant's time zone, once per setup.
+
+        A DateLocal metric (v.c.timestamp, v.p.gpstime, ...) is published as the
+        module's own wall clock labelled with nothing but a zone abbreviation,
+        which cannot be resolved to an offset - so it is only right when the
+        module's zone is the one Home Assistant reads it in. Setting it here
+        makes that true for everyone instead of asking each user to run the
+        command by hand (issue #277).
+
+        Runs as a background task on the config entry: the command takes its
+        full timeout when the module is offline, and must not hold up startup.
+        """
+        entry = self.hass.config_entries.async_get_entry(self.config_entry_id)
+        if entry is None:
+            return
+        entry.async_create_background_task(
+            self.hass,
+            self._async_set_module_time_zone(),
+            name=f"ovms_module_timezone_{self.config_entry_id}",
+        )
+
+    async def _async_set_module_time_zone(self) -> None:
+        """Send Home Assistant's time zone to the module."""
+        time_zone = self.hass.config.time_zone
+        posix_time_zone = await self.hass.async_add_executor_job(
+            get_module_time_zone, time_zone
+        )
+        if not posix_time_zone:
+            # Mostly the zones tzdata labels numerically ("<-03>3"), which the
+            # module's libc cannot read; sending one would move its clock.
+            _LOGGER.warning(
+                "No POSIX time zone the module can read describes %s, so its "
+                "own zone is left as it is. Set it by hand if its date and "
+                "time metrics are off: 'config set vehicle timezone <POSIX TZ>'",
+                time_zone,
+            )
+            return
+
+        result = await self.async_send_command(
+            command=MODULE_TIMEZONE_COMMAND.format(timezone=posix_time_zone),
+            timeout=DEFAULT_COMMAND_TIMEOUT,
+        )
+        if result.get("success"):
+            _LOGGER.info("Module time zone set to %s (%s)", posix_time_zone, time_zone)
+            return
+        _LOGGER.warning(
+            "Could not set the module's time zone to %s (%s); its date and time "
+            "metrics stay in the zone it is configured for",
+            posix_time_zone,
+            result.get("error", "no response"),
         )
 
     async def _async_startup_metric_refresh(self, _now: datetime) -> None:
