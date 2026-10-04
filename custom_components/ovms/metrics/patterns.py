@@ -132,16 +132,24 @@ TOPIC_PATTERNS = {
         "category": "network",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
-    "door": {
-        "name": "Door",
-        "icon": "mdi:car-door",
-        "device_class": BinarySensorDeviceClass.DOOR,
-        "category": "door",
-    },
+    # Before "door": a topic that names both, as the per-door lock metrics of
+    # the Kia Niro / Hyundai Kona do (xkn.v.door.lock.front.left), is a lock.
+    # The first pattern that matches any of its segments wins
+    # (metrics/utils.py::get_metric_by_pattern), so order decides.
     "lock": {
         "name": "Lock",
         "icon": "mdi:lock",
         "device_class": BinarySensorDeviceClass.LOCK,
+        "category": "door",
+        # OVMS publishes a lock metric as true when LOCKED, Home Assistant's
+        # LOCK class reads on as UNLOCKED - the same inversion the two defined
+        # lock metrics carry (issue #276).
+        "invert_state": True,
+    },
+    "door": {
+        "name": "Door",
+        "icon": "mdi:car-door",
+        "device_class": BinarySensorDeviceClass.DOOR,
         "category": "door",
     },
     "charging": {
