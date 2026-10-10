@@ -40,6 +40,3 @@ updates:
       - "python"
     commit-message:
       prefix: "Python"
-    # requirements.txt uses ">=" floors: only touch a line when the latest
-    # release no longer satisfies it, instead of raising every floor.
-    versioning-strategy: increase-if-necessary
