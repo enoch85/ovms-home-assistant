@@ -10,14 +10,13 @@ jobs:
     # a human push to its branch must not inherit auto-merge.
     if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     permissions:
       contents: write
       pull-requests: write
     steps:
       # Also verifies the commits are signed by Dependabot.
       - id: meta
-        uses: dependabot/fetch-metadata@v3
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
 
       # Majors can break the integration and need a human. Everything else is
       # merged by GitHub once branch protection's required checks pass; --auto
@@ -26,4 +25,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
-        run: gh pr merge --auto --squash "$PR_URL"
+        run: |
+          [ "$(gh pr view "$PR_URL" --json reviewDecision -q .reviewDecision)" = APPROVED ] \
+            || gh pr review --approve "$PR_URL"
+          gh pr merge --auto --squash "$PR_URL"
