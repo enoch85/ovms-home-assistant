@@ -58,14 +58,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Extract version from branch name
-        id: extract_version
-        run: echo "version=$(echo ${{ github.head_ref }} | sed 's/release\///')" >> $GITHUB_OUTPUT
-
       - name: Check manifest version
+        # The branch name comes from the PR author: read it from the
+        # environment, never expand it into the script.
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           MANIFEST_VERSION=$(grep '"version"' custom_components/ovms/manifest.json | cut -d'"' -f4)
-          BRANCH_VERSION="${{ steps.extract_version.outputs.version }}"
+          BRANCH_VERSION="${HEAD_REF#release/}"
 
           echo "Manifest version: $MANIFEST_VERSION"
           echo "Branch version: $BRANCH_VERSION"
