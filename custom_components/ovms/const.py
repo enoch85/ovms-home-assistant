@@ -373,6 +373,44 @@ OVMS_UNIT_LABELS = {
     "\u2030": None,
 }
 
+# A date/time metric is published as text by OvmsMetric::AsString
+# (components/ovms_server_v3/src/ovms_server_v3.cpp, TransmitMetric): a DateUTC
+# metric as strftime "%F %T UTC" (gmtime), a DateLocal metric as "%F %T %Z" in
+# the MODULE's own time zone (main/ovms_metrics.cpp). The zone is therefore only
+# ever an abbreviation, which no library can resolve to an offset - only the two
+# below are unambiguous. "GMT" is what %Z prints for a module on a British POSIX
+# time zone ("GMT0BST,...") outside summer time. See issue #277.
+OVMS_TIMESTAMP_PATTERN = r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\s+(\S+))?$"
+OVMS_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
+OVMS_TIMESTAMP_DISPLAY_FORMAT = "%Y-%m-%d at %H:%M:%S"
+OVMS_UTC_ZONE_TOKENS = frozenset(("UTC", "GMT"))
+# Keeping the module on Home Assistant's time zone is what makes a DateLocal
+# metric line up: the module labels it with an abbreviation only, so its zone
+# has to be the one Home Assistant reads it in. The module feeds this config
+# value straight to setenv("TZ")/tzset(), so it takes a POSIX TZ string
+# (utils.get_posix_time_zone). "config set" is idempotent - it only writes when
+# the value actually changes (main/ovms_config.cpp, ConfigParamMap::SetValue).
+MODULE_TIMEZONE_COMMAND = "config set vehicle timezone {timezone}"
+# The module's libc is newlib (the ESP32 toolchain OVMS builds against). Its
+# tzset reads a zone name with sscanf "%10[^0-9,+-]" and every offset and rule
+# time with "%hu" (newlib/libc/time/tzset_r.c, _tzset_r), which is less than
+# the POSIX syntax tzdata writes for. Two constructs it would silently misread,
+# so a string containing either is never sent:
+#   "<+0545>-5:45"  the quoted numeric name POSIX allows and newlib does not -
+#                   its scan stops at the "+" and takes 0545 as the hour
+#   ",M3.5.0/-1"    a negative rule hour - "%hu" fails and the rest of the
+#                   string is then read at the wrong offset
+# 231 of the 599 zones in tzdata 2026b carry such a name, so those modules are
+# left on the zone they have rather than given something they would misread.
+MODULE_TIME_ZONE_REJECTED = ("<", "/-")
+MODULE_TIME_ZONE_DIGITS = "0123456789"
+MODULE_TIME_ZONE_SUMMER_TIME_MARKER = ","
+# A year of weekly samples shows both the standard and the summer offset of
+# every zone, which is what a POSIX TZ string has to agree with.
+MODULE_TIME_ZONE_SAMPLE_DAYS = 366
+MODULE_TIME_ZONE_SAMPLE_STEP_DAYS = 7
+
+
 # Discovery thresholds (percentage-based)
 # These are percentages of expected metrics for the detected vehicle type
 MINIMUM_DISCOVERY_PERCENT = 5  # Below this, show warning to user

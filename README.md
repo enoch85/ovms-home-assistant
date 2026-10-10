@@ -90,6 +90,8 @@ config set server.v3 metrics.exclude "v.e.*.log"
 - For best results, ensure your OVMS module firmware is updated to at least version 3.3.004 or higher.
 - Metrics without a definition in this integration get their unit from the module itself (`metrics list -n`, firmware 3.3.004+). The module is asked after each start, and again when a metric it had no value for yet (charge metrics while parked, for example) starts publishing. Its answers are remembered per vehicle, so a start while the module is offline keeps the known units. Only a metric the module has never described - older firmware, or offline since the integration was installed - gets a unit guessed from the topic name, as before.
 - A log warning "The OVMS module reports other units than this integration defines for: ..." means a metric definition in this integration is out of date compared to your firmware. The entity keeps working; please report it so the definition can be corrected.
+- The integration puts the module on Home Assistant's time zone at every start (`config set vehicle timezone <POSIX TZ string>`, e.g. `NZST-12NZDT,M9.5.0,M4.1.0/3` for `Pacific/Auckland`). This is needed because `v.c.timestamp`, `v.g.timestamp`, `v.p.gpstime` and `v.e.serv.time` are published in the module's own time zone labelled with nothing but an abbreviation (`NZDT`, `CEST`, ...), which cannot be resolved to an offset - so they are only right when the two zones agree. It also moves the module's own clock: its logs, its charge and climate timers and the OVMS app all follow Home Assistant. The module stores the value only when it changes, and `m.time.utc` is always UTC either way.
+- Some time zones cannot be sent, and the module is then left exactly as it is with a warning naming the zone. The module's C library only accepts a plain POSIX time zone, and the time zone database describes about a third of the world's zones with a numeric name instead (`<-03>3` for Bogotá, `<+0545>-5:45` for Kathmandu) that it would misread. Pick a name for it yourself on the OVMS shell if its date and time metrics look wrong, e.g. `config set vehicle timezone COT5` for Bogotá - the name is only what the module prints, the offset after it is what matters. A module left on the firmware default (UTC) needs none of this.
 
 
 ## Screenshots
@@ -310,7 +312,7 @@ Entities are grouped under a device representing your vehicle, identified by the
 The integration intelligently formats data to enhance usability:
 
 - **Duration Values**: Time values are automatically formatted in the most appropriate units (minutes, hours, days) with both short form (5h 30m) and full text variants available as attributes
-- **Timestamps**: Dates and times are displayed in a human-readable format
+- **Timestamps**: Dates and times are displayed in a human-readable format, converted to Home Assistant's time zone
 - **Battery Levels**: Battery entities include a "battery_level" attribute categorizing the state as low/medium/high
 - **Temperature Comfort**: Temperature entities include a "temperature_level" attribute (freezing/cold/cool/comfortable/warm/hot)
 - **GPS Accuracy**: Location entities automatically include accuracy estimates derived from GPS signal quality

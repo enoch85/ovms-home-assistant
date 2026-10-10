@@ -19,6 +19,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 from ..const import (
     LOGGER_NAME,
+    OVMS_TIMESTAMP_DISPLAY_FORMAT,
     SIGNAL_UPDATE_ENTITY,
     VECTOR_MIN_VALUES,
     VECTOR_MIN_VALUES_NUMERIC,
@@ -46,6 +47,35 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 
 # Default setting for creating individual cell sensors
 CREATE_INDIVIDUAL_CELL_SENSORS = False
+
+# Attributes that must come from the metric definition on every start rather
+# than from storage. "original_*" carry the device class a formatted sensor is
+# parsed with, so a stale one keeps a sensor parsing as the type it had before
+# an upgrade; the rest are either entity metadata or formatting leftovers.
+NON_RESTORABLE_ATTRIBUTES = frozenset(
+    (
+        "device_class",
+        "state_class",
+        "unit_of_measurement",
+        "unit",
+        "last_updated",
+        "full_topic",
+        "formatted_duration",
+        "original_device_class",
+        "original_state_class",
+        "original_unit",
+        "timestamp_object",
+    )
+)
+
+
+def restorable_attributes(attributes: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the stored attributes that may be carried over on restart."""
+    return {
+        key: value
+        for key, value in attributes.items()
+        if key not in NON_RESTORABLE_ATTRIBUTES
+    }
 
 
 def format_sensor_value(value, device_class, attributes):
@@ -87,15 +117,10 @@ def format_sensor_value(value, device_class, attributes):
         # For timestamp, store datetime object as attribute and return ISO string
         attributes["timestamp_object"] = value
         if isinstance(value, datetime):
-            formatted = value.isoformat()
-            # Make it more readable by just keeping date and time
-            if "T" in formatted:
-                date_part, time_part = formatted.split("T")
-                time_part = time_part.split("+")[0].split(".")[
-                    0
-                ]  # Remove milliseconds and timezone
-                return f"{date_part} at {time_part}"
-            return formatted
+            # Wall clock only: strftime drops the offset for every zone, where
+            # splitting the ISO string on "+" left it behind west of Greenwich
+            # ("2026-10-03 at 11:28:28-04:00").
+            return value.strftime(OVMS_TIMESTAMP_DISPLAY_FORMAT)
         return str(value)
     # Normal handling - preserve numeric types for HA unit conversion
     # HA requires native_value to be int/float for device_class unit conversion
@@ -281,26 +306,9 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
 
             # Restore attributes if available, but clean up inconsistent ones
             if state.attributes:
-                # Exclude entity attributes that should come from metric definitions,
-                # not from restored state (prevents stale cached values)
-                saved_attributes = {
-                    k: v
-                    for k, v in state.attributes.items()
-                    if k
-                    not in [
-                        "device_class",
-                        "state_class",
-                        "unit_of_measurement",
-                        "unit",
-                        "last_updated",
-                    ]
-                }
-
-                # Remove stale/inconsistent formatted attributes
-                if "formatted_duration" in saved_attributes:
-                    del saved_attributes["formatted_duration"]
-
-                self._attr_extra_state_attributes.update(saved_attributes)
+                self._attr_extra_state_attributes.update(
+                    restorable_attributes(state.attributes)
+                )
 
         @callback
         def update_state(payload: Any) -> None:
@@ -632,27 +640,9 @@ class OVMSSensor(SensorEntity, RestoreEntity):
 
             # Restore attributes if available, but clean up inconsistent ones
             if state.attributes:
-                # Exclude entity attributes that should come from metric definitions,
-                # not from restored state (prevents stale cached values)
-                saved_attributes = {
-                    k: v
-                    for k, v in state.attributes.items()
-                    if k
-                    not in [
-                        "device_class",
-                        "state_class",
-                        "unit_of_measurement",
-                        "unit",
-                        "last_updated",
-                        "full_topic",
-                    ]
-                }
-
-                # Remove stale/inconsistent formatted attributes
-                if "formatted_duration" in saved_attributes:
-                    del saved_attributes["formatted_duration"]
-
-                self._attr_extra_state_attributes.update(saved_attributes)
+                self._attr_extra_state_attributes.update(
+                    restorable_attributes(state.attributes)
+                )
 
         @callback
         def update_state(payload: str) -> None:

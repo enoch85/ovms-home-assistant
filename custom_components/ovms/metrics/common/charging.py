@@ -186,11 +186,12 @@ CHARGING_METRICS = {
         "category": "charging",
         "device_class": BinarySensorDeviceClass.RUNNING,
     },
+    # Firmware unit TimeUTC (metrics_standard.cpp), published as "HH:MM:SS" -
+    # a UTC time of day, not a point in time, so no TIMESTAMP device class.
     "v.c.timerstart": {
         "name": "Charge Timer Start",
-        "description": ("Time timer is due to start, " "seconds since midnight UTC"),
+        "description": "Time of day the charge timer is due to start (UTC)",
         "icon": "mdi:timer",
-        "device_class": SensorDeviceClass.TIMESTAMP,
         "category": "charging",
     },
     "v.c.timestamp": {

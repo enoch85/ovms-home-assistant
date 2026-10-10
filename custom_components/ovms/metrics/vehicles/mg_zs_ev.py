@@ -205,11 +205,12 @@ MG_ZS_EV_METRICS = {
         "device_class": BinarySensorDeviceClass.POWER,
         "category": "mg_zs_ev",
     },
+    # A plain firmware string ("DD/MM/YY HH:MM:SS", no zone), not a datetime
+    # Home Assistant can type, so it stays text.
     "xmg.v.bms.time": {
         "name": "MG ZS-EV BMS Time",
         "description": "BMS time",
         "icon": "mdi:clock",
-        "device_class": SensorDeviceClass.TIMESTAMP,
         "category": "mg_zs_ev",
     },
     # DC-DC converter metrics
