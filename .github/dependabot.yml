@@ -4,6 +4,18 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Let fresh releases age before adopting them, so a hijacked or yanked
+    # release is caught upstream first. Security updates skip the cooldown.
+    cooldown:
+      default-days: 3
+    # One PR per week. Majors stay separate: they are not auto-merged.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     labels:
       - "dependencies"
       - "github_actions"
@@ -14,10 +26,20 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 3
+    groups:
+      python:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     labels:
       - "dependencies"
       - "python"
     commit-message:
       prefix: "Python"
-    target-branch: "dev"
+    # requirements.txt uses ">=" floors: only touch a line when the latest
+    # release no longer satisfies it, instead of raising every floor.
     versioning-strategy: increase-if-necessary
