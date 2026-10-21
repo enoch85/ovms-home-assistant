@@ -1,6 +1,7 @@
 {
   "domain": "ovms",
   "name": "Open Vehicle Monitoring System",
+  "categories": ["vehicles_transport.cars_evs"],
   "codeowners": ["@enoch85"],
   "config_flow": true,
   "dependencies": ["mqtt"],
