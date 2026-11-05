@@ -11,7 +11,7 @@ The [Open Vehicle Monitoring System (OVMS)](https://www.openvehicles.com/) integ
 | [Features](#features) | Full feature list |
 | [Requirements](#requirements) | Prerequisites and firmware versions |
 | [Screenshots](#screenshots) | Visual examples |
-| [Installation](#installation) | HACS and manual install |
+| [Installation](#installation) | Marketplace, HACS and manual install |
 | [MQTT Broker Configuration](#mqtt-broker-configuration) | MQTT broker setup and ACL |
 | [OVMS Configuration](#ovms-configuration) | OVMS module setup |
 | [Home Assistant Configuration](#home-assistant-configuration) | Integration setup in HA |
@@ -136,11 +136,11 @@ Compared to using the OVMS V2 server, this integration will use more data since 
 
 ## Installation
 
-### HACS Installation (Recommended)
+### Marketplace Installation (Recommended)
 
-1. In Home Assistant go to HACS -> Integrations. Click on "+ Explore & Download Repositories" and search for "OVMS Home Assistant".
+1. In Home Assistant 2026.11 and newer, go to Settings -> Marketplace and search for "OVMS Home Assistant", or use the button below, and download it. On older versions, search for it in HACS instead, download it and restart Home Assistant.
 
-   [![OPEN HACS REPOSITORY ON](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=enoch85&repository=ovms-home-assistant&category=integration)
+   [![OPEN MARKETPLACE REPOSITORY ON](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=enoch85&repository=ovms-home-assistant&category=integration)
 
 2. In Home Assistant go to Settings -> Devices & Services -> Integrations. Click on "+ Add integration" and search for "OVMS".
 
