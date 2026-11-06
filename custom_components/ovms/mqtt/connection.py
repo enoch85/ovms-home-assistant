@@ -28,10 +28,10 @@ from ..const import (
     DEFAULT_TOPIC_STRUCTURE,
     DEFAULT_VERIFY_SSL,
     LOGGER_NAME,
-    TOPIC_TEMPLATE,
 )
 from ..utils import (
     generate_ovms_client_id,
+    get_subscription_topics,
     uses_tls_transport,
     uses_websocket_transport,
 )
@@ -529,27 +529,19 @@ class MQTTConnectionManager:
             return
 
         try:
-            # Format the topic
             qos = self.config.get(CONF_QOS, DEFAULT_QOS)
 
-            # Subscribe to all topics under the structure prefix
-            topic = TOPIC_TEMPLATE.format(structure_prefix=self.structure_prefix)
-
-            _LOGGER.info("Subscribing to OVMS topic: %s", topic)
-            await self.hass.async_add_executor_job(self.client.subscribe, topic, qos)
-
-            # Add a subscription with vehicle ID but without username
-            # Handle the case where topics might use different username patterns
-            vehicle_id = self.config.get(CONF_VEHICLE_ID, "")
-            prefix = self.config.get(CONF_TOPIC_PREFIX, "")
-            if vehicle_id and prefix:
-                alternative_topic = f"{prefix}/+/{vehicle_id}/#"
-                _LOGGER.info(
-                    "Also subscribing to alternative topic pattern: %s",
-                    alternative_topic,
-                )
+            # Everything under the structure prefix plus the same vehicle under
+            # any username level, without two overlapping filters: brokers such
+            # as Mosquitto 2 deliver a message once per matching subscription.
+            for topic in get_subscription_topics(
+                self.structure_prefix,
+                self.config.get(CONF_TOPIC_PREFIX, ""),
+                self.config.get(CONF_VEHICLE_ID, ""),
+            ):
+                _LOGGER.info("Subscribing to OVMS topic: %s", topic)
                 await self.hass.async_add_executor_job(
-                    self.client.subscribe, alternative_topic, qos
+                    self.client.subscribe, topic, qos
                 )
         except Exception as ex:
             _LOGGER.exception("Error subscribing to topics: %s", ex)

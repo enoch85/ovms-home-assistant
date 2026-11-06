@@ -5,11 +5,14 @@ import logging
 import hashlib
 from typing import Any, Dict, Mapping, Optional
 
+import paho.mqtt.client as mqtt
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .const import (
+    ALTERNATIVE_TOPIC_TEMPLATE,
     CONF_HOST,
     CONF_MQTT_USERNAME,
     CONF_PROTOCOL,
@@ -23,6 +26,7 @@ from .const import (
     OVMS_DEVICE_MANUFACTURER,
     OVMS_DEVICE_MODEL,
     PIN_SECURE_PROTOCOLS,
+    TOPIC_TEMPLATE,
 )
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
@@ -93,6 +97,41 @@ def uses_websocket_transport(config: Mapping[str, Any]) -> bool:
 def uses_tls_transport(config: Mapping[str, Any]) -> bool:
     """Return True when the configured MQTT transport uses TLS."""
     return config.get(CONF_PROTOCOL) in ("mqtts", "wss")
+
+
+def get_subscription_topics(
+    structure_prefix: str, prefix: Optional[str], vehicle_id: Optional[str]
+) -> list[str]:
+    """Return the MQTT topic filters to subscribe to for one vehicle.
+
+    Args:
+        structure_prefix: The formatted topic structure, e.g. "ovms/user/car1"
+        prefix: The configured topic prefix, e.g. "ovms"
+        vehicle_id: The configured vehicle ID, e.g. "car1"
+
+    Returns:
+        Everything under the structure prefix (TOPIC_TEMPLATE) and the same
+        vehicle under any username level (ALTERNATIVE_TOPIC_TEMPLATE). When the
+        latter already covers the structure prefix, it is returned alone.
+
+    Notes:
+        Brokers such as Mosquitto 2 deliver a message once for every
+        subscription it matches. Subscribing to both filters made every message
+        of the default "{prefix}/{mqtt_username}/{vehicle_id}" structure
+        arrive, and be processed, twice.
+    """
+    topics = [TOPIC_TEMPLATE.format(structure_prefix=structure_prefix)]
+    if not prefix or not vehicle_id:
+        return topics
+
+    alternative = ALTERNATIVE_TOPIC_TEMPLATE.format(
+        prefix=prefix, vehicle_id=vehicle_id
+    )
+    # A filter ending in "/#" that matches the structure prefix also matches
+    # every topic under it.
+    if mqtt.topic_matches_sub(alternative, structure_prefix):
+        return [alternative]
+    return [*topics, alternative]
 
 
 def get_entry_command_function(

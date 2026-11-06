@@ -55,7 +55,7 @@ OVMSMQTTClient (mqtt/__init__.py) - orchestrates all components
 
 ### Critical Data Flows
 
-1. **Topic Discovery Flow**: During setup, the integration subscribes to `{prefix}/{mqtt_username}/{vehicle_id}/#` wildcard, collects all topics for ~5 seconds, then parses them to determine entity types.
+1. **Topic Discovery Flow**: During setup, the integration subscribes to `{prefix}/+/{vehicle_id}/#` wildcard (the vehicle under any username level, which covers the default `{prefix}/{mqtt_username}/{vehicle_id}`), collects all topics for ~5 seconds, then parses them to determine entity types. `utils.get_subscription_topics` picks the filters and never subscribes two that overlap: brokers such as Mosquitto 2 deliver a message once per matching subscription, so overlapping filters process every message twice.
 
 2. **Entity Creation Pattern**: Topic → TopicParser (matches patterns in `metrics/patterns.py`) → EntityFactory → Platform-specific entity class → Home Assistant entity registry.
 
