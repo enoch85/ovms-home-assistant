@@ -60,7 +60,6 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for OVMS."""
 
     VERSION = CONFIG_VERSION
-    CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_PUSH
 
     def __init__(self):
         """Initialize the OVMS config flow."""
