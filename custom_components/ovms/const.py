@@ -259,6 +259,12 @@ TOPIC_STRUCTURES = [
 TOPIC_WILDCARD = "#"
 # Main subscription topic with structure variables
 TOPIC_TEMPLATE = "{structure_prefix}/#"
+# The same vehicle under any username level, which TopicParser accepts too.
+# It covers TOPIC_TEMPLATE for the "{prefix}/{mqtt_username}/{vehicle_id}" and
+# "{prefix}/client/{vehicle_id}" structures, and brokers such as Mosquitto 2
+# deliver a message once per matching subscription, so it is then subscribed
+# instead of TOPIC_TEMPLATE, never next to it (utils.get_subscription_topics).
+ALTERNATIVE_TOPIC_TEMPLATE = "{prefix}/+/{vehicle_id}/#"
 # Discovery topic to find all OVMS topics
 DISCOVERY_TOPIC = "{prefix}/#"
 # Command topic template for request-response pattern
