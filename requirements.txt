@@ -3,5 +3,5 @@
 # homeassistant brings voluptuous at the exact version it supports.
 homeassistant==2026.10.4
 black==26.10.1
-paho-mqtt==2.1.0
+paho-mqtt==2.2.0
 pylint==4.1.3
