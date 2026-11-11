@@ -18,6 +18,7 @@ from ..const import (
     DEFAULT_COMMAND_RATE_PERIOD,
     DEFAULT_COMMAND_TIMEOUT,
     DEFAULT_QOS,
+    COMMAND_TIMEOUT_ERROR,
     COMMAND_TOPIC_TEMPLATE,
     COMMAND_CLEANUP_INTERVAL,
     COMMAND_PENDING_EXPIRY,
@@ -168,8 +169,14 @@ class CommandHandler:
         command_id: Optional[str] = None,
         timeout: int = DEFAULT_COMMAND_TIMEOUT,
         vehicle_id: Optional[str] = None,
+        *,
+        quiet: bool = False,
     ) -> Dict[str, Any]:
-        """Send a command to the OVMS module and wait for a response."""
+        """Send a command to the OVMS module and wait for a response.
+
+        Set ``quiet`` for a command the integration sends by itself: a timeout
+        is then only logged at debug level, and the caller reports it in context.
+        """
         # Resolve the connection manager for the targeted vehicle.
         mqtt_client = self._get_connection_manager(vehicle_id)
 
@@ -283,7 +290,8 @@ class CommandHandler:
             }
 
         except asyncio.TimeoutError:
-            _LOGGER.warning(
+            log = _LOGGER.debug if quiet else _LOGGER.warning
+            log(
                 "Command '%s %s' (ID: %s) timed out after %d seconds. "
                 "No response received from OVMS device. This could indicate: "
                 "1) OVMS firmware doesn't support MQTT commands, "
@@ -301,7 +309,7 @@ class CommandHandler:
 
             return {
                 "success": False,
-                "error": "Timeout waiting for response",
+                "error": COMMAND_TIMEOUT_ERROR,
                 "command_id": command_id,
                 "command": command,
                 "parameters": logged_parameters,

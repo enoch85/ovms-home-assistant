@@ -67,6 +67,8 @@ OVMSMQTTClient (mqtt/__init__.py) - orchestrates all components
 
 6. **Command Flow**: Service call → CommandHandler.async_send_command() → MQTT publish to `{prefix}/{username}/{vehicle_id}/client/rr/command/{command_id}` → Response on `{prefix}/{username}/{vehicle_id}/client/rr/response/{command_id}`.
 
+7. **Startup Commands**: The commands the integration sends by itself (module time zone, `METRIC_UNITS_COMMAND`, `METRIC_REFRESH_COMMAND`) go through `OVMSMQTTClient._async_send_startup_command`: one at a time, with `quiet=True` so a timeout skips the generic warning. Retained topics look the same whether the module is there or not ("V3 Server Connected: on" included), so `_track_module_reachability` counts the module as reachable only after a live `metric/` message (the broker clears the retain flag on those), and as away when its will (`s.v3.connected` = "no") arrives or one of these commands times out before anything live was seen. While it is away nothing is sent: the module connects with clean session off and subscribes at QoS 1, so the broker would queue the command and the module would run it whenever it returns. The time zone and the unit query are sent again `DEFERRED_COMMAND_DELAY` after the module is seen again; the refresh is left to the full publish the module makes when it reconnects. A module that publishes but does not answer gets one warning: it only takes commands under its own topic prefix, while metrics are accepted from any username level.
+
 ### Configuration Management
 
 - **Config Version**: Track in `const.py::CONFIG_VERSION` (currently 6)

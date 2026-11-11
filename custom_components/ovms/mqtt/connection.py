@@ -79,7 +79,7 @@ class MQTTConnectionManager:
         self,
         hass: HomeAssistant,
         config: Dict[str, Any],
-        message_callback: Callable[[str, str], None],
+        message_callback: Callable[[str, str, bool], None],
         connection_callback: Callable[[bool], None],
     ):
         """Initialize the MQTT connection manager."""
@@ -338,10 +338,11 @@ class MQTTConnectionManager:
                 except UnicodeDecodeError:
                     payload = "<binary data>"
 
-                # Process the message
+                # Process the message. The retain flag tells the broker's
+                # stored copy, sent on subscribing, from a live message.
                 if self.message_callback:
                     asyncio.run_coroutine_threadsafe(
-                        self.message_callback(msg.topic, payload),
+                        self.message_callback(msg.topic, payload, msg.retain),
                         self.hass.loop,
                     )
             except Exception as ex:
