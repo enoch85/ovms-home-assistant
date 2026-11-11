@@ -1,6 +1,6 @@
 """Utility functions for OVMS integration."""
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 import logging
 import hashlib
 from typing import Any, Dict, Mapping, Optional
@@ -23,6 +23,7 @@ from .const import (
     LOGGER_NAME,
     METRIC_UNITS_STORAGE_KEY,
     METRIC_UNITS_STORAGE_VERSION,
+    MQTT_SUBACK_FAILURE,
     OVMS_DEVICE_MANUFACTURER,
     OVMS_DEVICE_MODEL,
     PIN_SECURE_PROTOCOLS,
@@ -101,7 +102,7 @@ def uses_tls_transport(config: Mapping[str, Any]) -> bool:
 
 def get_subscription_topics(
     structure_prefix: str, prefix: Optional[str], vehicle_id: Optional[str]
-) -> list[str]:
+) -> dict[str, Optional[str]]:
     """Return the MQTT topic filters to subscribe to for one vehicle.
 
     Args:
@@ -110,19 +111,25 @@ def get_subscription_topics(
         vehicle_id: The configured vehicle ID, e.g. "car1"
 
     Returns:
-        Everything under the structure prefix (TOPIC_TEMPLATE) and the same
-        vehicle under any username level (ALTERNATIVE_TOPIC_TEMPLATE). When the
-        latter already covers the structure prefix, it is returned alone.
+        Each filter to subscribe to, mapped to the filter to subscribe to
+        instead if the broker refuses it (None when there is none): everything
+        under the structure prefix (TOPIC_TEMPLATE) and the same vehicle under
+        any username level (ALTERNATIVE_TOPIC_TEMPLATE). When the latter
+        already covers the structure prefix, it is returned alone, with the
+        structure prefix as its replacement.
 
     Notes:
         Brokers such as Mosquitto 2 deliver a message once for every
         subscription it matches. Subscribing to both filters made every message
         of the default "{prefix}/{mqtt_username}/{vehicle_id}" structure
-        arrive, and be processed, twice.
+        arrive, and be processed, twice. A broker that authorizes subscriptions
+        per user refuses the wider filter, so the structure prefix must still
+        be subscribed to then: it carries the module's data and the responses
+        to commands.
     """
-    topics = [TOPIC_TEMPLATE.format(structure_prefix=structure_prefix)]
+    topic = TOPIC_TEMPLATE.format(structure_prefix=structure_prefix)
     if not prefix or not vehicle_id:
-        return topics
+        return {topic: None}
 
     alternative = ALTERNATIVE_TOPIC_TEMPLATE.format(
         prefix=prefix, vehicle_id=vehicle_id
@@ -130,8 +137,23 @@ def get_subscription_topics(
     # A filter ending in "/#" that matches the structure prefix also matches
     # every topic under it.
     if mqtt.topic_matches_sub(alternative, structure_prefix):
-        return [alternative]
-    return [*topics, alternative]
+        return {alternative: topic}
+    return {topic: None, alternative: None}
+
+
+def is_subscription_refused(reason_codes: Iterable[Any]) -> bool:
+    """Return True if the broker refused a subscription (SUBACK).
+
+    Args:
+        reason_codes: What paho hands to on_subscribe: ReasonCode objects for
+            MQTT 5, the plain integer return codes for MQTT 3.1.1.
+
+    Returns:
+        True if any of them is a failure (MQTT_SUBACK_FAILURE or above).
+    """
+    return any(
+        getattr(code, "value", code) >= MQTT_SUBACK_FAILURE for code in reason_codes
+    )
 
 
 def get_entry_command_function(

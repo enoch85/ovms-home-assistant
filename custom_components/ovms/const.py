@@ -264,7 +264,15 @@ TOPIC_TEMPLATE = "{structure_prefix}/#"
 # "{prefix}/client/{vehicle_id}" structures, and brokers such as Mosquitto 2
 # deliver a message once per matching subscription, so it is then subscribed
 # instead of TOPIC_TEMPLATE, never next to it (utils.get_subscription_topics).
+# A broker that authorizes subscriptions per user refuses it, though: Mosquitto
+# with its dynamic security plugin, or the OVMS server's own broker, whose ACL
+# check (/mqapi/acl) only permits topics starting with "ovms/<username>/". It
+# is then replaced by TOPIC_TEMPLATE.
 ALTERNATIVE_TOPIC_TEMPLATE = "{prefix}/+/{vehicle_id}/#"
+# A SUBACK reason code from this value on means the subscription was refused:
+# MQTT 3.1.1 section 3.9.3 (return code 0x80 = Failure) and MQTT 5 section
+# 3.9.3 (0x80 and above), the same test as paho's ReasonCode.is_failure.
+MQTT_SUBACK_FAILURE = 0x80
 # Discovery topic to find all OVMS topics
 DISCOVERY_TOPIC = "{prefix}/#"
 # Command topic template for request-response pattern
