@@ -973,7 +973,7 @@ logger:
 2. Check if the command syntax is correct for your vehicle
 3. Verify MQTT QoS settings allow reliable message delivery
 4. Look for command responses in the logs
-5. The module only takes commands under its own topic prefix (`ovms/<Server V3 user>/<vehicle ID>/` unless its topic prefix is set). Data is accepted from any username level, so a topic structure whose username differs from the module's still shows data while every command times out - the integration warns once when the module publishes but leaves its startup commands unanswered. The broker must also let the module read `<prefix>/client/+/command/+`
+5. The module only takes commands under its own topic prefix (`ovms/<Server V3 user>/<vehicle ID>/` unless its topic prefix is set). Data is accepted from any username level, so a topic structure whose username differs from the module's still shows data while every command times out - the integration warns once when the module publishes but leaves its startup commands unanswered, naming the prefix its data arrives under and the one commands go to. The broker must also let the module read `<prefix>/client/+/command/+`.
 
 ### Entity Not Updating
 

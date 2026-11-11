@@ -36,6 +36,7 @@ from custom_components.ovms import mqtt as ovms_mqtt
 from custom_components.ovms.const import (
     COMMAND_TIMEOUT_ERROR,
     CONF_VEHICLE_ID,
+    DEFAULT_COMMAND_TIMEOUT,
     DOMAIN,
     LOGGER_NAME,
     METRIC_REFRESH_COMMAND,
@@ -78,6 +79,9 @@ class _Records(logging.Handler):
 
     def levels(self, level):
         return [r for r in self.records if r.levelno == level]
+
+    def messages(self, level):
+        return [r.getMessage() for r in self.levels(level)]
 
 
 class _FakeEntry:
@@ -174,15 +178,38 @@ async def main():
 
     # ---- 2) its will is on the broker: nothing is sent until it is back --
     records.records.clear()
-    client, hass, sent = _client({TIME_ZONE_COMMAND: ANSWER})
+    client, hass, sent = _client(
+        {TIME_ZONE_COMMAND: ANSWER, METRIC_REFRESH_COMMAND: ANSWER}
+    )
     await client._on_message_received(CONNECTED, "no", True)
     await client._async_set_module_time_zone()
     client._entry_had_entities = False  # a first setup always asks for everything
     await client._async_startup_metric_refresh(None)
     _check(
-        "with the module's will retained, no startup command is sent",
+        "with the module's will retained, no startup command is sent; both wait",
         (sent, list(client._deferred_commands)),
-        ([], [TIME_ZONE_COMMAND]),
+        ([], [TIME_ZONE_COMMAND, METRIC_REFRESH_COMMAND]),
+        results,
+    )
+    _check(
+        "one info line says the module is offline, and nothing claims a full "
+        "publish was requested",
+        (
+            [
+                m
+                for m in records.messages(logging.INFO)
+                if "not sent until it publishes again" in m
+            ],
+            [m for m in records.messages(logging.INFO) if "requesting" in m],
+        ),
+        (
+            [
+                "The OVMS module is offline (its MQTT will is on the broker). The "
+                "integration's own startup commands are not sent until it "
+                "publishes again"
+            ],
+            [],
+        ),
         results,
     )
     await client._on_message_received(SOC, "81", True)
@@ -200,10 +227,18 @@ async def main():
     await client._on_message_received(SOC, "80", False)
     await hass.settle()
     _check(
-        "the first live metric sends the time zone once; the refresh is left "
-        "to the module's own full publish on reconnecting",
-        (client._module_reachable, sent, client._deferred_commands),
-        (True, [(TIME_ZONE_COMMAND, True)], {}),
+        "the first live metric sends the time zone once, and the refresh this "
+        "first setup still needs",
+        (
+            client._module_reachable,
+            sorted(sent),
+            client._deferred_commands,
+        ),
+        (
+            True,
+            sorted([(TIME_ZONE_COMMAND, True), (METRIC_REFRESH_COMMAND, True)]),
+            {},
+        ),
         results,
     )
     _check(
@@ -238,28 +273,74 @@ async def main():
     _check(
         "one info line says why, and there is no warning",
         (
-            len(
-                [
-                    r
-                    for r in records.levels(logging.INFO)
-                    if "did not answer" in r.getMessage()
-                ]
-            ),
+            [
+                m
+                for m in records.messages(logging.INFO)
+                if "not sent until it publishes again" in m
+            ],
             records.levels(logging.WARNING),
         ),
-        (1, []),
+        (
+            [
+                "The OVMS module did not answer "
+                f"'{TIME_ZONE_COMMAND}' within {DEFAULT_COMMAND_TIMEOUT} seconds "
+                "and is not publishing anything live, so it is probably asleep, "
+                "offline or reconnecting (its retained data looks the same either "
+                "way). The integration's own startup commands are not sent until "
+                "it publishes again"
+            ],
+            [],
+        ),
         results,
     )
     await client._on_message_received(SOC, "80", False)
     await hass.settle()
     _check(
-        "once the module publishes, the time zone and the unit query are sent "
-        "again, the refresh is not",
+        "once the module publishes, the time zone, the unit query and the "
+        "refresh a first setup needs are sent again",
         sorted(command for command, _quiet in sent[1:]),
-        sorted([TIME_ZONE_COMMAND, METRIC_UNITS_COMMAND]),
+        sorted([TIME_ZONE_COMMAND, METRIC_UNITS_COMMAND, METRIC_REFRESH_COMMAND]),
         results,
     )
     await client.command_handler.async_shutdown()
+
+    # ---- 3b) the refresh is decided afresh once the module is back --------
+    for label, missing_when_back, expected in (
+        (
+            "it reconnected and published everything itself: no refresh",
+            0,
+            [],
+        ),
+        (
+            "it only resumed, entities are still missing: refresh",
+            2,
+            [METRIC_REFRESH_COMMAND],
+        ),
+    ):
+        records.records.clear()
+        client, hass, sent = _client(
+            {TIME_ZONE_COMMAND: [TIMEOUT, ANSWER], METRIC_REFRESH_COMMAND: ANSWER}
+        )
+        missing = [2]
+        client._count_missing_registry_entities = lambda: missing[0]
+        client._entry_had_entities = True
+        await client._async_set_module_time_zone()  # unanswered: module away
+        await client._async_startup_metric_refresh(None)  # held back
+        held_back = [m for m in records.messages(logging.INFO) if "requesting" in m]
+        missing[0] = missing_when_back
+        await client._on_message_received(SOC, "80", False)
+        await hass.settle()
+        _check(
+            f"module back, {label}",
+            (
+                held_back,
+                [command for command, _quiet in sent if command != TIME_ZONE_COMMAND],
+                len([m for m in records.messages(logging.INFO) if "requesting" in m]),
+            ),
+            ([], expected, len(expected)),
+            results,
+        )
+        await client.command_handler.async_shutdown()
 
     # ---- 4) it publishes but does not answer: one actionable warning ------
     records.records.clear()
@@ -327,6 +408,25 @@ async def main():
         "... and is sent again when it is back",
         [command for command, _quiet in sent],
         [TIME_ZONE_COMMAND, TIME_ZONE_COMMAND],
+        results,
+    )
+    await client.command_handler.async_shutdown()
+
+    # ---- 4c) it publishes under another username: the warning names both --
+    records.records.clear()
+    client, hass, sent = _client({TIME_ZONE_COMMAND: TIMEOUT})
+    await client._on_message_received("ovms/other/car/metric/v/b/soc", "80", False)
+    await client._async_set_module_time_zone()
+    warnings = records.messages(logging.WARNING)
+    _check(
+        "data accepted from another username level: the warning names where it "
+        "publishes and where the commands go",
+        (
+            len(warnings),
+            "publishes data under 'ovms/other/car'" in warnings[0],
+            "commands go to 'ovms/u/car'" in warnings[0],
+        ),
+        (1, True, True),
         results,
     )
     await client.command_handler.async_shutdown()
