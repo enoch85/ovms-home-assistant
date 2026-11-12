@@ -266,12 +266,7 @@ class OVMSOptionsFlow(OptionsFlow):
         options.update(
             {
                 vol.Required(
-                    CONF_QOS,
-                    default=str(
-                        entry_options.get(
-                            CONF_QOS, entry_data.get(CONF_QOS, DEFAULT_QOS)
-                        )
-                    ),
+                    CONF_QOS, default=str(current_config.get(CONF_QOS, DEFAULT_QOS))
                 ): QOS_SELECTOR,
                 vol.Required(
                     CONF_TOPIC_PREFIX,

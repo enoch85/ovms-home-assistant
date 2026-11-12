@@ -39,20 +39,15 @@ from ..const import (
     ERROR_TLS_ERROR,
     ERROR_UNKNOWN,
     PORT_PROBE_TIMEOUT,
-    QOS_LEVELS,
 )
 from ..utils import uses_tls_transport, uses_websocket_transport
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
-# The QoS radio buttons in the setup and options forms. Their options are text:
-# with numbers, the frontend showed no level selected. Stored as the int paho needs.
+# Text options: the frontend marks no radio button for numeric ones.
 QOS_SELECTOR = vol.All(
     SelectSelector(
-        SelectSelectorConfig(
-            options=[str(level) for level in QOS_LEVELS],
-            mode=SelectSelectorMode.LIST,
-        )
+        SelectSelectorConfig(options=["0", "1", "2"], mode=SelectSelectorMode.LIST)
     ),
     vol.Coerce(int),
 )
