@@ -534,6 +534,41 @@ COMMAND_CLEANUP_INTERVAL = 60  # seconds between pending-command sweeps
 COMMAND_PENDING_EXPIRY = 300  # seconds before a pending command is expired
 COMMAND_CLEANUP_RETRY_DELAY = 5  # seconds to wait after a cleanup-loop error
 
+# Broker ports tried, in this order, when no port is entered (issue #281): the
+# usual ones of MQTT over TLS, WebSocket over TLS, MQTT and WebSocket. TLS comes
+# first, so a broker that offers it is reached over it.
+STANDARD_BROKER_PORTS = (8883, 8084, 1883, 8083)
+# TCP port numbers (RFC 6335 section 6): 0 is reserved, 65535 is the highest.
+MIN_PORT = 1
+MAX_PORT = 65535
+# The form field for certificate verification; stored as CONF_VERIFY_SSL.
+VERIFY_SSL_FIELD = "verify_ssl_certificate"
+# The protocol a broker port speaks, found without credentials: a broker's
+# WebSocket listener accepts the upgrade paho sends (RFC 6455 section 4.1, on
+# paho's default path "/mqtt"), and an MQTT listener answers an anonymous MQTT
+# 3.1.1 CONNECT (clean session, empty client ID) with a CONNACK, accepted or
+# not (MQTT 3.1.1 sections 3.1 and 3.2).
+WEBSOCKET_PROBE_REQUEST = (
+    "GET /mqtt HTTP/1.1\r\n"
+    "Host: {host}:{port}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    "Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "Sec-WebSocket-Protocol: mqtt\r\n\r\n"
+)
+WEBSOCKET_PROBE_ACCEPTED = b"HTTP/1.1 101"
+WEBSOCKET_KEY_BYTES = 16  # the upgrade's random nonce (RFC 6455 section 4.1)
+MQTT_PROBE_CONNECT = b"\x10\x0c\x00\x04MQTT\x04\x02\x00\x00\x00\x00"
+MQTT_PROBE_CONNACK = b"\x20"
+# The protocol name for (TLS, WebSocket).
+BROKER_PROTOCOLS = {
+    (True, True): "wss",
+    (True, False): "mqtts",
+    (False, True): "ws",
+    (False, False): "mqtt",
+}
+
 # Maximum length for state values in Home Assistant
 MAX_STATE_LENGTH = 255
 

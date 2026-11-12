@@ -6,14 +6,15 @@
         "description": "Configure connection to the MQTT broker where OVMS is publishing data",
         "data": {
           "host": "Broker Host",
-          "Port": "Connection Port",
+          "port": "Port",
           "username": "Username",
           "password": "Password",
           "qos": "QoS Level",
           "verify_ssl_certificate": "Verify SSL/TLS Certificate"
         },
         "data_description": {
-          "verify_ssl_certificate": "SSL/TLS certificate verification only applies to secure ports (8883, 8084)"
+          "port": "Leave empty to find the broker's port automatically.",
+          "verify_ssl_certificate": "SSL/TLS certificate verification only applies when the broker uses SSL/TLS"
         }
       },
       "topics": {
@@ -74,7 +75,7 @@
           "qos": "QoS Level",
           "topic_prefix": "Topic Prefix",
           "topic_structure": "Topic Structure",
-          "Port": "Connection Port",
+          "port": "Port",
           "verify_ssl_certificate": "Verify SSL/TLS Certificate",
           "topic_blacklist": "Topic Blacklist",
           "lock_pin_mode": "Stored PIN",
@@ -84,7 +85,8 @@
           "delete_stale_history": "Delete History"
         },
         "data_description": {
-          "verify_ssl_certificate": "SSL/TLS certificate verification only applies to secure ports (8883, 8084). Stored PIN support (for lock/unlock and valet/unvalet) requires verified TLS.",
+          "port": "Leave empty to find the broker's port automatically.",
+          "verify_ssl_certificate": "SSL/TLS certificate verification only applies when the broker uses SSL/TLS. Stored PIN support (for lock/unlock and valet/unvalet) requires verified TLS.",
           "topic_blacklist": "A comma-separated list of topic patterns to filter out. This prevents unwanted entities from being created. Any topic containing these patterns will be ignored. Use this to filter high-frequency log topics that create too many entities.",
           "lock_pin": "Store your OVMS device PIN here so you don't have to enter it every time you lock or unlock. The same stored PIN is also automatically used by the valet/unvalet switch. Without a stored PIN, Home Assistant will prompt for one when locking/unlocking; the valet switch will fall back to a neutral placeholder, which is enough for vehicles that don't validate the PIN (e.g. Fiat 500e). Only available on verified secure MQTT connections.",
           "entity_staleness_header": "Automatically hide inactive sensors to reduce UI clutter",
@@ -94,7 +96,8 @@
       }
     },
     "error": {
-      "invalid_lock_pin": "PIN codes cannot contain spaces or other whitespace."
+      "invalid_lock_pin": "PIN codes cannot contain spaces or other whitespace.",
+      "cannot_connect": "Failed to connect to the broker"
     }
   },
   "services": {

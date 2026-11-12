@@ -200,11 +200,7 @@ Configure your OVMS module to publish data to your MQTT broker:
 1. In the OVMS web UI, go to Config → Server V3 (MQTT)
 2. Configure the following settings:
    - Server: Your MQTT broker address
-   - Port:
-       - TCP Port: 1883 (mqtt://)
-       - WebSocket Port: 8083 (ws://)
-       - SSL/TLS Port: 8883 (mqtts://)
-       - Secure WebSocket Port: 8084 (wss://)
+   - Port: Your broker's port. Left empty, the module uses 1883, or 8883 with "Enable TLS"
    - Username/Password: If required by your broker
    - Topic Prefix: `ovms` (default, can be customized)
    - Enable Auto-Start: YES
@@ -219,11 +215,7 @@ Configure your OVMS module to publish data to your MQTT broker:
 2. Search for "OVMS" and select it
 3. Enter the MQTT broker details:
    - MQTT Broker: Your broker address
-   - Port:
-       - TCP Port: 1883 (mqtt://)
-       - WebSocket Port: 8083 (ws://) - default
-       - SSL/TLS Port: 8883 (mqtts://)
-       - Secure WebSocket Port: 8084 (wss://)
+   - Port: Leave it empty to have the port and protocol found: 8883 (MQTT over TLS), 8084 (WebSocket over TLS), 1883 (MQTT) and 8083 (WebSocket) are tried in this order. If your broker listens on another port, enter it; its protocol is still found. The port can be changed later under Configure, and cleared to be found again
    - Username/Password: If required by your broker
 4. Configure topic structure:
    - Topic Prefix: Should match your OVMS setting (default: `ovms`)

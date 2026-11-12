@@ -12,6 +12,7 @@ from homeassistant.helpers.selector import (
 )
 
 from ..const import (
+    CONF_HOST,
     CONF_LOCK_PIN,
     CONF_QOS,
     CONF_TOPIC_PREFIX,
@@ -29,15 +30,20 @@ from ..const import (
     DEFAULT_TOPIC_BLACKLIST,
     DEFAULT_DELETE_STALE_HISTORY,
     DEFAULT_LOCK_PIN,
+    ERROR_CANNOT_CONNECT,
     TOPIC_STRUCTURES,
     LOGGER_NAME,
     SENSITIVE_LOG_REDACTION,
+    VERIFY_SSL_FIELD,
 )
 from ..utils import (
+    get_merged_config,
     is_secure_pin_connection,
     lock_pin_contains_whitespace,
     normalize_lock_pin,
+    uses_tls_transport,
 )
+from .mqtt_connection import PORT_SELECTOR, async_detect_broker
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -133,47 +139,24 @@ class OVMSOptionsFlow(OptionsFlow):
         )
 
         if user_input is not None:
-            # Process port and SSL verification
-            if "Port" in user_input:
-                port_selection = user_input["Port"]
+            # The port in use keeps its protocol. Another port, or none, is
+            # found on the broker as in the setup.
+            stored = get_merged_config(self.config_entry)
+            port = user_input.get(CONF_PORT)
+            if port == stored.get(CONF_PORT):
+                broker = stored.get(CONF_PROTOCOL), port
+            else:
+                broker = await async_detect_broker(self.hass, stored[CONF_HOST], port)
+            if broker is None:
+                # Shown again as entered, with the protocol in use
+                errors["base"] = ERROR_CANNOT_CONNECT
+                broker = stored.get(CONF_PROTOCOL), port
+            user_input[CONF_PROTOCOL], user_input[CONF_PORT] = broker
+            user_input[CONF_VERIFY_SSL] = user_input.pop(
+                VERIFY_SSL_FIELD, DEFAULT_VERIFY_SSL
+            ) and uses_tls_transport(user_input)
 
-                # Set appropriate protocol and port based on selection
-                if port_selection == "8883":
-                    user_input[CONF_PROTOCOL] = "mqtts"
-                    user_input[CONF_PORT] = 8883
-                    # Use checkbox value for secure ports
-                    user_input[CONF_VERIFY_SSL] = user_input.get(
-                        "verify_ssl_certificate", True
-                    )
-                elif port_selection == "8084":
-                    user_input[CONF_PROTOCOL] = "wss"
-                    user_input[CONF_PORT] = 8084
-                    # Use checkbox value for secure ports
-                    user_input[CONF_VERIFY_SSL] = user_input.get(
-                        "verify_ssl_certificate", True
-                    )
-                elif port_selection == "1883":
-                    user_input[CONF_PROTOCOL] = "mqtt"
-                    user_input[CONF_PORT] = 1883
-                    # Force to False for non-secure ports
-                    user_input[CONF_VERIFY_SSL] = False
-                elif port_selection == "8083":
-                    user_input[CONF_PROTOCOL] = "ws"
-                    user_input[CONF_PORT] = 8083
-                    # Force to False for non-secure ports
-                    user_input[CONF_VERIFY_SSL] = False
-
-                # Remove temporary keys
-                del user_input["Port"]
-                if "verify_ssl_certificate" in user_input:
-                    del user_input["verify_ssl_certificate"]
-
-            # Process the topic blacklist (string -> deduplicated list). This runs
-            # for every submit, including when a "Port" was selected above: the
-            # previous in-port-branch conversion turned the value into a list first,
-            # which made this isinstance(str) check fail and silently skipped the
-            # dedup, so duplicate patterns were stored. Keep a single conversion
-            # here so duplicates are always removed.
+            # Process the topic blacklist (string -> deduplicated list), once.
             if CONF_TOPIC_BLACKLIST in user_input and isinstance(
                 user_input[CONF_TOPIC_BLACKLIST], str
             ):
@@ -234,31 +217,17 @@ class OVMSOptionsFlow(OptionsFlow):
             "Options flow - DEFAULT_TOPIC_BLACKLIST: %s", DEFAULT_TOPIC_BLACKLIST
         )
 
-        # Determine current port selection
-        current_port = current_config.get(CONF_PORT, 8883)
-        current_protocol = current_config.get(CONF_PROTOCOL, "mqtts")
-
-        port_selection = "8883"  # Default
-        if current_port == 1883 and current_protocol == "mqtt":
-            port_selection = "1883"
-        elif current_port == 8083 and current_protocol == "ws":
-            port_selection = "8083"
-        elif current_port == 8084 and current_protocol == "wss":
-            port_selection = "8084"
-
-        # Create options schema with port selection and place SSL verification right after ports
+        # The port in use is shown (a suggestion, so it can be cleared to be
+        # detected again), and certificate verification right after it.
+        current_port = current_config.get(CONF_PORT)
         current_verify_ssl = current_config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
         secure_pin_connection = is_secure_pin_connection(current_config)
         options = {
-            vol.Required("Port", default=port_selection): vol.In(
-                {
-                    "1883": "TCP Port: 1883 (mqtt://)",
-                    "8083": "WebSocket Port: 8083 (ws://)",
-                    "8883": "SSL/TLS Port: 8883 (mqtts://)",
-                    "8084": "Secure WebSocket Port: 8084 (wss://)",
-                }
-            ),
-            vol.Required("verify_ssl_certificate", default=current_verify_ssl): bool,
+            vol.Optional(
+                CONF_PORT,
+                description={"suggested_value": current_port} if current_port else None,
+            ): PORT_SELECTOR,
+            vol.Required(VERIFY_SSL_FIELD, default=current_verify_ssl): bool,
         }
 
         # Add remaining options

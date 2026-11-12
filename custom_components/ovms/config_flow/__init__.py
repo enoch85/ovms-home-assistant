@@ -35,16 +35,21 @@ from ..const import (
     CONF_VERIFY_SSL,
     CONF_ORIGINAL_VEHICLE_ID,
     CONF_CLIENT_ID,
+    DEFAULT_VERIFY_SSL,
+    ERROR_CANNOT_CONNECT,
     TOPIC_STRUCTURES,
     LOGGER_NAME,
+    STANDARD_BROKER_PORTS,
+    VERIFY_SSL_FIELD,
 )
 from ..utils import (
     generate_ovms_client_id,
     generate_ovms_config_entry_unique_id,
     get_ovms_topic_username,
+    uses_tls_transport,
 )
 
-from .mqtt_connection import test_mqtt_connection
+from .mqtt_connection import PORT_SELECTOR, async_detect_broker, test_mqtt_connection
 from .topic_discovery import (
     discover_topics,
     test_topic_availability,
@@ -132,42 +137,28 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             self.debug_info["broker_setup_start"] = time.time()
 
-            # Extract protocol and port from Port selection
-            if "Port" in user_input:
-                port_selection = user_input["Port"]
-                if port_selection == "8883":
-                    user_input[CONF_PROTOCOL] = "mqtts"
-                    user_input[CONF_PORT] = 8883
-                    # Use the checkbox value for secure ports
-                    user_input[CONF_VERIFY_SSL] = user_input.get(
-                        "verify_ssl_certificate", True
-                    )
-                elif port_selection == "8084":
-                    user_input[CONF_PROTOCOL] = "wss"
-                    user_input[CONF_PORT] = 8084
-                    # Use the checkbox value for secure ports
-                    user_input[CONF_VERIFY_SSL] = user_input.get(
-                        "verify_ssl_certificate", True
-                    )
-                elif port_selection == "1883":
-                    user_input[CONF_PROTOCOL] = "mqtt"
-                    user_input[CONF_PORT] = 1883
-                    # Force verify_ssl to False for non-secure ports regardless of checkbox
-                    user_input[CONF_VERIFY_SSL] = False
-                elif port_selection == "8083":
-                    user_input[CONF_PROTOCOL] = "ws"
-                    user_input[CONF_PORT] = 8083
-                    # Force verify_ssl to False for non-secure ports regardless of checkbox
-                    user_input[CONF_VERIFY_SSL] = False
-                del user_input["Port"]
-
-                # Remove the SSL verification option after processing it
-                if "verify_ssl_certificate" in user_input:
-                    del user_input["verify_ssl_certificate"]
-
-            # Test MQTT connection
-            _LOGGER.debug("Testing MQTT connection")
-            result = await test_mqtt_connection(self.hass, user_input)
+            # The protocol, and the port unless one was entered, is found on
+            # the broker; certificate verification only applies to TLS.
+            verify_ssl = user_input.pop(VERIFY_SSL_FIELD, DEFAULT_VERIFY_SSL)
+            broker = await async_detect_broker(
+                self.hass, user_input[CONF_HOST], user_input.get(CONF_PORT)
+            )
+            if broker is None:
+                result = {
+                    "success": False,
+                    "error_type": ERROR_CANNOT_CONNECT,
+                    "message": (
+                        f"No MQTT broker answers at {user_input[CONF_HOST]} on "
+                        f"port {user_input.get(CONF_PORT) or STANDARD_BROKER_PORTS}"
+                    ),
+                }
+            else:
+                user_input[CONF_PROTOCOL], user_input[CONF_PORT] = broker
+                user_input[CONF_VERIFY_SSL] = verify_ssl and uses_tls_transport(
+                    user_input
+                )
+                _LOGGER.debug("Testing MQTT connection")
+                result = await test_mqtt_connection(self.hass, user_input)
 
             self.debug_info["broker_setup_end"] = time.time()
             self.debug_info["broker_setup_duration"] = (
@@ -199,18 +190,11 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if "details" in result:
                 errors["details"] = result["details"]
 
-        # Build the schema with expanded port options
+        # An empty port is detected on the broker
         schema_dict = {
             vol.Required(CONF_HOST): str,
-            vol.Required("Port", default="8883"): vol.In(
-                {
-                    "1883": "TCP Port: 1883 (mqtt://)",
-                    "8083": "WebSocket Port: 8083 (ws://)",
-                    "8883": "SSL/TLS Port: 8883 (mqtts://)",
-                    "8084": "Secure WebSocket Port: 8084 (wss://)",
-                }
-            ),
-            vol.Required("verify_ssl_certificate", default=True): bool,
+            vol.Optional(CONF_PORT): PORT_SELECTOR,
+            vol.Required(VERIFY_SSL_FIELD, default=DEFAULT_VERIFY_SSL): bool,
         }
 
         # Continue with remaining form fields
