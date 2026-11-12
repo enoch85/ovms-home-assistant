@@ -1,7 +1,9 @@
 """MQTT connection handling for OVMS configuration."""
 
 import asyncio
+import base64
 import logging
+import os
 import socket
 import ssl
 import time
@@ -10,6 +12,7 @@ import uuid
 from typing import Dict, Any, Optional
 
 import paho.mqtt.client as mqtt
+import voluptuous as vol
 
 from homeassistant.const import (
     CONF_HOST,
@@ -19,8 +22,14 @@ from homeassistant.const import (
     CONF_PROTOCOL,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+)
 
 from ..const import (
+    BROKER_PROTOCOLS,
     CONF_QOS,
     CONF_VERIFY_SSL,
     DEFAULT_QOS,
@@ -32,11 +41,27 @@ from ..const import (
     ERROR_TOPIC_ACCESS_DENIED,
     ERROR_TLS_ERROR,
     ERROR_UNKNOWN,
+    MAX_PORT,
+    MIN_PORT,
+    MQTT_PROBE_CONNACK,
+    MQTT_PROBE_CONNECT,
     PORT_PROBE_TIMEOUT,
+    STANDARD_BROKER_PORTS,
+    WEBSOCKET_KEY_BYTES,
+    WEBSOCKET_PROBE_ACCEPTED,
+    WEBSOCKET_PROBE_REQUEST,
 )
 from ..utils import uses_tls_transport, uses_websocket_transport
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
+# The broker port in the setup and options forms: empty means "detect it".
+PORT_SELECTOR = vol.All(
+    NumberSelector(
+        NumberSelectorConfig(mode=NumberSelectorMode.BOX, min=MIN_PORT, max=MAX_PORT)
+    ),
+    vol.Coerce(int),
+)
 
 
 def _probe_tcp_port(host: str, port: int, timeout: float) -> bool:
@@ -53,6 +78,71 @@ def _probe_tcp_port(host: str, port: int, timeout: float) -> bool:
         return False
     finally:
         sock.close()
+
+
+def _detect_protocol(host: str, port: int) -> Optional[str]:
+    """Return the protocol ("mqtts", "wss", "mqtt" or "ws") a broker port speaks.
+
+    Blocking (sockets), so it must run in an executor thread. No credentials are
+    sent: a TLS handshake without certificate check tells TLS from plain, then a
+    WebSocket upgrade must be accepted or an anonymous CONNECT answered. The
+    upgrade goes first because an MQTT listener closes on it at once, while a
+    WebSocket listener leaves a CONNECT unanswered until the timeout.
+
+    Returns:
+        The protocol, or None if nothing on the port speaks MQTT.
+    """
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    for tls in (True, False):
+        for websocket in (True, False):
+            try:
+                sock = socket.create_connection((host, port), PORT_PROBE_TIMEOUT)
+            except (OSError, UnicodeError):  # unreachable, or not a valid host name
+                return None
+            try:
+                if tls:
+                    try:
+                        sock = context.wrap_socket(sock, server_hostname=host)
+                    except OSError:
+                        break
+                if websocket:
+                    key = base64.b64encode(os.urandom(WEBSOCKET_KEY_BYTES)).decode()
+                    request = WEBSOCKET_PROBE_REQUEST.format(
+                        host=host, port=port, key=key
+                    )
+                    sock.sendall(request.encode())
+                    expected = WEBSOCKET_PROBE_ACCEPTED
+                else:
+                    sock.sendall(MQTT_PROBE_CONNECT)
+                    expected = MQTT_PROBE_CONNACK
+                with sock.makefile("rb") as reply:
+                    if reply.read(len(expected)) == expected:
+                        return BROKER_PROTOCOLS[tls, websocket]
+            except OSError:
+                pass
+            finally:
+                sock.close()
+    return None
+
+
+async def async_detect_broker(
+    hass: HomeAssistant, host: str, port: Optional[int]
+) -> Optional[tuple[str, int]]:
+    """Return the protocol and port of the MQTT broker on host, or None.
+
+    A port that is given is only probed for its protocol. Without one, the
+    STANDARD_BROKER_PORTS are probed in order and the first that speaks MQTT is
+    used, so a broker that offers TLS is reached over it.
+    """
+    for candidate in (port,) if port else STANDARD_BROKER_PORTS:
+        protocol = await hass.async_add_executor_job(_detect_protocol, host, candidate)
+        if protocol:
+            _LOGGER.debug("MQTT broker found at %s:%s (%s)", host, candidate, protocol)
+            return protocol, candidate
+    return None
 
 
 def ensure_serializable(obj):

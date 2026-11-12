@@ -6,14 +6,15 @@
         "description": "Verbindung zum MQTT-Broker konfigurieren, auf dem OVMS Daten veröffentlicht",
         "data": {
           "host": "Broker-Host",
-          "Port": "Verbindungsport",
+          "port": "Port",
           "username": "Benutzername",
           "password": "Passwort",
           "qos": "QoS-Level",
           "verify_ssl_certificate": "SSL/TLS-Zertifikat überprüfen"
         },
         "data_description": {
-          "verify_ssl_certificate": "SSL/TLS-Zertifikatüberprüfung gilt nur für sichere Ports (8883, 8084)"
+          "port": "Leer lassen, um den Port des Brokers automatisch zu ermitteln.",
+          "verify_ssl_certificate": "SSL/TLS-Zertifikatüberprüfung gilt nur, wenn der Broker SSL/TLS verwendet"
         }
       },
       "topics": {
@@ -74,13 +75,17 @@
           "qos": "QoS-Level",
           "topic_prefix": "Themenpräfix",
           "topic_structure": "Themenstruktur",
-          "Port": "Verbindungsport",
+          "port": "Port",
           "verify_ssl_certificate": "SSL/TLS-Zertifikat überprüfen"
         },
         "data_description": {
-          "verify_ssl_certificate": "SSL/TLS-Zertifikatüberprüfung gilt nur für sichere Ports (8883, 8084)"
+          "port": "Leer lassen, um den Port des Brokers automatisch zu ermitteln.",
+          "verify_ssl_certificate": "SSL/TLS-Zertifikatüberprüfung gilt nur, wenn der Broker SSL/TLS verwendet"
         }
       }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Broker fehlgeschlagen"
     }
   },
   "services": {
