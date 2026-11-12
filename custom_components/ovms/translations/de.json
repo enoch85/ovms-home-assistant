@@ -56,7 +56,7 @@
       "no_topics": "Keine OVMS-Themen gefunden",
       "few_topics_warning": "Wenige Metrik-Themen gefunden. Ihr OVMS-Modul ist möglicherweise offline oder veröffentlicht nicht. Sie können fortfahren, aber einige Entitäten fehlen möglicherweise.",
       "topic_access_denied": "Zugriff auf OVMS-Themen verweigert",
-      "tls_error": "TLS/SSL-Konfigurationsfehler",
+      "tls_error": "Das Zertifikat des Brokers konnte nicht überprüft werden. Deaktivieren Sie \"SSL/TLS-Zertifikat überprüfen\", wenn es selbstsigniert ist.",
       "unknown": "Unerwarteter Fehler",
       "missing_prefix": "Erforderlicher Platzhalter {prefix} fehlt",
       "missing_vehicle_id": "Erforderlicher Platzhalter {vehicle_id} fehlt",

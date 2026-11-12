@@ -233,7 +233,7 @@ Release script:
 
 - **Client ID**: 20 chars max for MQTT 3.1/3.1.1 compatibility
 - **QoS**: Default 1 (at least once delivery)
-- **Port and protocol**: Found on the broker without credentials (`config_flow/mqtt_connection.async_detect_broker`): an entered port only for its protocol, otherwise `STANDARD_BROKER_PORTS` in order, TLS first. `CONF_VERIFY_SSL` only applies to TLS
+- **Port and protocol**: Found by connecting (`config_flow/mqtt_connection.async_detect_broker`): an entered port with each of `ENTERED_PORT_PROTOCOLS`, otherwise the first open port of `STANDARD_BROKER_PORTS` with its protocol, TLS first. A certificate or login error stops the search. `CONF_VERIFY_SSL` only applies to TLS and is never turned off automatically
 - **LWT**: Published to `{structure_prefix}/status` with "online"/"offline"
 
 ### Home Assistant Signals

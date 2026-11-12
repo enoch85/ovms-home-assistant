@@ -56,7 +56,7 @@
       "no_topics": "No OVMS topics found",
       "few_topics_warning": "Few metric topics found. Your OVMS module may be offline or not publishing. You can continue, but some entities may be missing.",
       "topic_access_denied": "Access denied to OVMS topics",
-      "tls_error": "TLS/SSL configuration error",
+      "tls_error": "The broker's certificate could not be verified. Untick \"Verify SSL/TLS Certificate\" if it is self-signed.",
       "unknown": "Unexpected error",
       "missing_prefix": "Missing required {prefix} placeholder",
       "missing_vehicle_id": "Missing required {vehicle_id} placeholder",

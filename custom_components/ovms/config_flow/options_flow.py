@@ -12,7 +12,6 @@ from homeassistant.helpers.selector import (
 )
 
 from ..const import (
-    CONF_HOST,
     CONF_LOCK_PIN,
     CONF_QOS,
     CONF_TOPIC_PREFIX,
@@ -140,21 +139,23 @@ class OVMSOptionsFlow(OptionsFlow):
 
         if user_input is not None:
             # The port in use keeps its protocol. Another port, or none, is
-            # found on the broker as in the setup.
+            # found by connecting, as in the setup.
             stored = get_merged_config(self.config_entry)
-            port = user_input.get(CONF_PORT)
-            if port == stored.get(CONF_PORT):
-                broker = stored.get(CONF_PROTOCOL), port
-            else:
-                broker = await async_detect_broker(self.hass, stored[CONF_HOST], port)
-            if broker is None:
-                # Shown again as entered, with the protocol in use
-                errors["base"] = ERROR_CANNOT_CONNECT
-                broker = stored.get(CONF_PROTOCOL), port
-            user_input[CONF_PROTOCOL], user_input[CONF_PORT] = broker
+            user_input[CONF_PROTOCOL] = stored.get(CONF_PROTOCOL)
             user_input[CONF_VERIFY_SSL] = user_input.pop(
                 VERIFY_SSL_FIELD, DEFAULT_VERIFY_SSL
-            ) and uses_tls_transport(user_input)
+            )
+            if user_input.get(CONF_PORT) != stored.get(CONF_PORT):
+                broker = {**stored, **user_input, CONF_PORT: user_input.get(CONF_PORT)}
+                if (await async_detect_broker(self.hass, broker))["success"]:
+                    user_input[CONF_PORT] = broker[CONF_PORT]
+                    user_input[CONF_PROTOCOL] = broker[CONF_PROTOCOL]
+                else:
+                    # Shown again as entered, with the protocol in use
+                    errors["base"] = ERROR_CANNOT_CONNECT
+            user_input[CONF_VERIFY_SSL] = user_input[
+                CONF_VERIFY_SSL
+            ] and uses_tls_transport(user_input)
 
             # Process the topic blacklist (string -> deduplicated list), once.
             if CONF_TOPIC_BLACKLIST in user_input and isinstance(

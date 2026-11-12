@@ -1,9 +1,7 @@
 """MQTT connection handling for OVMS configuration."""
 
 import asyncio
-import base64
 import logging
-import os
 import socket
 import ssl
 import time
@@ -32,11 +30,11 @@ from homeassistant.helpers.selector import (
 )
 
 from ..const import (
-    BROKER_PROTOCOLS,
     CONF_QOS,
     CONF_VERIFY_SSL,
     DEFAULT_QOS,
     DEFAULT_VERIFY_SSL,
+    ENTERED_PORT_PROTOCOLS,
     LOGGER_NAME,
     ERROR_CANNOT_CONNECT,
     ERROR_INVALID_AUTH,
@@ -46,13 +44,8 @@ from ..const import (
     ERROR_UNKNOWN,
     MAX_PORT,
     MIN_PORT,
-    MQTT_PROBE_CONNACK,
-    MQTT_PROBE_CONNECT,
     PORT_PROBE_TIMEOUT,
     STANDARD_BROKER_PORTS,
-    WEBSOCKET_KEY_BYTES,
-    WEBSOCKET_PROBE_ACCEPTED,
-    WEBSOCKET_PROBE_REQUEST,
 )
 from ..utils import uses_tls_transport, uses_websocket_transport
 
@@ -91,69 +84,42 @@ def _probe_tcp_port(host: str, port: int, timeout: float) -> bool:
         sock.close()
 
 
-def _detect_protocol(host: str, port: int) -> Optional[str]:
-    """Return the protocol ("mqtts", "wss", "mqtt" or "ws") a broker port speaks.
-
-    Blocking (sockets), so it must run in an executor thread. No credentials are
-    sent: a TLS handshake without certificate check tells TLS from plain, then a
-    WebSocket upgrade must be accepted or an anonymous CONNECT answered. The
-    upgrade goes first because an MQTT listener closes on it at once, while a
-    WebSocket listener leaves a CONNECT unanswered until the timeout.
-
-    Returns:
-        The protocol, or None if nothing on the port speaks MQTT.
-    """
-    context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    context.minimum_version = ssl.TLSVersion.TLSv1_2
-    for tls in (True, False):
-        for websocket in (True, False):
-            try:
-                sock = socket.create_connection((host, port), PORT_PROBE_TIMEOUT)
-            except (OSError, UnicodeError):  # unreachable, or not a valid host name
-                return None
-            try:
-                if tls:
-                    try:
-                        sock = context.wrap_socket(sock, server_hostname=host)
-                    except OSError:
-                        break
-                if websocket:
-                    key = base64.b64encode(os.urandom(WEBSOCKET_KEY_BYTES)).decode()
-                    request = WEBSOCKET_PROBE_REQUEST.format(
-                        host=host, port=port, key=key
-                    )
-                    sock.sendall(request.encode())
-                    expected = WEBSOCKET_PROBE_ACCEPTED
-                else:
-                    sock.sendall(MQTT_PROBE_CONNECT)
-                    expected = MQTT_PROBE_CONNACK
-                with sock.makefile("rb") as reply:
-                    if reply.read(len(expected)) == expected:
-                        return BROKER_PROTOCOLS[tls, websocket]
-            except OSError:
-                pass
-            finally:
-                sock.close()
-    return None
-
-
 async def async_detect_broker(
-    hass: HomeAssistant, host: str, port: Optional[int]
-) -> Optional[tuple[str, int]]:
-    """Return the protocol and port of the MQTT broker on host, or None.
+    hass: HomeAssistant, config: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Find the broker's port and protocol by connecting; return the test result.
 
-    A port that is given is only probed for its protocol. Without one, the
-    STANDARD_BROKER_PORTS are probed in order and the first that speaks MQTT is
-    used, so a broker that offers TLS is reached over it.
+    An entered port is tried with each of ENTERED_PORT_PROTOCOLS. Without one,
+    the first open port of STANDARD_BROKER_PORTS is tried with its protocol.
+    Stops at the first connection or at an error another protocol would not
+    fix, and leaves the port, protocol and certificate check last tried in config.
     """
-    for candidate in (port,) if port else STANDARD_BROKER_PORTS:
-        protocol = await hass.async_add_executor_job(_detect_protocol, host, candidate)
-        if protocol:
-            _LOGGER.debug("MQTT broker found at %s:%s (%s)", host, candidate, protocol)
-            return protocol, candidate
-    return None
+    verify_ssl = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+    if entered := config.get(CONF_PORT):
+        tries = [(entered, protocol) for protocol in ENTERED_PORT_PROTOCOLS]
+    else:
+        tries = []
+        for port, protocol in STANDARD_BROKER_PORTS.items():
+            if await hass.async_add_executor_job(
+                _probe_tcp_port, config[CONF_HOST], port, PORT_PROBE_TIMEOUT
+            ):
+                tries = [(port, protocol)]
+                break
+    result = {
+        "success": False,
+        "error_type": ERROR_CANNOT_CONNECT,
+        "message": f"No MQTT broker answers at {config[CONF_HOST]}",
+    }
+    for port, protocol in tries:
+        config[CONF_PORT], config[CONF_PROTOCOL] = port, protocol
+        config[CONF_VERIFY_SSL] = verify_ssl and uses_tls_transport(config)
+        result = await test_mqtt_connection(hass, config)
+        if result["success"] or result["error_type"] not in (
+            ERROR_CANNOT_CONNECT,
+            ERROR_TIMEOUT,
+        ):
+            break
+    return result
 
 
 def ensure_serializable(obj):
@@ -303,7 +269,7 @@ async def test_mqtt_connection(
             await hass.async_add_executor_job(socket.gethostbyname, config[CONF_HOST])
             dns_success = True
             dns_error = None
-        except socket.gaierror as err:
+        except (socket.gaierror, UnicodeError) as err:  # UnicodeError: invalid name
             dns_success = False
             dns_error = str(err)
         dns_time = asyncio.get_event_loop().time() - dns_start
@@ -449,13 +415,14 @@ async def test_mqtt_connection(
                 error_message = "Connection refused - invalid client identifier"
             elif rc == 3:
                 error_message = "Connection refused - server unavailable"
-            elif rc == 4:
+            # MQTT 3.1.1 return codes 4 and 5, MQTT 5 reason codes 134 and 135
+            elif rc in (4, 134):
                 error_message = "Connection refused - bad username or password"
                 error_type = ERROR_INVALID_AUTH
                 details = (
                     "Authentication failed. Please check your username and password."
                 )
-            elif rc == 5:
+            elif rc in (5, 135):
                 error_message = "Connection refused - not authorized"
                 error_type = ERROR_INVALID_AUTH
                 details = (
@@ -476,6 +443,14 @@ async def test_mqtt_connection(
             "debug_info": debug_info,
         }
 
+    except ssl.SSLCertVerificationError as cert_err:
+        _LOGGER.error("%s - Certificate not trusted: %s", log_prefix, cert_err)
+        return {
+            "success": False,
+            "error_type": ERROR_TLS_ERROR,
+            "message": f"Certificate not trusted: {cert_err}",
+            "debug_info": debug_info,
+        }
     except socket.timeout:
         _LOGGER.error("%s - Connection timeout", log_prefix)
         debug_info["error"] = {
