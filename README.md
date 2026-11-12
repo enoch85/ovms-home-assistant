@@ -170,6 +170,8 @@ The OVMS integration needs the following MQTT permissions:
 
 If you're using a broker with restrictive ACLs (like Mosquitto, EMQX, etc.), ensure your MQTT user has these permissions.
 
+A broker that only lets each user read its own `ovms/<username>/...` topics, such as the OVMS server's own broker, works too. The integration subscribes to the vehicle under any username level (`ovms/+/<vehicle id>/#`), and when the broker refuses that, to `ovms/<username>/<vehicle id>/#` instead.
+
 ### Example Mosquitto ACL Configuration:
 
 ```

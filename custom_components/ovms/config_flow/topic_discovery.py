@@ -35,7 +35,6 @@ from ..const import (
     DEFAULT_VERIFY_SSL,
     DISCOVERY_TOPIC,
     # Import outside toplevel fixed by importing here
-    TOPIC_TEMPLATE as CONST_TOPIC_TEMPLATE,
     COMMAND_TOPIC_TEMPLATE as CONST_COMMAND_TOPIC_TEMPLATE,
     RESPONSE_TOPIC_TEMPLATE as CONST_RESPONSE_TOPIC_TEMPLATE,
     METRIC_REQUEST_TOPIC_TEMPLATE,
@@ -52,7 +51,12 @@ from ..const import (
 )
 from ..metrics import METRIC_DEFINITIONS
 from ..metrics.vehicles import VEHICLE_TYPE_PREFIXES, VEHICLE_TYPE_NAMES
-from ..utils import uses_tls_transport, uses_websocket_transport
+from ..utils import (
+    get_subscription_topics,
+    is_subscription_refused,
+    uses_tls_transport,
+    uses_websocket_transport,
+)
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -771,10 +775,17 @@ async def test_topic_availability(hass: HomeAssistant, config):
         "test_start_time": asyncio.get_event_loop().time(),
     }
 
-    # Format the topic template
-    topic = CONST_TOPIC_TEMPLATE.format(structure_prefix=structure_prefix)
-    _LOGGER.debug("%s - Using subscription topic: %s", log_prefix, topic)
-    debug_info["subscription_topic"] = topic
+    # The filters the integration subscribes to at runtime, each with the one
+    # that replaces it if the broker refuses it. They also cover the response
+    # topic below, so it needs no subscription of its own: overlapping filters
+    # would deliver every message more than once.
+    subscription_topics = get_subscription_topics(
+        structure_prefix,
+        config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX),
+        vehicle_id,
+    )
+    _LOGGER.debug("%s - Using subscription topics: %s", log_prefix, subscription_topics)
+    debug_info["subscription_topics"] = list(subscription_topics)
 
     # Format command and response topics for request-response test
     command_id = uuid.uuid4().hex[:8]
@@ -803,6 +814,15 @@ async def test_topic_availability(hass: HomeAssistant, config):
     topics_found = set()
     connection_status = {"connected": False, "rc": None}
     responses_received = []
+    # Subscriptions waiting for the broker's answer: message ID -> filter and
+    # its replacement. Only paho's thread touches it (on_connect, on_subscribe).
+    pending_subscriptions = {}
+
+    def subscribe(topic: str, replacement: Optional[str]) -> None:
+        """Subscribe to one filter and remember it until the broker answers."""
+        _LOGGER.debug("%s - Subscribing to topic: %s", log_prefix, topic)
+        _, mid = mqttc.subscribe(topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
+        pending_subscriptions[mid] = (topic, replacement)
 
     # Define callbacks
     def on_connect(_, __, flags, rc, _properties=None):
@@ -817,37 +837,21 @@ async def test_topic_availability(hass: HomeAssistant, config):
         )
 
         if rc == 0:
-            # Subscribe to general topics and response topic
-            _LOGGER.debug("%s - Subscribing to general topic: %s", log_prefix, topic)
-            mqttc.subscribe(topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
+            for subscription_topic, replacement in subscription_topics.items():
+                subscribe(subscription_topic, replacement)
 
+    def on_subscribe(_, __, mid, reason_codes, _properties=None) -> None:
+        """Subscribe to the replacement of a filter the broker refused."""
+        topic, replacement = pending_subscriptions.pop(mid, (None, None))
+        if replacement and is_subscription_refused(reason_codes):
             _LOGGER.debug(
-                "%s - Subscribing to response topic: %s", log_prefix, response_topic
+                "%s - The broker refused %s, subscribing to %s instead",
+                log_prefix,
+                topic,
+                replacement,
             )
-            mqttc.subscribe(response_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
-
-            # Also try a direct subscription to known topic patterns
-            prefix = config.get(CONF_TOPIC_PREFIX, DEFAULT_TOPIC_PREFIX)
-            if prefix:
-                # Try with the actual username instead of placeholder
-                mqtt_username = config.get(CONF_MQTT_USERNAME, "")
-                if mqtt_username:
-                    direct_topic = f"{prefix}/{mqtt_username}/{vehicle_id}/#"
-                    _LOGGER.debug(
-                        "%s - Also subscribing to direct topic: %s",
-                        log_prefix,
-                        direct_topic,
-                    )
-                    mqttc.subscribe(direct_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
-
-                # Also try with the pattern matching any username
-                alt_topic = f"{prefix}/+/{vehicle_id}/#"
-                _LOGGER.debug(
-                    "%s - Also subscribing to alternative topic: %s",
-                    log_prefix,
-                    alt_topic,
-                )
-                mqttc.subscribe(alt_topic, qos=config.get(CONF_QOS, DEFAULT_QOS))
+            debug_info["refused_subscription"] = topic
+            subscribe(replacement, None)
 
     def on_message(_, __, msg):
         """Handle incoming messages."""
@@ -906,6 +910,7 @@ async def test_topic_availability(hass: HomeAssistant, config):
         mqttc.on_connect = on_connect_v311
 
     mqttc.on_message = on_message
+    mqttc.on_subscribe = on_subscribe
     mqttc.on_disconnect = on_disconnect
     mqttc.on_log = on_log
 

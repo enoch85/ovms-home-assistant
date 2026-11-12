@@ -3,8 +3,9 @@
 import asyncio
 import logging
 import random
+import threading
 import time
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Dict, Optional, Callable, Set, Tuple
 
 import paho.mqtt.client as mqtt
 
@@ -32,6 +33,8 @@ from ..const import (
 )
 from ..utils import (
     generate_ovms_client_id,
+    get_subscription_topics,
+    is_subscription_refused,
     uses_tls_transport,
     uses_websocket_transport,
 )
@@ -98,6 +101,14 @@ class MQTTConnectionManager:
         # Status tracking
         self._status_topic = None
         self._connected_payload = "online"
+
+        # Subscriptions waiting for the broker's answer (message ID -> filter,
+        # and the filter to subscribe to instead if the broker refuses it), and
+        # the filters a broker refused, which are not asked for again. paho
+        # handles the answer in its own thread, hence the lock.
+        self._subscription_lock = threading.Lock()
+        self._pending_subscriptions: Dict[int, Tuple[str, Optional[str]]] = {}
+        self._refused_topics: Set[str] = set()
 
     def _format_structure_prefix(self) -> str:
         """Format the topic structure prefix based on configuration."""
@@ -288,6 +299,9 @@ class MQTTConnectionManager:
         def on_disconnect(client, userdata, rc, properties=None):
             """Handle disconnection."""
             self.connected = False
+            # Their answers will not come; the reconnection subscribes again.
+            with self._subscription_lock:
+                self._pending_subscriptions.clear()
 
             # Notify the client
             if self.connection_callback:
@@ -347,10 +361,20 @@ class MQTTConnectionManager:
             except Exception as ex:
                 _LOGGER.exception("Error in message handler: %s", ex)
 
+        def on_subscribe(client, userdata, mid, reason_codes, properties=None) -> None:
+            """Handle the broker's answer to a subscription (SUBACK)."""
+            # paho re-raises a callback's exception, which would end its
+            # network loop, so nothing may escape from here.
+            try:
+                self._on_subscribe_result(mid, reason_codes)
+            except Exception as ex:  # pylint: disable=broad-except
+                _LOGGER.exception("Error handling a subscription answer: %s", ex)
+
         # Set the callbacks
         self.client.on_connect = on_connect
         self.client.on_disconnect = on_disconnect
         self.client.on_message = on_message
+        self.client.on_subscribe = on_subscribe
 
     def _on_connect_callback(self, client, userdata, flags, rc):
         """Common connection callback for different MQTT versions."""
@@ -529,30 +553,83 @@ class MQTTConnectionManager:
             return
 
         try:
-            # Format the topic
-            qos = self.config.get(CONF_QOS, DEFAULT_QOS)
-
-            # Subscribe to all topics under the structure prefix
-            topic = TOPIC_TEMPLATE.format(structure_prefix=self.structure_prefix)
-
-            _LOGGER.info("Subscribing to OVMS topic: %s", topic)
-            await self.hass.async_add_executor_job(self.client.subscribe, topic, qos)
-
-            # Add a subscription with vehicle ID but without username
-            # Handle the case where topics might use different username patterns
-            vehicle_id = self.config.get(CONF_VEHICLE_ID, "")
-            prefix = self.config.get(CONF_TOPIC_PREFIX, "")
-            if vehicle_id and prefix:
-                alternative_topic = f"{prefix}/+/{vehicle_id}/#"
-                _LOGGER.info(
-                    "Also subscribing to alternative topic pattern: %s",
-                    alternative_topic,
-                )
+            # Everything under the structure prefix plus the same vehicle under
+            # any username level, without two overlapping filters: brokers such
+            # as Mosquitto 2 deliver a message once per matching subscription.
+            # A filter the broker refused before is replaced right away.
+            for topic, replacement in get_subscription_topics(
+                self.structure_prefix,
+                self.config.get(CONF_TOPIC_PREFIX, ""),
+                self.config.get(CONF_VEHICLE_ID, ""),
+            ).items():
+                if replacement and topic in self._refused_topics:
+                    topic, replacement = replacement, None
                 await self.hass.async_add_executor_job(
-                    self.client.subscribe, alternative_topic, qos
+                    self._subscribe, topic, replacement
                 )
         except Exception as ex:
             _LOGGER.exception("Error subscribing to topics: %s", ex)
+
+    def _subscribe(self, topic: str, replacement: Optional[str]) -> None:
+        """Subscribe to one filter and remember it until the broker answers.
+
+        Args:
+            topic: The filter to subscribe to.
+            replacement: The filter to subscribe to instead if the broker
+                refuses this one, or None.
+
+        Blocking (paho), so it runs in the executor, or in paho's own thread
+        for a replacement. The lock also covers subscribe() itself: a local
+        broker can answer before it returns, and the answer must find the
+        message ID. subscribe() never waits for paho's callback locks while
+        paho's network thread runs (loop_start), so this cannot deadlock.
+        """
+        _LOGGER.info("Subscribing to OVMS topic: %s", topic)
+        with self._subscription_lock:
+            result, mid = self.client.subscribe(
+                topic, self.config.get(CONF_QOS, DEFAULT_QOS)
+            )
+            if result == mqtt.MQTT_ERR_SUCCESS:
+                self._pending_subscriptions[mid] = (topic, replacement)
+
+    def _on_subscribe_result(self, mid: int, reason_codes: Any) -> None:
+        """Subscribe to the replacement of a filter the broker refused.
+
+        Runs in paho's thread. A broker that authorizes subscriptions per user
+        (Mosquitto's dynamic security plugin, the OVMS server's own broker)
+        refuses the filter for the vehicle under any username level; the
+        structure prefix it replaced is then subscribed to instead, as before
+        the two were merged, so the vehicle's data still arrives.
+        """
+        with self._subscription_lock:
+            topic, replacement = self._pending_subscriptions.pop(mid, (None, None))
+        if topic is None or not is_subscription_refused(reason_codes):
+            return
+
+        reasons = ", ".join(self._get_reason_message(code) for code in reason_codes)
+        first_refusal = topic not in self._refused_topics
+        self._refused_topics.add(topic)
+        if replacement:
+            log = _LOGGER.info if first_refusal else _LOGGER.debug
+            log(
+                "The MQTT broker refused a subscription to %s (%s), subscribing "
+                "to %s instead",
+                topic,
+                reasons,
+                replacement,
+            )
+            self._subscribe(replacement, None)
+        elif topic == TOPIC_TEMPLATE.format(structure_prefix=self.structure_prefix):
+            _LOGGER.warning(
+                "The MQTT broker refused a subscription to %s (%s), so no data "
+                "arrives from the vehicle. Check that this MQTT user may read it",
+                topic,
+                reasons,
+            )
+        else:
+            _LOGGER.debug(
+                "The MQTT broker refused a subscription to %s (%s)", topic, reasons
+            )
 
     async def async_publish(
         self, topic: str, payload: str, qos: Optional[int] = None, retain: bool = False
