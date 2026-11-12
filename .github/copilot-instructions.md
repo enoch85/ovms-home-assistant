@@ -233,7 +233,7 @@ Release script:
 
 - **Client ID**: 20 chars max for MQTT 3.1/3.1.1 compatibility
 - **QoS**: Default 1 (at least once delivery)
-- **TLS**: Supported via `CONF_VERIFY_SSL`, uses port 8883
+- **Port and protocol**: Found on the broker without credentials (`config_flow/mqtt_connection.async_detect_broker`): an entered port only for its protocol, otherwise `STANDARD_BROKER_PORTS` in order, TLS first. `CONF_VERIFY_SSL` only applies to TLS
 - **LWT**: Published to `{structure_prefix}/status` with "online"/"offline"
 
 ### Home Assistant Signals

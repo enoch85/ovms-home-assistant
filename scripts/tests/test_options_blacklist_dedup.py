@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """Regression test for topic-blacklist de-duplication in the options flow.
 
-The options form always includes a "Port" selector, so ``async_step_init`` took
-the ``if "Port" in user_input:`` branch on every submit. That branch converted
-the blacklist string into a list *without* de-duplicating, after which the
-dedicated de-dup block below it was skipped (its ``isinstance(..., str)`` guard
-now saw a list), so duplicate patterns were stored verbatim.
+A conversion of the blacklist string into a list *without* de-duplicating once
+ran before the dedicated de-dup block, whose ``isinstance(..., str)`` guard then
+saw a list, so duplicate patterns were stored verbatim.
 
-This drives the REAL ``OVMSOptionsFlow.async_step_init`` with a Port selection
-and a blacklist containing duplicates, and asserts the saved blacklist is
-de-duplicated.
+This drives the REAL ``OVMSOptionsFlow.async_step_init`` with a blacklist
+containing duplicates, and asserts the saved blacklist is de-duplicated.
 
 Run standalone:  python3 scripts/tests/test_options_blacklist_dedup.py
 Exits non-zero on failure.
@@ -28,11 +25,17 @@ from custom_components.ovms.const import CONF_TOPIC_BLACKLIST
 
 
 class _FakeEntry:
-    """Minimal config-entry stand-in (only entry_id is read in __init__)."""
+    """Minimal config-entry stand-in, its port unchanged by the submit."""
 
     entry_id = "test_entry"
     data = {}
     options = {}
+
+
+class _Flow(OVMSOptionsFlow):
+    """The options flow with its entry at hand, as Home Assistant provides it."""
+
+    config_entry = _FakeEntry()
 
 
 def _check(name, cond, results):
@@ -45,14 +48,12 @@ async def main():
     print("-" * 55)
     results = []
 
-    flow = OVMSOptionsFlow(_FakeEntry())
+    flow = _Flow(_FakeEntry())
     captured = {}
     # Capture what async_step_init would persist instead of creating a real entry.
     flow.async_create_entry = lambda **kw: captured.update(kw) or kw
 
-    await flow.async_step_init(
-        {"Port": "1883", CONF_TOPIC_BLACKLIST: "log, log, xyz ,xyz,, log"}
-    )
+    await flow.async_step_init({CONF_TOPIC_BLACKLIST: "log, log, xyz ,xyz,, log"})
     stored = captured.get("data", {}).get(CONF_TOPIC_BLACKLIST)
 
     _check("blacklist is stored as a list", isinstance(stored, list), results)
