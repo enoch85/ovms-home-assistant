@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 
+from custom_components.ovms.const import STATUS_OFFLINE_PAYLOAD, STATUS_ONLINE_PAYLOAD
 from custom_components.ovms.mqtt.topic_parser import TopicParser
 from custom_components.ovms.sensor.binary_sensor import OVMSBinarySensor
 
@@ -113,6 +114,17 @@ def main():
             sensor.device_class == device_class and sensor.is_on is locked_is_on,
             results,
         )
+
+    # The integration's own status topic reads on while it is connected.
+    for payload, is_on in (
+        (STATUS_ONLINE_PAYLOAD, True),
+        (STATUS_OFFLINE_PAYLOAD, False),
+    ):
+        parsed = tp.parse_topic("ovms/u/veh/status", payload)
+        sensor = OVMSBinarySensor(
+            "uid", parsed["name"], "ovms/u/veh/status", payload, {}, {}
+        )
+        _check(f"status {payload!r} reads {is_on}", sensor.is_on is is_on, results)
 
     print("-" * 55)
     if all(results):

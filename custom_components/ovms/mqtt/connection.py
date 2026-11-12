@@ -29,6 +29,8 @@ from ..const import (
     DEFAULT_TOPIC_STRUCTURE,
     DEFAULT_VERIFY_SSL,
     LOGGER_NAME,
+    STATUS_OFFLINE_PAYLOAD,
+    STATUS_ONLINE_PAYLOAD,
     TOPIC_TEMPLATE,
 )
 from ..utils import (
@@ -100,7 +102,7 @@ class MQTTConnectionManager:
 
         # Status tracking
         self._status_topic = None
-        self._connected_payload = "online"
+        self._connected_payload = STATUS_ONLINE_PAYLOAD
 
         # Subscriptions waiting for the broker's answer (message ID -> filter,
         # and the filter to subscribe to instead if the broker refuses it), and
@@ -215,7 +217,7 @@ class MQTTConnectionManager:
 
         # Add Last Will and Testament message
         self._status_topic = f"{self.structure_prefix}/status"
-        will_payload = "offline"
+        will_payload = STATUS_OFFLINE_PAYLOAD
         will_qos = self.config.get(CONF_QOS, DEFAULT_QOS)
         will_retain = True
 
@@ -668,7 +670,7 @@ class MQTTConnectionManager:
                     await self.hass.async_add_executor_job(
                         self.client.publish,
                         self._status_topic,
-                        "offline",
+                        STATUS_OFFLINE_PAYLOAD,
                         self.config.get(CONF_QOS, DEFAULT_QOS),
                         True,  # Retain
                     )

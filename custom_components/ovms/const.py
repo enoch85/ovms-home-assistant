@@ -278,6 +278,10 @@ DISCOVERY_TOPIC = "{prefix}/#"
 # Command topic template for request-response pattern
 COMMAND_TOPIC_TEMPLATE = "{structure_prefix}/client/rr/command/{command_id}"
 RESPONSE_TOPIC_TEMPLATE = "{structure_prefix}/client/rr/response/{command_id}"
+# Payloads of the integration's own "{structure_prefix}/status" topic: retained
+# on connecting and on shutting down, and its will.
+STATUS_ONLINE_PAYLOAD = "online"
+STATUS_OFFLINE_PAYLOAD = "offline"
 
 # On-demand metric request topics (OVMS edge firmware)
 # These allow requesting specific metrics or all metrics with wildcard patterns
