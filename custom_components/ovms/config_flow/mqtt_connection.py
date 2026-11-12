@@ -95,6 +95,7 @@ def _detect_protocol(host: str, port: int) -> Optional[str]:
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     for tls in (True, False):
         for websocket in (True, False):
             try:
