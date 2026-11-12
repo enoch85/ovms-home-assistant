@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 logging.disable(logging.CRITICAL)
 
 from custom_components.ovms.attribute_manager import AttributeManager
-from custom_components.ovms.const import METRIC_UNITS_COMMAND
+from custom_components.ovms.const import COMMAND_TIMEOUT_ERROR, METRIC_UNITS_COMMAND
 from custom_components.ovms.mqtt import OVMSMQTTClient
 from custom_components.ovms.mqtt.entity_registry import EntityRegistry
 from custom_components.ovms.mqtt.topic_parser import TopicParser
@@ -247,7 +247,7 @@ async def main():
         async def async_save(self, data):
             self.saved.append(dict(data))
 
-    offline = {"success": False, "error": "Timeout waiting for response"}
+    offline = {"success": False, "error": COMMAND_TIMEOUT_ERROR}
     client, hass, commands = await _client(offline)
     client._metric_units_store = _FakeStore()
     client.topic_parser.reported_units.update({"xks.b.pack.power": "kW"})  # loaded
@@ -295,10 +295,7 @@ async def main():
 
     # ---- 2) every failure releases the topic with the old behaviour ------
     failures = {
-        "module offline (timeout)": {
-            "success": False,
-            "error": "Timeout waiting for response",
-        },
+        "module offline (timeout)": {"success": False, "error": COMMAND_TIMEOUT_ERROR},
         "rate limited": {"success": False, "error": "Rate limit exceeded"},
         "firmware without -n (usage text)": {
             "success": True,

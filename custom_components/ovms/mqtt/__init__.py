@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Dict, Any, Optional, Set
 
 from homeassistant.const import ATTR_RESTORED, STATE_UNAVAILABLE
@@ -22,12 +22,18 @@ from ..const import (
     METRIC_REFRESH_COMMAND,
     METRIC_REQUEST_TOPIC_TEMPLATE,
     METRIC_UNITS_COMMAND,
+    MODULE_CONNECTED_TOPIC_SUFFIX,
+    MODULE_METRIC_TOPIC_MARKER,
     MODULE_TIMEZONE_COMMAND,
+    MODULE_WILL_PAYLOAD,
+    COMMAND_TIMEOUT_ERROR,
+    COMMAND_TOPIC_TEMPLATE,
     CONF_CONFIG_ENTRY_ID,
     CONF_CLIENT_ID,
     CONF_QOS,
     DEFAULT_COMMAND_TIMEOUT,
     DEFAULT_QOS,
+    DEFERRED_COMMAND_DELAY,
     RECONNECT_METRIC_REQUEST_DELAY,
     GPS_ACCURACY_MIN_METERS,
     GPS_ACCURACY_MAX_METERS,
@@ -89,6 +95,21 @@ class OVMSMQTTClient:
         # moment we subscribe - while this client is still being set up and
         # cannot send commands yet. The module is asked once setup is complete.
         self._setup_complete = asyncio.Event()
+        # Whether the module itself can be reached: None while only its retained
+        # topics have been seen, which look the same whether it is there or not;
+        # True once it published something live; False once it is known to be
+        # away. See _track_module_reachability and _async_send_startup_command.
+        self._module_reachable: Optional[bool] = None
+        # The commands the integration sends by itself go out one at a time,
+        # and those the module could not take are re-run when it is seen again
+        # (command -> function that sends it again).
+        self._startup_command_lock = asyncio.Lock()
+        self._deferred_commands: Dict[str, Callable[[], None]] = {}
+        self._unanswered_warning_logged = False
+        # Whether holding back the startup commands has been logged since the
+        # module was last seen, and the topic prefix it was seen under.
+        self._module_away_logged = False
+        self._module_live_prefix: Optional[str] = None
 
         # Initialize services
         self.naming_service = EntityNamingService(config)
@@ -197,6 +218,7 @@ class OVMSMQTTClient:
 
         Runs as a background task on the config entry: the command takes its
         full timeout when the module is offline, and must not hold up startup.
+        A module that cannot be reached gets it when it is seen again.
         """
         entry = self.hass.config_entries.async_get_entry(self.config_entry_id)
         if entry is None:
@@ -224,10 +246,13 @@ class OVMSMQTTClient:
             )
             return
 
-        result = await self.async_send_command(
-            command=MODULE_TIMEZONE_COMMAND.format(timezone=posix_time_zone),
-            timeout=DEFAULT_COMMAND_TIMEOUT,
+        result = await self._async_send_startup_command(
+            MODULE_TIMEZONE_COMMAND.format(timezone=posix_time_zone),
+            retry=self._sync_module_time_zone,
         )
+        if result is None or result.get("error") == COMMAND_TIMEOUT_ERROR:
+            # Not sent, or not answered: _async_send_startup_command logged it.
+            return
         if result.get("success"):
             _LOGGER.info("Module time zone set to %s (%s)", posix_time_zone, time_zone)
             return
@@ -238,7 +263,7 @@ class OVMSMQTTClient:
             result.get("error", "no response"),
         )
 
-    async def _async_startup_metric_refresh(self, _now: datetime) -> None:
+    async def _async_startup_metric_refresh(self, _now: Optional[datetime]) -> None:
         """Request a full metric publish when entities could be missing.
 
         Entities are only created once a message arrives on their topic. OVMS
@@ -262,8 +287,10 @@ class OVMSMQTTClient:
           against a fresh broker left half the entities uncreated and nothing
           ever asked for the rest (issue #275).
 
-        Runs once per setup. If the module is offline the command simply
-        fails: its own next reconnection triggers a full publish anyway.
+        Runs once per setup. A module that cannot be reached is asked once it
+        is seen again, and only if this is still needed then: a module that
+        reconnects publishes everything itself, so nothing is missing any more,
+        but one that was only unreachable for a while does not.
         """
         self._startup_refresh_cancel = None
         if self._shutting_down:
@@ -279,22 +306,31 @@ class OVMSMQTTClient:
             _LOGGER.debug("Startup metric refresh not needed: no entities missing")
             return
 
-        if self._entry_had_entities:
-            _LOGGER.info(
-                "%d previously discovered entities are still unavailable after "
-                "startup, requesting a full metric publish via '%s'",
-                missing,
-                METRIC_REFRESH_COMMAND,
-            )
-        else:
-            _LOGGER.info(
-                "First setup of this vehicle, requesting a full metric publish "
-                "via '%s' so every metric the module holds gets an entity",
-                METRIC_REFRESH_COMMAND,
-            )
-        result = await self.async_send_command(
-            command=METRIC_REFRESH_COMMAND, timeout=DEFAULT_COMMAND_TIMEOUT
+        def announce() -> None:
+            """Say why the full publish is asked for, once it really is."""
+            if self._entry_had_entities:
+                _LOGGER.info(
+                    "%d previously discovered entities are still unavailable "
+                    "after startup, requesting a full metric publish via '%s'",
+                    missing,
+                    METRIC_REFRESH_COMMAND,
+                )
+            else:
+                _LOGGER.info(
+                    "First setup of this vehicle, requesting a full metric "
+                    "publish via '%s' so every metric the module holds gets an "
+                    "entity",
+                    METRIC_REFRESH_COMMAND,
+                )
+
+        result = await self._async_send_startup_command(
+            METRIC_REFRESH_COMMAND,
+            retry=self._retry_startup_metric_refresh,
+            on_send=announce,
         )
+        if result is None or result.get("error") == COMMAND_TIMEOUT_ERROR:
+            # Not sent, or not answered: _async_send_startup_command logged it.
+            return
         if not result.get("success"):
             _LOGGER.warning(
                 "Startup metric refresh command failed (%s); the entities "
@@ -302,6 +338,182 @@ class OVMSMQTTClient:
                 "The ovms.refresh_metrics service can be used to retry",
                 result.get("error", "no response"),
             )
+
+    def _retry_startup_metric_refresh(self) -> None:
+        """Decide afresh about the refresh the module could not take.
+
+        Called once the module is seen again. A module that reconnected has
+        published everything itself by then, so nothing is missing any more
+        and nothing is sent; one that was only unreachable for a while has not,
+        and is asked now. A first setup is always asked.
+        """
+        entry = self.hass.config_entries.async_get_entry(self.config_entry_id)
+        if entry is None:
+            # The entry is gone, so this client is being torn down.
+            return
+        entry.async_create_background_task(
+            self.hass,
+            self._async_startup_metric_refresh(None),
+            name=f"ovms_startup_metric_refresh_{self.config_entry_id}",
+        )
+
+    async def _async_send_startup_command(
+        self,
+        command: str,
+        retry: Optional[Callable[[], None]] = None,
+        on_send: Optional[Callable[[], None]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Send a command the integration sends by itself, not one a user asked.
+
+        These go out one at a time. While the module is known to be away - its
+        will is on the broker, or it left one of these unanswered without having
+        published anything live - the command is not sent: it could only time
+        out, and the broker would keep it for the module's persistent session
+        (the module connects with clean session off and subscribes at QoS 1)
+        and have it run whenever the module returns. ``retry`` is called once
+        the module is seen again.
+
+        A timeout is reported here, once, in place of the generic warning: at
+        info level when nothing from the module has been seen live (asleep,
+        offline, or reconnecting after a broker restart, while its retained
+        "V3 Server Connected: on" still shows), as a warning when it publishes
+        and still does not answer. Holding the commands back because of the
+        module's will is logged once at info level as well.
+
+        Args:
+            command: The complete command line.
+            retry: Sends the command again; called when the module is seen
+                again if it could not take it now.
+            on_send: Called right before the command is really sent, so a
+                caller can log what it asks for without claiming so for a
+                command that is held back.
+
+        Returns:
+            The command result, or None when it was not sent.
+        """
+        async with self._startup_command_lock:
+            reachable = self._module_reachable
+            if reachable is False:
+                if not self._module_away_logged:
+                    self._module_away_logged = True
+                    _LOGGER.info(
+                        "The OVMS module is offline (its MQTT will is on the "
+                        "broker). The integration's own startup commands are "
+                        "not sent until it publishes again"
+                    )
+                _LOGGER.debug(
+                    "Not sending '%s' now: the OVMS module cannot be reached",
+                    command,
+                )
+                if retry is not None:
+                    self._deferred_commands[command] = retry
+                return None
+
+            if on_send is not None:
+                on_send()
+            result = await self.async_send_command(
+                command=command, timeout=DEFAULT_COMMAND_TIMEOUT, quiet=True
+            )
+            if result.get("error") != COMMAND_TIMEOUT_ERROR:
+                return result
+
+            if reachable and self._module_reachable:
+                if not self._unanswered_warning_logged:
+                    self._unanswered_warning_logged = True
+                    prefix = self.command_handler.structure_prefix
+                    _LOGGER.warning(
+                        "The OVMS module publishes data under '%s' but did not "
+                        "answer '%s' within %d seconds. Either its answers take "
+                        "that long, or the command does not reach it: commands "
+                        "go to '%s', and the module only takes them under its "
+                        "own topic prefix (Server V3 user and vehicle ID), so "
+                        "check that the two match and that the broker lets it "
+                        "read '%s'",
+                        self._module_live_prefix or prefix,
+                        command,
+                        DEFAULT_COMMAND_TIMEOUT,
+                        prefix,
+                        COMMAND_TOPIC_TEMPLATE.format(
+                            structure_prefix=prefix, command_id="+"
+                        ),
+                    )
+                return result
+
+            if retry is not None:
+                self._deferred_commands[command] = retry
+            if self._module_reachable:
+                # It came back while this command waited for its answer.
+                self._schedule_deferred_commands()
+                return result
+            self._module_reachable = False
+            self._module_away_logged = True
+            _LOGGER.info(
+                "The OVMS module did not answer '%s' within %d seconds and is "
+                "not publishing anything live, so it is probably asleep, "
+                "offline or reconnecting (its retained data looks the same "
+                "either way). The integration's own startup commands are not "
+                "sent until it publishes again",
+                command,
+                DEFAULT_COMMAND_TIMEOUT,
+            )
+            return result
+
+    def _track_module_reachability(
+        self, topic: str, payload: str, retained: bool
+    ) -> None:
+        """Follow whether the module itself can be reached, from what it sends.
+
+        OVMS publishes its metrics retained, so the broker hands over the
+        module's last state - "V3 Server Connected: on" included - whether the
+        module is still there or not. A broker forwards a message with the
+        retain flag set only when it sends it because of a new subscription
+        (MQTT 3.1.1 section 3.3.1.3, MQTT 5 by default), so a metric without it
+        is live and shows the module is there. Its will shows it is gone - a
+        retained copy only while nothing live has been seen, as it is stale
+        when the module does not publish s.v3.connected (metrics.exclude).
+        """
+        if MODULE_METRIC_TOPIC_MARKER not in topic:
+            return
+        if (
+            topic.endswith(MODULE_CONNECTED_TOPIC_SUFFIX)
+            and payload == MODULE_WILL_PAYLOAD
+        ):
+            if not retained or not self._module_reachable:
+                self._module_reachable = False
+            return
+        if retained or self._module_reachable:
+            return
+        self._module_reachable = True
+        self._module_away_logged = False
+        self._module_live_prefix = topic.split(MODULE_METRIC_TOPIC_MARKER, 1)[0]
+        self._schedule_deferred_commands()
+
+    def _schedule_deferred_commands(self) -> None:
+        """Re-run the commands the module could not take, now it is back."""
+        if not self._deferred_commands:
+            return
+        entry = self.hass.config_entries.async_get_entry(self.config_entry_id)
+        if entry is None:
+            # The entry is gone, so this client is being torn down.
+            return
+        entry.async_create_background_task(
+            self.hass,
+            self._async_run_deferred_commands(),
+            name=f"ovms_deferred_commands_{self.config_entry_id}",
+        )
+
+    async def _async_run_deferred_commands(self) -> None:
+        """Send the deferred commands once the module's first burst is out."""
+        await asyncio.sleep(DEFERRED_COMMAND_DELAY)
+        if self._shutting_down or not self._module_reachable:
+            return
+        deferred, self._deferred_commands = self._deferred_commands, {}
+        _LOGGER.debug(
+            "The OVMS module publishes again, sending what it missed: %s",
+            ", ".join(deferred),
+        )
+        for retry in deferred.values():
+            retry()
 
     def _registry_entities(self) -> Iterator[er.RegistryEntry]:
         """Yield this entry's registered entities that are fed by an MQTT topic.
@@ -343,8 +555,14 @@ class OVMSMQTTClient:
                 missing += 1
         return missing
 
-    async def _on_message_received(self, topic: str, payload: str) -> None:
-        """Handle message received from MQTT broker."""
+    async def _on_message_received(
+        self, topic: str, payload: str, retained: bool = False
+    ) -> None:
+        """Handle message received from MQTT broker.
+
+        ``retained`` is True for a message the broker sent from its store
+        because we subscribed, False for one forwarded live.
+        """
         self.message_count += 1
 
         # Check if this is a command response and route it to the command handler
@@ -368,6 +586,8 @@ class OVMSMQTTClient:
         # See issue #216.
         if self.topic_parser.is_per_client_topic(topic):
             return
+
+        self._track_module_reachability(topic, payload, retained)
 
         # Store in topic cache
         self.topic_cache[topic] = {
@@ -500,10 +720,15 @@ class OVMSMQTTClient:
         """
         try:
             await self._setup_complete.wait()
-            # async_send_command never raises: every failure comes back as
-            # success=False, so the waiting topics below are always released.
-            result = await self.async_send_command(
-                command=METRIC_UNITS_COMMAND, timeout=DEFAULT_COMMAND_TIMEOUT
+            # The command never raises: every failure comes back as
+            # success=False, or as None when the module cannot be reached and
+            # is asked again once it is back, so the waiting topics below are
+            # always released.
+            result = (
+                await self._async_send_startup_command(
+                    METRIC_UNITS_COMMAND, retry=self._request_metric_units
+                )
+                or {}
             )
             response = result.get("response")
             units: Dict[str, Optional[str]] = {}
@@ -514,7 +739,8 @@ class OVMSMQTTClient:
             known.update(units)
             if changed and self._metric_units_store is not None:
                 await self._metric_units_store.async_save(dict(known))
-            _LOGGER.info("Module described %d of its metrics", len(units))
+            if result.get("success"):
+                _LOGGER.info("Module described %d of its metrics", len(units))
             self._log_unit_mismatches(units)
         finally:
             self._metric_units_query_running = False

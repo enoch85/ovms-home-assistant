@@ -15,6 +15,9 @@ everything (``METRIC_REFRESH_COMMAND``) covers two cases:
     recognised on its own.
 
 And it must stay quiet when an entry that already had entities has them all.
+While the module is known to be away nothing is sent - it would only time
+out - but the refresh is kept, to be decided again once the module is seen
+again: its reconnection may have published everything by then.
 
 Run standalone:  python3 scripts/tests/test_startup_metric_refresh.py
 Exits non-zero on failure.
@@ -40,6 +43,12 @@ class _Client(OVMSMQTTClient):
         self._startup_refresh_cancel = None
         self._entry_had_entities = had_entities
         self._missing = missing
+        self._module_reachable = None
+        self._startup_command_lock = asyncio.Lock()
+        self._deferred_commands = {}
+        self._unanswered_warning_logged = False
+        self._module_away_logged = False
+        self._module_live_prefix = None
         self.commands = []
 
     def _count_missing_registry_entities(self):
@@ -82,6 +91,27 @@ async def main():
         setattr(client, attribute, attribute == "_shutting_down")
         await client._async_startup_metric_refresh(None)
         _check(name, client.commands, [], results)
+
+    client = _Client(True, 3)
+    client._module_reachable = False
+    await client._async_startup_metric_refresh(None)
+    _check(
+        "nothing is sent while the module is known to be away; the refresh is "
+        "kept to be decided again when it is seen again",
+        (client.commands, list(client._deferred_commands)),
+        ([], [METRIC_REFRESH_COMMAND]),
+        results,
+    )
+
+    client = _Client(True, 0)
+    client._module_reachable = False
+    await client._async_startup_metric_refresh(None)
+    _check(
+        "with nothing missing an away module is not even kept waiting for it",
+        (client.commands, client._deferred_commands),
+        ([], {}),
+        results,
+    )
 
     print("-" * 55)
     if all(results):

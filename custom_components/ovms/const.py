@@ -317,6 +317,23 @@ METRIC_REFRESH_COMMAND = "server v3 update all"
 # with margin - so the command is only sent when that request went unanswered.
 STARTUP_METRIC_REFRESH_DELAY = ACTIVE_DISCOVERY_TIMEOUT * 2  # 20 seconds
 
+# Whether the module itself can be reached, as opposed to the broker. OVMS
+# publishes its metrics retained under "<prefix>/metric/" (ovms_server_v3.cpp,
+# TransmitMetric), so after a restart the broker hands over the module's last
+# state whether the module is still there or not; only a metric the broker
+# forwards live shows that it is. Its MQTT will - "no", retained, on
+# s.v3.connected (OvmsServerV3::Connect and its MG_EV_CONNECT handler) - shows
+# that it is gone.
+MODULE_METRIC_TOPIC_MARKER = "/metric/"
+MODULE_CONNECTED_TOPIC_SUFFIX = "/metric/s/v3/connected"
+MODULE_WILL_PAYLOAD = "no"
+# A command the integration sends by itself (time zone, metric units) that the
+# module could not take while it was away is sent again this long after the
+# module is seen again. A module that has just connected first publishes a
+# burst of metrics (OvmsServerV3::Ticker1, up to queue.sendall = 100 per call
+# on firmware 3.3.006+), and an answer queued behind that could time out.
+DEFERRED_COMMAND_DELAY = ACTIVE_DISCOVERY_TIMEOUT  # 10 seconds
+
 # Firmware-reported metric units
 # MQTT carries bare values only - no unit, type or label - so the unit of a
 # metric without a definition had to be guessed from its topic name, and the
@@ -510,6 +527,8 @@ ERROR_UNKNOWN = "unknown"
 DEFAULT_COMMAND_RATE_LIMIT = 5  # commands per minute
 DEFAULT_COMMAND_RATE_PERIOD = 60.0  # seconds
 DEFAULT_COMMAND_TIMEOUT = 10  # seconds to wait for command response
+# The error CommandHandler reports when no response arrived within the timeout.
+COMMAND_TIMEOUT_ERROR = "Timeout waiting for response"
 PORT_PROBE_TIMEOUT = 2  # seconds for the config-flow TCP port reachability probe
 COMMAND_CLEANUP_INTERVAL = 60  # seconds between pending-command sweeps
 COMMAND_PENDING_EXPIRY = 300  # seconds before a pending command is expired
