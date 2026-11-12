@@ -56,7 +56,7 @@
       "no_topics": "Inga OVMS-ämnen hittades",
       "few_topics_warning": "Få metrikämnen hittades. Din OVMS-modul kan vara offline eller inte publicerar. Du kan fortsätta, men vissa entiteter kan saknas.",
       "topic_access_denied": "Åtkomst nekad till OVMS-ämnen",
-      "tls_error": "TLS/SSL-konfigurationsfel",
+      "tls_error": "Brokerns certifikat kunde inte verifieras. Avmarkera \"Verifiera SSL/TLS-certifikat\" om det är självsignerat.",
       "unknown": "Oväntat fel",
       "missing_prefix": "Saknar obligatorisk {prefix} platshållare",
       "missing_vehicle_id": "Saknar obligatorisk {vehicle_id} platshållare",

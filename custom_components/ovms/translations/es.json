@@ -56,7 +56,7 @@
       "no_topics": "No se encontraron temas OVMS",
       "few_topics_warning": "Se encontraron pocos temas de métricas. Su módulo OVMS puede estar desconectado o no está publicando. Puede continuar, pero algunas entidades pueden faltar.",
       "topic_access_denied": "Acceso denegado a los temas OVMS",
-      "tls_error": "Error de configuración TLS/SSL",
+      "tls_error": "No se pudo verificar el certificado del broker. Desmarque \"Verificar certificado SSL/TLS\" si es autofirmado.",
       "unknown": "Error inesperado",
       "missing_prefix": "Falta el marcador requerido {prefix}",
       "missing_vehicle_id": "Falta el marcador requerido {vehicle_id}",

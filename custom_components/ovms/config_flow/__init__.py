@@ -15,7 +15,6 @@ from homeassistant.const import (
     CONF_PASSWORD,
     CONF_PORT,
     CONF_USERNAME,
-    CONF_PROTOCOL,
 )
 from homeassistant.core import callback
 
@@ -36,24 +35,20 @@ from ..const import (
     CONF_ORIGINAL_VEHICLE_ID,
     CONF_CLIENT_ID,
     DEFAULT_VERIFY_SSL,
-    ERROR_CANNOT_CONNECT,
     TOPIC_STRUCTURES,
     LOGGER_NAME,
-    STANDARD_BROKER_PORTS,
     VERIFY_SSL_FIELD,
 )
 from ..utils import (
     generate_ovms_client_id,
     generate_ovms_config_entry_unique_id,
     get_ovms_topic_username,
-    uses_tls_transport,
 )
 
 from .mqtt_connection import (
     PORT_SELECTOR,
     QOS_SELECTOR,
     async_detect_broker,
-    test_mqtt_connection,
 )
 from .topic_discovery import (
     discover_topics,
@@ -142,28 +137,12 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             self.debug_info["broker_setup_start"] = time.time()
 
-            # The protocol, and the port unless one was entered, is found on
-            # the broker; certificate verification only applies to TLS.
-            verify_ssl = user_input.pop(VERIFY_SSL_FIELD, DEFAULT_VERIFY_SSL)
-            broker = await async_detect_broker(
-                self.hass, user_input[CONF_HOST], user_input.get(CONF_PORT)
+            # The port, unless one was entered, and the protocol are found by
+            # connecting.
+            user_input[CONF_VERIFY_SSL] = user_input.pop(
+                VERIFY_SSL_FIELD, DEFAULT_VERIFY_SSL
             )
-            if broker is None:
-                result = {
-                    "success": False,
-                    "error_type": ERROR_CANNOT_CONNECT,
-                    "message": (
-                        f"No MQTT broker answers at {user_input[CONF_HOST]} on "
-                        f"port {user_input.get(CONF_PORT) or STANDARD_BROKER_PORTS}"
-                    ),
-                }
-            else:
-                user_input[CONF_PROTOCOL], user_input[CONF_PORT] = broker
-                user_input[CONF_VERIFY_SSL] = verify_ssl and uses_tls_transport(
-                    user_input
-                )
-                _LOGGER.debug("Testing MQTT connection")
-                result = await test_mqtt_connection(self.hass, user_input)
+            result = await async_detect_broker(self.hass, user_input)
 
             self.debug_info["broker_setup_end"] = time.time()
             self.debug_info["broker_setup_duration"] = (
