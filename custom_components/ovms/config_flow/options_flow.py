@@ -43,7 +43,7 @@ from ..utils import (
     normalize_lock_pin,
     uses_tls_transport,
 )
-from .mqtt_connection import PORT_SELECTOR, async_detect_broker
+from .mqtt_connection import PORT_SELECTOR, QOS_SELECTOR, async_detect_broker
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -233,14 +233,9 @@ class OVMSOptionsFlow(OptionsFlow):
         # Add remaining options
         options.update(
             {
-                # Coerce first: the frontend can submit the selected QoS as a
-                # string, which bare vol.In([0, 1, 2]) would reject.
                 vol.Required(
-                    CONF_QOS,
-                    default=entry_options.get(
-                        CONF_QOS, entry_data.get(CONF_QOS, DEFAULT_QOS)
-                    ),
-                ): vol.All(vol.Coerce(int), vol.In([0, 1, 2])),
+                    CONF_QOS, default=str(current_config.get(CONF_QOS, DEFAULT_QOS))
+                ): QOS_SELECTOR,
                 vol.Required(
                     CONF_TOPIC_PREFIX,
                     default=entry_options.get(

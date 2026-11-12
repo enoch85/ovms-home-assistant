@@ -26,6 +26,9 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
 )
 
 from ..const import (
@@ -59,6 +62,14 @@ _LOGGER = logging.getLogger(LOGGER_NAME)
 PORT_SELECTOR = vol.All(
     NumberSelector(
         NumberSelectorConfig(mode=NumberSelectorMode.BOX, min=MIN_PORT, max=MAX_PORT)
+    ),
+    vol.Coerce(int),
+)
+
+# Text options: the frontend marks no radio button for numeric ones.
+QOS_SELECTOR = vol.All(
+    SelectSelector(
+        SelectSelectorConfig(options=["0", "1", "2"], mode=SelectSelectorMode.LIST)
     ),
     vol.Coerce(int),
 )
