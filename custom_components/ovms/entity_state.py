@@ -4,7 +4,7 @@ import json
 from collections.abc import Iterable
 from typing import TypeAlias
 
-from .const import truncate_state_value
+from .const import STATUS_OFFLINE_PAYLOAD, STATUS_ONLINE_PAYLOAD, truncate_state_value
 
 StateValues: TypeAlias = Iterable[str]
 StatePair: TypeAlias = tuple[StateValues, StateValues]
@@ -12,8 +12,13 @@ StatePair: TypeAlias = tuple[StateValues, StateValues]
 BOOLEAN_TRUE_STATES = frozenset(("true", "on", "yes", "1"))
 BOOLEAN_FALSE_STATES = frozenset(("false", "off", "no", "0"))
 
-BINARY_SENSOR_TRUE_STATES = BOOLEAN_TRUE_STATES | frozenset(("open", "locked"))
-BINARY_SENSOR_FALSE_STATES = BOOLEAN_FALSE_STATES | frozenset(("closed", "unlocked"))
+# The integration's own status topic is a binary sensor too (TopicParser).
+BINARY_SENSOR_TRUE_STATES = BOOLEAN_TRUE_STATES | frozenset(
+    ("open", "locked", STATUS_ONLINE_PAYLOAD)
+)
+BINARY_SENSOR_FALSE_STATES = BOOLEAN_FALSE_STATES | frozenset(
+    ("closed", "unlocked", STATUS_OFFLINE_PAYLOAD)
+)
 
 LOCK_TRUE_STATES = BOOLEAN_TRUE_STATES | frozenset(("locked",))
 LOCK_FALSE_STATES = BOOLEAN_FALSE_STATES | frozenset(("unlocked",))
