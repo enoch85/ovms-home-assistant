@@ -10,6 +10,7 @@ import uuid
 from typing import Dict, Any, Optional
 
 import paho.mqtt.client as mqtt
+import voluptuous as vol
 
 from homeassistant.const import (
     CONF_HOST,
@@ -19,6 +20,11 @@ from homeassistant.const import (
     CONF_PROTOCOL,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 
 from ..const import (
     CONF_QOS,
@@ -33,10 +39,23 @@ from ..const import (
     ERROR_TLS_ERROR,
     ERROR_UNKNOWN,
     PORT_PROBE_TIMEOUT,
+    QOS_LEVELS,
 )
 from ..utils import uses_tls_transport, uses_websocket_transport
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
+
+# The QoS radio buttons in the setup and options forms. Their options are text:
+# with numbers, the frontend showed no level selected. Stored as the int paho needs.
+QOS_SELECTOR = vol.All(
+    SelectSelector(
+        SelectSelectorConfig(
+            options=[str(level) for level in QOS_LEVELS],
+            mode=SelectSelectorMode.LIST,
+        )
+    ),
+    vol.Coerce(int),
+)
 
 
 def _probe_tcp_port(host: str, port: int, timeout: float) -> bool:

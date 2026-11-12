@@ -44,7 +44,7 @@ from ..utils import (
     get_ovms_topic_username,
 )
 
-from .mqtt_connection import test_mqtt_connection
+from .mqtt_connection import QOS_SELECTOR, test_mqtt_connection
 from .topic_discovery import (
     discover_topics,
     test_topic_availability,
@@ -218,11 +218,7 @@ class OVMSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             {
                 vol.Optional(CONF_USERNAME): str,
                 vol.Optional(CONF_PASSWORD): str,
-                # Coerce first: the frontend can submit the selected QoS as a
-                # string, which bare vol.In([0, 1, 2]) would reject.
-                vol.Required(CONF_QOS, default=DEFAULT_QOS): vol.All(
-                    vol.Coerce(int), vol.In([0, 1, 2])
-                ),
+                vol.Required(CONF_QOS, default=str(DEFAULT_QOS)): QOS_SELECTOR,
             }
         )
 

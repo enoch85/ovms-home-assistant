@@ -246,6 +246,8 @@ STALENESS_MAX_DISPLAY_ENTITIES = 40
 # Options
 PROTOCOLS = ["mqtt", "mqtts", "ws", "wss"]
 UNIT_SYSTEMS = ["metric", "imperial"]
+# MQTT QoS 0, 1 and 2 (MQTT 3.1.1 and 5.0, section 4.3)
+QOS_LEVELS = [0, 1, 2]
 
 # Topic structure templates
 TOPIC_STRUCTURES = [
