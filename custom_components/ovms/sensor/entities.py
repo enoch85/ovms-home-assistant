@@ -173,6 +173,19 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         self._attr_suggested_display_precision = attributes.get(
             "suggested_display_precision"
         )
+        # Entity metadata, not state attributes: a "unit_of_measurement" left
+        # here would contradict the unit a user selects for the entity
+        for key in (
+            "device_class",
+            "state_class",
+            "native_unit_of_measurement",
+            "unit_of_measurement",
+            "unit",
+            "suggested_unit_of_measurement",
+            "suggested_display_precision",
+            "icon",
+        ):
+            self._attr_extra_state_attributes.pop(key, None)
 
         # For timestamp sensors, set explicit metadata values
         if self._attr_device_class == SensorDeviceClass.TIMESTAMP:
@@ -237,8 +250,13 @@ class CellVoltageSensor(SensorEntity, RestoreEntity):
         """Subscribe to updates."""
         await super().async_added_to_hass()
 
-        # Restore previous state if available
-        if (state := await self.async_get_last_state()) is not None:
+        # Restore previous state if available. A sensor created with a value
+        # keeps it: the stored state is the DISPLAYED one (bar for a native
+        # kPa), which Home Assistant would convert a second time.
+        if (
+            self._parsed_value is None
+            and (state := await self.async_get_last_state()) is not None
+        ):
             if state.state not in ["unavailable", "unknown", None]:
                 device_class_for_restoring = (
                     self._attr_extra_state_attributes.get("original_device_class")
@@ -377,6 +395,18 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         ]
         return any(pattern in self._topic.lower() for pattern in tire_patterns)
 
+    def _has_tire_position_sensors(self) -> bool:
+        """Return True if this sensor gets one sensor per tire position.
+
+        Only tire metrics with a unit Home Assistant can convert - pressure and
+        temperature - get them. An attribute keeps its native unit, so without
+        these sensors a pressure per tire can only be shown in kPa.
+        """
+        return self._is_tire_sensor() and self._attr_device_class in (
+            SensorDeviceClass.PRESSURE,
+            SensorDeviceClass.TEMPERATURE,
+        )
+
     def __init__(
         self,
         unique_id: str,
@@ -504,6 +534,8 @@ class OVMSSensor(SensorEntity, RestoreEntity):
         # Initialize cell sensors tracking
         self._cell_sensors_created = False
         self._cell_sensors = []
+        # Latest per-tire values from a live payload, for the per-tire sensors
+        self._tire_values: Optional[List[float]] = None
 
         # Parse the value using original device class for formatted types
         device_class_for_parsing = (
@@ -716,6 +748,15 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 )
             )
 
+        # Create the per-tire sensors from the live values, or from the
+        # restored attributes when the module has not sent the metric yet
+        if self._has_tire_position_sensors() and not self._cell_sensors_created:
+            values = self._tire_values or self._attr_extra_state_attributes.get(
+                f"{self._stat_type}_values"
+            )
+            if isinstance(values, list) and values:
+                self._create_cell_sensors(values[: len(TIRE_POSITIONS)])
+
     def _try_parse_vector(self, payload: Any) -> bool:
         """Apply config-driven vector handling if the metric declares it.
 
@@ -870,13 +911,15 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                     # Use numeric naming for other sensors
                     self._attr_extra_state_attributes[f"{self._stat_type}_{i+1}"] = val
 
-            # Update cell sensors if created
-            if (
-                hasattr(self, "_cell_sensors_created")
-                and self._cell_sensors_created
-                and CREATE_INDIVIDUAL_CELL_SENSORS
-            ):
+            if self._has_tire_position_sensors():
+                self._tire_values = values[: len(TIRE_POSITIONS)]
+
+            # Update cell sensors if created, or create the per-tire sensors
+            # once the entity is in Home Assistant
+            if getattr(self, "_cell_sensors_created", False):
                 self._update_cell_sensor_values(values)
+            elif self._tire_values and self.platform is not None:
+                self._create_cell_sensors(self._tire_values)
         except Exception as ex:
             _LOGGER.exception("Error handling cell values: %s", ex)
 
@@ -932,8 +975,10 @@ class OVMSSensor(SensorEntity, RestoreEntity):
                 ),
                 "device_class": self._attr_device_class,
                 "unit_of_measurement": self._attr_native_unit_of_measurement,
+                "icon": self._attr_icon,
+                "suggested_display_precision": self._attr_suggested_display_precision,
             },
-            CREATE_INDIVIDUAL_CELL_SENSORS,
+            CREATE_INDIVIDUAL_CELL_SENSORS or self._has_tire_position_sensors(),
         )
 
         # Store cell sensor IDs
