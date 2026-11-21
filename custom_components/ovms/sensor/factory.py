@@ -295,7 +295,8 @@ def create_cell_sensors(
                 f"{vehicle_id}_{category}_{topic_hash}_{position_code.lower()}",
                 config_entry_id,
             )
-            friendly_name = f"{attributes.get('name', 'Tire')} {position_name}"
+            position_label = position_name.replace("_", " ").title()
+            friendly_name = f"{attributes.get('name') or 'Tire'} {position_label}"
             topic_suffix = f"{position_code.lower()}"
         else:
             # Use generic naming for other sensors or additional values beyond 4 tires
@@ -325,6 +326,10 @@ def create_cell_sensors(
                 "device_class": attributes.get("device_class"),
                 "state_class": SensorStateClass.MEASUREMENT,
                 "unit_of_measurement": attributes.get("unit_of_measurement"),
+                "icon": attributes.get("icon"),
+                "suggested_display_precision": attributes.get(
+                    "suggested_display_precision"
+                ),
             },
         }
 
